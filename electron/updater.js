@@ -1,8 +1,14 @@
 const { autoUpdater } = require('electron-updater')
 const { dialog, app } = require('electron')
+const path = require('path')
 
 class AppUpdater {
   constructor() {
+    // ✅ DEV: Abilita controllo aggiornamenti anche in modalità sviluppo
+    if (process.env.NODE_ENV === 'development') {
+      autoUpdater.updateConfigPath = path.join(__dirname, 'dev-app-update.yml')
+    }
+    
     // Configura l'auto-updater
     autoUpdater.checkForUpdatesAndNotify()
     
