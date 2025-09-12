@@ -1,0 +1,2950 @@
+import React, { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react'
+import { localDatabase } from '../database/LocalDatabase'
+import { getBlob } from '../database/BlobStore'
+import { useSettings } from './SettingsContext'
+import { SoundEffectsManager } from '../audio/SoundEffectsManager'
+import { MicrophoneEffectsManager } from '../audio/MicrophoneEffectsManager'
+
+// ===== TIPI E INTERFACCE =====
+interface AudioTrack {
+  id: string
+  title: string
+  artist: string
+  duration: number
+  url: string
+}
+
+interface DeckState {
+  track: AudioTrack | null
+  isPlaying: boolean
+  currentTime: number
+  
+  duration: number
+  volume: number
+  localVolume: number
+}
+
+interface MicrophoneState {
+  isEnabled: boolean
+  isMuted: boolean
+}
+
+interface AudioState {
+  leftDeck: DeckState
+  rightDeck: DeckState
+  masterVolume: number
+  crossfader: number
+  microphone: MicrophoneState
+  soundEffectsManager: SoundEffectsManager | null
+  microphoneEffectsManager: MicrophoneEffectsManager | null
+  audioContext: AudioContext | null
+}
+
+// ===== AZIONI DEL REDUCER =====
+type AudioAction =
+  | { type: 'SET_LEFT_DECK_TRACK'; payload: AudioTrack | null }
+  | { type: 'SET_RIGHT_DECK_TRACK'; payload: AudioTrack | null }
+  | { type: 'SET_LEFT_DECK_PLAYING'; payload: boolean }
+  | { type: 'SET_RIGHT_DECK_PLAYING'; payload: boolean }
+  | { type: 'SET_LEFT_DECK_TIME'; payload: number }
+  | { type: 'SET_RIGHT_DECK_TIME'; payload: number }
+  | { type: 'SET_LEFT_DECK_DURATION'; payload: number }
+  | { type: 'SET_RIGHT_DECK_DURATION'; payload: number }
+  | { type: 'SET_LEFT_DECK_VOLUME'; payload: number }
+  | { type: 'SET_RIGHT_DECK_VOLUME'; payload: number }
+  | { type: 'SET_LEFT_DECK_LOCAL_VOLUME'; payload: number }
+  | { type: 'SET_SOUND_EFFECTS_MANAGER'; payload: SoundEffectsManager | null }
+  | { type: 'SET_MICROPHONE_EFFECTS_MANAGER'; payload: MicrophoneEffectsManager | null }
+  | { type: 'SET_AUDIO_CONTEXT'; payload: AudioContext | null }
+  | { type: 'SET_RIGHT_DECK_LOCAL_VOLUME'; payload: number }
+  | { type: 'SET_MASTER_VOLUME'; payload: number }
+  | { type: 'SET_CROSSFADER'; payload: number }
+  | { type: 'SET_MICROPHONE_ENABLED'; payload: boolean }
+  | { type: 'SET_MICROPHONE_MUTED'; payload: boolean }
+
+// ===== REDUCER =====
+const audioReducer = (state: AudioState, action: AudioAction): AudioState => {
+  switch (action.type) {
+    case 'SET_LEFT_DECK_TRACK':
+      return { ...state, leftDeck: { ...state.leftDeck, track: action.payload } }
+    case 'SET_RIGHT_DECK_TRACK':
+      return { ...state, rightDeck: { ...state.rightDeck, track: action.payload } }
+    case 'SET_LEFT_DECK_PLAYING':
+      return { ...state, leftDeck: { ...state.leftDeck, isPlaying: action.payload } }
+    case 'SET_RIGHT_DECK_PLAYING':
+      return { ...state, rightDeck: { ...state.rightDeck, isPlaying: action.payload } }
+    case 'SET_LEFT_DECK_TIME':
+      return { ...state, leftDeck: { ...state.leftDeck, currentTime: action.payload } }
+    case 'SET_RIGHT_DECK_TIME':
+      return { ...state, rightDeck: { ...state.rightDeck, currentTime: action.payload } }
+    case 'SET_LEFT_DECK_DURATION':
+      return { ...state, leftDeck: { ...state.leftDeck, duration: action.payload } }
+    case 'SET_RIGHT_DECK_DURATION':
+      return { ...state, rightDeck: { ...state.rightDeck, duration: action.payload } }
+    case 'SET_LEFT_DECK_VOLUME':
+      return { ...state, leftDeck: { ...state.leftDeck, volume: action.payload } }
+    case 'SET_RIGHT_DECK_VOLUME':
+      return { ...state, rightDeck: { ...state.rightDeck, volume: action.payload } }
+    case 'SET_LEFT_DECK_LOCAL_VOLUME':
+      return { ...state, leftDeck: { ...state.leftDeck, localVolume: action.payload } }
+    case 'SET_RIGHT_DECK_LOCAL_VOLUME':
+      return { ...state, rightDeck: { ...state.rightDeck, localVolume: action.payload } }
+    case 'SET_MASTER_VOLUME':
+      return { ...state, masterVolume: action.payload }
+    case 'SET_CROSSFADER':
+      return { ...state, crossfader: action.payload }
+    case 'SET_MICROPHONE_ENABLED':
+      return { ...state, microphone: { ...state.microphone, isEnabled: action.payload } }
+    case 'SET_MICROPHONE_MUTED':
+      return { ...state, microphone: { ...state.microphone, isMuted: action.payload } }
+    case 'SET_SOUND_EFFECTS_MANAGER':
+      return { ...state, soundEffectsManager: action.payload }
+    case 'SET_MICROPHONE_EFFECTS_MANAGER':
+      return { ...state, microphoneEffectsManager: action.payload }
+    case 'SET_AUDIO_CONTEXT':
+      return { ...state, audioContext: action.payload }
+    default:
+      return state
+  }
+}
+
+// ===== STATO INIZIALE =====
+const initialState: AudioState = {
+        leftDeck: { 
+    track: null,
+    isPlaying: false,
+    currentTime: 0,
+    duration: 0,
+    volume: 0.8,
+    localVolume: 0.0
+  },
+        rightDeck: { 
+    track: null,
+    isPlaying: false,
+    currentTime: 0,
+    duration: 0,
+    volume: 0.8,
+    localVolume: 0.0
+  },
+  masterVolume: 1.0,
+  crossfader: 0.5, // 0.5 = centro, 0.0 = tutto A, 1.0 = tutto B
+        microphone: { 
+    isEnabled: false,
+    isMuted: true
+  },
+  soundEffectsManager: null,
+  microphoneEffectsManager: null,
+  audioContext: null
+}
+
+// ===== CONTESTO =====
+const AudioContext = createContext<{
+  state: AudioState
+  dispatch: React.Dispatch<AudioAction>
+  leftAudioRef: React.RefObject<HTMLAudioElement>
+  rightAudioRef: React.RefObject<HTMLAudioElement>
+  micStreamRef: React.RefObject<MediaStream | null>
+  soundEffectsManagerRef: React.RefObject<SoundEffectsManager | null>
+  microphoneEffectsManagerRef: React.RefObject<MicrophoneEffectsManager | null>
+  getMixedStream: (leftElement?: HTMLAudioElement | null, rightElement?: HTMLAudioElement | null, pttActive?: boolean) => Promise<MediaStream | null>
+  createMicrophoneStream: () => Promise<MediaStream | null>
+  createSmartMicrophoneControl: () => { enable: () => Promise<boolean>; disable: () => void; getStream: () => MediaStream | null; isActive: () => boolean }
+  getAvailableAudioOutputDevices: () => Promise<MediaDeviceInfo[]>
+  ensureMainAudioContext: () => AudioContext | null
+  playLeftTrack: (track: AudioTrack) => void
+  playRightTrack: (track: AudioTrack) => void
+  pauseLeftTrack: () => void
+  resumeLeftTrack: () => void
+  stopLeftTrack: () => void
+  pauseRightTrack: () => void
+  resumeRightTrack: () => void
+  stopRightTrack: () => void
+  handlePlayPauseDefinitive: (side: 'left' | 'right') => Promise<void>
+  setLeftLocalVolume: (volume: number) => void
+  setRightLocalVolume: (volume: number) => void
+  seekLeftTo: (time: number) => void
+  seekRightTo: (time: number) => void
+  setStreamDucking: (active: boolean) => void
+  setStreamMasterVolume: (volume: number) => void
+  setMasterVolume: (volume: number) => void
+  setCrossfader: (value: number) => void
+  addToDeck: (track: any, deck: 'left' | 'right') => Promise<void>
+  incrementPlayCount: (trackId: string) => Promise<void>
+} | undefined>(undefined)
+
+// ===== PROVIDER =====
+export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [state, dispatch] = useReducer(audioReducer, initialState)
+  const { settings } = useSettings()
+
+  // ===== REFS =====
+  const leftAudioRef = useRef<HTMLAudioElement | null>(null)
+  const rightAudioRef = useRef<HTMLAudioElement | null>(null)
+  const micStreamRef = useRef<MediaStream | null>(null)
+  const soundEffectsManagerRef = useRef<SoundEffectsManager | null>(null)
+  const microphoneEffectsManagerRef = useRef<MicrophoneEffectsManager | null>(null)
+
+  // ===== INIZIALIZZAZIONE MANAGER EFFETTI =====
+  useEffect(() => {
+    const initializeEffectsManagers = async () => {
+      try {
+        // Inizializza Sound Effects Manager
+        const soundEffectsManager = new SoundEffectsManager()
+        soundEffectsManager.setCallbacks({
+          onDebug: (message) => console.log(message),
+          onError: (error) => console.error(error)
+        })
+        soundEffectsManagerRef.current = soundEffectsManager
+        dispatch({ type: 'SET_SOUND_EFFECTS_MANAGER', payload: soundEffectsManager })
+
+        // Inizializza Microphone Effects Manager
+        const microphoneEffectsManager = new MicrophoneEffectsManager()
+        microphoneEffectsManager.setCallbacks({
+          onDebug: (message) => console.log(message),
+          onError: (error) => console.error(error)
+        })
+        microphoneEffectsManagerRef.current = microphoneEffectsManager
+        dispatch({ type: 'SET_MICROPHONE_EFFECTS_MANAGER', payload: microphoneEffectsManager })
+
+        console.log('🎵 [INIT] Manager effetti audio inizializzati')
+      } catch (error) {
+        console.error('❌ [INIT] Errore inizializzazione manager effetti:', error)
+      }
+    }
+
+    initializeEffectsManagers()
+  }, [])
+
+  // ===== INIZIALIZZAZIONE MICROFONO =====
+  useEffect(() => {
+    const initializeMicrophone = async () => {
+      try {
+        console.log('🎤 [INIT] Inizializzazione microfono con impostazioni settings...')
+        const micStream = await createMicrophoneStream()
+        if (micStream) {
+          micStreamRef.current = micStream
+          console.log('✅ [INIT] Microfono inizializzato con successo con impostazioni corrette:', micStream)
+        } else {
+          console.warn('⚠️ [INIT] Fallback a microfono generico...')
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          micStreamRef.current = fallbackStream
+          console.log('✅ [INIT] Microfono fallback inizializzato:', fallbackStream)
+        }
+      } catch (e: any) {
+        console.warn('⚠️ [INIT] Microfono non disponibile all\'avvio:', e.message)
+        // Non è un errore critico, il microfono verrà richiesto quando necessario
+      }
+    }
+
+    initializeMicrophone()
+  }, [])
+
+  // ===== FUNZIONE STREAMING AUDIO COMPLETAMENTE RICOSTRUITA =====
+  const getMixedStream = async (leftElement?: HTMLAudioElement | null, rightElement?: HTMLAudioElement | null, pttActive: boolean = false): Promise<MediaStream | null> => {
+    console.log('🎵 [GETMIXEDSTREAM] Inizio getMixedStream...')
+    console.log('🎵 [GETMIXEDSTREAM] leftElement:', !!leftElement)
+    console.log('🎵 [GETMIXEDSTREAM] rightElement:', !!rightElement)
+    console.log('🎵 [GETMIXEDSTREAM] pttActive:', pttActive)
+    
+    try {
+              // Get current settings
+        const settings = await localDatabase.getSettings();
+        console.log('🎵 [GETMIXEDSTREAM] Settings ottenuti:', !!settings)
+        // ✅ USA FORMATO DAI SETTINGS invece di hardcoding
+        console.log('🔧 [DEBUG] Settings completi:', settings)
+        console.log('🔧 [DEBUG] settings.streaming:', settings?.streaming)
+        console.log('🔧 [DEBUG] settings.streaming?.defaultFormat:', settings?.streaming?.defaultFormat)
+        
+        const streamingFormat = settings?.streaming?.defaultFormat || 'opus'
+        const streamingBitrate = settings?.streaming?.defaultBitrate || 128
+        const streamingChannels = settings?.streaming?.channels || 2
+        const audioSampleRate = settings?.audio?.sampleRate || 48000
+        
+        console.log('🔊 [STREAMING] Using format from settings:', streamingFormat);
+        console.log('🔊 [STREAMING] Bitrate:', streamingBitrate, 'Channels:', streamingChannels, 'SampleRate:', audioSampleRate);
+      
+      // ✅ CRITICAL FIX: SERVER CHECK con configurazione RadioBoss
+      try {
+        console.log('🔍 [SERVER CHECK] Verifica connessione al server streaming...')
+        
+        // ✅ CRITICAL FIX: Usa le impostazioni passate come parametro o leggi dal database
+        
+        try {
+          let s = settings // Usa le impostazioni passate come parametro
+          console.log('🔍 [SERVER CHECK] Parametro settings ricevuto:', !!s)
+          console.log('🔍 [SERVER CHECK] Tipo di settings:', typeof s)
+          
+          // ✅ CRITICAL FIX: FORZA sempre la lettura dal database per evitare problemi di timing
+          console.log('🔍 [SERVER CHECK] FORZO lettura dal database per evitare problemi...')
+          
+          // Aspetta che il database sia inizializzato e forza lettura settings
+          await localDatabase.waitForInitialization()
+          s = await localDatabase.getSettings()
+          console.log('🔍 [SERVER CHECK] Settings forzati dal database:', !!s)
+          
+          // ✅ USA SERVER DI DEFAULT SELEZIONATO
+          const defaultServer = await localDatabase.getDefaultIcecastServer()
+          console.log('🔍 [SERVER CHECK] DEBUG - Server di default:', defaultServer)
+          
+          if (!defaultServer) {
+            throw new Error('IMPOSTAZIONI STREAMING INCOMPLETE: Nessun server Icecast configurato')
+          }
+          
+          // ✅ CRITICAL FIX: Verifica che il server di default sia valido
+          if (!defaultServer.host || !defaultServer.port) {
+            throw new Error('IMPOSTAZIONI STREAMING INCOMPLETE: Server di default non valido')
+          }
+          
+          if (defaultServer.host.trim() === '' || defaultServer.port === 0) {
+            throw new Error('IMPOSTAZIONI STREAMING INCOMPLETE: Host vuoto o porta 0 nel server di default')
+          }
+          
+          console.log('🔍 [SERVER CHECK] ✅ Server di default valido, procedo con test connessione...')
+          
+          // ✅ CRITICAL FIX: FFmpeg verrà avviato da StreamingManager.startStreaming()
+          console.log('🔄 [GETMIXEDSTREAM] FFmpeg verrà avviato da StreamingManager.startStreaming()')
+          
+          // ✅ CRITICAL FIX: Test connessione con server di default selezionato
+          const testUrl = `http://${defaultServer.host}:${defaultServer.port}${defaultServer.mount}`
+          console.log('🔍 [SERVER CHECK] Connessione Icecast configurata:', testUrl)
+          console.log('🔍 [SERVER CHECK] Server:', defaultServer.name, 'Host:', defaultServer.host, ', Porta:', defaultServer.port)
+          
+          // ✅ CRITICAL FIX: Test connessione HTTP con parametri RadioBoss
+          console.log('🔍 [SERVER CHECK] Test connessione HTTP su:', testUrl)
+          
+          try {
+            await fetch(testUrl, { 
+              method: 'HEAD',
+              mode: 'no-cors'
+            })
+            console.log('✅ [SERVER CHECK] Server Icecast raggiungibile su', testUrl)
+          } catch (fetchError) {
+            console.warn('⚠️ [SERVER CHECK] Test HTTP fallito, ma continuo con streaming:', fetchError)
+          }
+          
+          console.log('✅ [STREAMING] Server streaming verificato, procedo con la cattura audio...')
+          
+        } catch (serverError) {
+          console.error('❌ [SERVER CHECK] Errore verifica server:', serverError)
+          throw serverError
+        }
+        
+        // ✅ CORREZIONE: Assicurati che l'AudioContext principale sia disponibile
+        let mixContext = ensureMainAudioContext()
+        
+        if (!mixContext) {
+          throw new Error('Impossibile creare AudioContext per streaming')
+        }
+        
+        console.log('🎵 [MIX] AudioContext principale disponibile per streaming')
+
+        // Verifica che sia valido
+        if (!mixContext || typeof mixContext.createMediaElementSource !== 'function') {
+          throw new Error('AudioContext non valido')
+        }
+
+        if (!mixContext.destination) {
+          throw new Error('AudioContext non ha destination')
+        }
+
+        // Crea destination stream
+        const destinationStream = mixContext.createMediaStreamDestination()
+        const mixerGain = mixContext.createGain()
+        mixerGain.connect(destinationStream)
+
+        // ✅ CRITICAL FIX: Imposta il volume iniziale del mixer per lo streaming
+        mixerGain.gain.setValueAtTime(1.0, mixContext.currentTime) // Streaming sempre al 100% inizialmente
+        
+        // ✅ ESPONI nodi globali per gli effetti audio
+        ;(window as any).mixerGain = mixerGain;
+        ;(window as any).destinationStream = destinationStream;
+
+        // ✅ ESPONI AudioContext e MixerGain globalmente per StreamingManager
+        ;(window as any).globalAudioContext = state.audioContext
+        ;(window as any).globalMixerGain = mixerGain
+        
+        console.log('🌍 [GLOBAL] AudioContext e MixerGain esposti globalmente per StreamingManager')
+        
+        // ✅ CRITICAL FIX: Connetti IMMEDIATAMENTE l'analyser se StreamingManager è disponibile
+        const streamingManager = (window as any).streamingManager
+        if (streamingManager && streamingManager.connectDirectly) {
+          console.log('🔄 [GLOBAL] StreamingManager trovato - connessione diretta immediata...')
+          streamingManager.connectDirectly(mixContext, mixerGain)
+        }
+
+        // Salva riferimenti globali
+        ;(window as any).currentMixerGain = mixerGain
+        ;(window as any).currentMixContext = mixContext
+        
+        // Esponi funzione master volume
+        ;(window as any).audioContextSetMasterVolume = (volume: number) => {
+          if (mixerGain && mixContext) {
+            mixerGain.gain.setValueAtTime(volume, mixContext.currentTime)
+          }
+        }
+
+        let hasRealAudio = false
+
+        // 🎵 CAPTURE AUDIO REALE DAI DECK - STREAMING SEPARATO DAL MONITORING
+
+        // ✅ CRITICAL FIX: Cerca dinamicamente gli elementi audio dei deck nel DOM
+        // Questo risolve il problema dell'ordine di attivazione (streaming prima vs deck prima)
+        const leftAudioElement = leftElement || leftAudioRef.current || document.querySelector('audio.deck-audio[data-deck="A"]') as HTMLAudioElement
+        const rightAudioElement = rightElement || rightAudioRef.current || document.querySelector('audio.deck-audio[data-deck="B"]') as HTMLAudioElement
+
+        console.log('🔍 [DEBUG AUDIO ELEMENTS] Elementi audio trovati:', {
+          leftElement: !!leftElement,
+          leftAudioRef: !!leftAudioRef.current,
+          leftAudioDOM: !!document.querySelector('audio.deck-audio[data-deck="A"]'),
+          leftAudioElement: !!leftAudioElement,
+          leftAudioSrc: leftAudioElement?.src,
+          rightElement: !!rightElement,
+          rightAudioRef: !!rightAudioRef.current,
+          rightAudioDOM: !!document.querySelector('audio.deck-audio[data-deck="B"]'),
+          rightAudioElement: !!rightAudioElement,
+          rightAudioSrc: rightAudioElement?.src
+        })
+        
+        // ✅ CRITICAL DEBUG: Verifica tutti gli elementi audio nel DOM
+        const allAudioElements = document.querySelectorAll('audio')
+        console.log('🔍 [DEBUG ALL AUDIO] Tutti gli elementi audio nel DOM:', {
+          total: allAudioElements.length,
+          elements: Array.from(allAudioElements).map((audio, index) => ({
+            index,
+            tagName: audio.tagName,
+            className: audio.className,
+            dataDeck: audio.getAttribute('data-deck'),
+            src: audio.src,
+            id: audio.id
+          }))
+        })
+        
+        // ✅ CRITICAL DEBUG: Verifica se ci sono elementi audio con classi diverse
+        const alternativeLeftAudio = (document.querySelector('audio[data-deck="A"]') as HTMLAudioElement) || 
+                                    (document.querySelector('audio[data-deck="left"]') as HTMLAudioElement) ||
+                                    (document.querySelector('audio.left-deck') as HTMLAudioElement) ||
+                                    (document.querySelector('audio[data-side="left"]') as HTMLAudioElement)
+        
+        const alternativeRightAudio = (document.querySelector('audio[data-deck="B"]') as HTMLAudioElement) || 
+                                     (document.querySelector('audio[data-deck="right"]') as HTMLAudioElement) ||
+                                     (document.querySelector('audio.right-deck') as HTMLAudioElement) ||
+                                     (document.querySelector('audio[data-side="right"]') as HTMLAudioElement)
+        
+        console.log('🔍 [DEBUG ALTERNATIVE AUDIO] Elementi audio alternativi trovati:', {
+          leftAlternative: !!alternativeLeftAudio,
+          leftAlternativeSrc: alternativeLeftAudio?.src,
+          rightAlternative: !!alternativeRightAudio,
+          rightAlternativeSrc: alternativeRightAudio?.src
+        })
+        
+        // ✅ CRITICAL FIX: Usa elementi alternativi se quelli principali non sono disponibili
+        const finalLeftAudio = leftAudioElement || alternativeLeftAudio
+        const finalRightAudio = rightAudioElement || alternativeRightAudio
+        
+        console.log('🔍 [DEBUG FINAL AUDIO] Elementi audio finali selezionati:', {
+          finalLeft: !!finalLeftAudio,
+          finalLeftSrc: finalLeftAudio?.src,
+          finalRight: !!finalRightAudio,
+          finalRightSrc: finalRightAudio?.src
+        })
+
+        // Deck sinistro - STREAMING (sempre al 100%)
+        if (finalLeftAudio && finalLeftAudio.src && finalLeftAudio.src.trim() !== '') {
+          try {
+            console.log('🎵 [STREAMING] Tentativo cattura deck sinistro per streaming...')
+            
+            // ✅ CRITICAL FIX: Notifica di inizio cattura
+            if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+              ;(window as any).addStreamingNotification('info', 'Cattura Audio', 'Tentativo cattura deck sinistro per streaming...', 'audio')
+            }
+            
+            // ✅ CRITICAL FIX: Crea un elemento audio CLONATO per lo streaming
+            const leftStreamAudio = new Audio(finalLeftAudio.src)
+            
+            // ✅ CRITICAL FIX: Sincronizza TUTTE le proprietà dell'audio originale
+            leftStreamAudio.currentTime = finalLeftAudio.currentTime
+            leftStreamAudio.playbackRate = finalLeftAudio.playbackRate
+            leftStreamAudio.loop = finalLeftAudio.loop
+            leftStreamAudio.muted = finalLeftAudio.muted
+            
+            // ✅ CRITICAL FIX: Volume streaming SEMPRE al 100%, indipendentemente dal volume locale
+            leftStreamAudio.volume = 1.0
+            
+            // ✅ CRITICAL FIX: Sincronizza lo stato di riproduzione
+            if (finalLeftAudio.paused) {
+              leftStreamAudio.pause()
+            } else {
+              leftStreamAudio.play().catch(console.error)
+            }
+            
+        // ✅ CRITICAL FIX: Sincronizzazione continua della posizione durante la riproduzione
+        const syncLeftPosition = () => {
+          // ✅ CRITICAL FIX: Ottieni sempre gli elementi audio più recenti
+          const currentLeftAudio = leftAudioRef.current
+          
+          if (leftStreamAudio && currentLeftAudio) {
+            // ✅ CRITICAL FIX: Verifica se l'elemento audio locale è cambiato (nuova traccia)
+            if (leftStreamAudio.src !== currentLeftAudio.src) {
+              console.log(`🔄 [SYNC LEFT] Rilevato cambio traccia - aggiornando elemento audio dello streaming`)
+              leftStreamAudio.src = currentLeftAudio.src
+              leftStreamAudio.load()
+              
+              // Sincronizza tutte le proprietà
+              leftStreamAudio.currentTime = currentLeftAudio.currentTime
+              leftStreamAudio.playbackRate = currentLeftAudio.playbackRate
+              leftStreamAudio.loop = currentLeftAudio.loop
+              leftStreamAudio.muted = currentLeftAudio.muted
+              leftStreamAudio.volume = 1.0
+              
+            // Sincronizza lo stato di riproduzione
+            if (currentLeftAudio.paused) {
+              console.log('🔄 [SYNC LEFT] Pausa leftStreamAudio - audio originale in pausa')
+              leftStreamAudio.pause()
+            } else {
+              console.log('🔄 [SYNC LEFT] Riproduzione leftStreamAudio - audio originale in riproduzione')
+              leftStreamAudio.play().catch((e) => {
+                console.error('❌ [SYNC LEFT] Errore riproduzione leftStreamAudio:', e)
+              })
+            }
+            } else {
+              // Sincronizzazione normale della posizione
+              const timeDiff = Math.abs(leftStreamAudio.currentTime - currentLeftAudio.currentTime)
+              // Sincronizza solo se la differenza è significativa (> 0.05s) per maggiore precisione
+              if (timeDiff > 0.05) {
+                console.log(`🔄 [SYNC LEFT] Sincronizzazione posizione: ${currentLeftAudio.currentTime.toFixed(2)}s (diff: ${timeDiff.toFixed(2)}s)`)
+                leftStreamAudio.currentTime = currentLeftAudio.currentTime
+              }
+            }
+          }
+        }
+        
+        // ✅ CRITICAL FIX: Salva riferimento globale per sincronizzazione
+        ;(window as any).leftStreamAudio = leftStreamAudio
+        
+        // ✅ CRITICAL FIX: Avvia sincronizzazione continua solo se non è già attiva
+        if (!(window as any).leftSyncInterval) {
+          console.log('🔄 [SYNC LEFT] Avvio sincronizzazione continua per deck sinistro')
+          ;(window as any).leftSyncInterval = setInterval(syncLeftPosition, 200)
+        }
+            
+            // ✅ RIMOSSO: Event listeners che fermavano la sincronizzazione durante cambio traccia
+            // La sincronizzazione continua deve rimanere attiva per mantenere il stream audio
+            
+            const leftSource = mixContext.createMediaElementSource(leftStreamAudio)
+            const leftStreamGain = mixContext.createGain()
+            
+            // ✅ CROSSFADER: Applica il crossfader al deck sinistro
+            // Deck A: Volume = 1.0 - crossfader (0.0 = tutto A, 1.0 = tutto B)
+            const leftCrossfaderVolume = 1.0 - (state.crossfader || 0.5)
+            leftStreamGain.gain.setValueAtTime(leftCrossfaderVolume, mixContext.currentTime)
+            
+            console.log('🔗 [STREAMING] Collegamento audio deck sinistro:', {
+              leftSource: !!leftSource,
+              leftStreamGain: !!leftStreamGain,
+              mixerGain: !!mixerGain,
+              destinationStream: !!destinationStream,
+              crossfaderVolume: leftCrossfaderVolume
+            })
+            
+            leftSource.connect(leftStreamGain)
+            leftStreamGain.connect(mixerGain)
+            
+            console.log('✅ [STREAMING] Audio deck sinistro collegato: leftStreamAudio → leftSource → leftStreamGain → mixerGain → destinationStream')
+            
+            // Salva il riferimento al gain del deck sinistro per PTT e crossfader
+            ;(window as any).leftDeckStreamGain = leftStreamGain
+            
+            // ✅ CRITICAL FIX: Notifica di successo cattura
+            if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+              ;(window as any).addStreamingNotification('success', 'Audio Catturato', 'Deck sinistro catturato con successo per streaming', 'audio')
+            }
+            
+            // ✅ CRITICAL FIX: Sincronizza il playback con l'audio locale
+            leftStreamAudio.currentTime = finalLeftAudio.currentTime
+            
+            console.log('🔍 [STREAMING] Stato audio originale:', {
+              paused: finalLeftAudio.paused,
+              currentTime: finalLeftAudio.currentTime,
+              duration: finalLeftAudio.duration,
+              src: finalLeftAudio.src,
+              volume: finalLeftAudio.volume,
+              readyState: finalLeftAudio.readyState,
+              networkState: finalLeftAudio.networkState
+            })
+            
+            console.log('🔍 [STREAMING] Stato leftStreamAudio:', {
+              paused: leftStreamAudio.paused,
+              currentTime: leftStreamAudio.currentTime,
+              duration: leftStreamAudio.duration,
+              src: leftStreamAudio.src,
+              volume: leftStreamAudio.volume,
+              readyState: leftStreamAudio.readyState,
+              networkState: leftStreamAudio.networkState
+            })
+            
+            // ✅ CRITICAL FIX: Forza sempre il volume dell'audio clonato per lo streaming
+            leftStreamAudio.volume = 1.0  // VOLUME MASSIMO per il clonato
+            leftStreamAudio.muted = false // Assicurati che non sia mutato
+            
+            // ✅ CRITICAL FIX: Forza crossfader e gain per audio clonato
+            if (state.audioContext) {
+              leftStreamGain.gain.setValueAtTime(1.0, state.audioContext.currentTime)
+              mixerGain.gain.setValueAtTime(1.0, state.audioContext.currentTime)
+            } else {
+              leftStreamGain.gain.value = 1.0
+              mixerGain.gain.value = 1.0
+            }
+            
+            console.log('🔊 [STREAMING] Gain forzati - leftStreamGain: 1.0, mixerGain: 1.0')
+            
+            if (!finalLeftAudio.paused) {
+              console.log('🎵 [STREAMING] Avvio riproduzione leftStreamAudio...')
+              leftStreamAudio.play().then(() => {
+                console.log('✅ [STREAMING] leftStreamAudio riprodotto con successo')
+              }).catch((e) => {
+                console.error('❌ [STREAMING] Errore riproduzione leftStreamAudio:', e)
+              })
+            } else {
+              console.log('⚠️ [STREAMING] leftStreamAudio non avviato - audio originale in pausa')
+            }
+            
+            // ✅ CRITICAL FIX: FORZA SEMPRE riproduzione con sincronizzazione
+            console.log('🎵 [STREAMING] FORZO SEMPRE riproduzione leftStreamAudio per streaming...')
+            console.log('🔍 [DEBUG] finalLeftAudio:', finalLeftAudio)
+            console.log('🔍 [DEBUG] leftStreamAudio:', leftStreamAudio)
+            console.log('🔍 [DEBUG] finalLeftAudio.currentTime:', finalLeftAudio?.currentTime)
+            console.log('🔍 [DEBUG] leftStreamAudio.src:', leftStreamAudio?.src)
+            
+            try {
+              // ✅ SINCRONIZZA il tempo dell'audio clonato con l'originale
+              leftStreamAudio.currentTime = finalLeftAudio.currentTime
+              leftStreamAudio.playbackRate = finalLeftAudio.playbackRate || 1.0
+              console.log('✅ [STREAMING] Sincronizzazione tempo completata')
+              
+              // ✅ FORZA la riproduzione SEMPRE
+              await leftStreamAudio.play()
+              console.log('✅ [STREAMING] leftStreamAudio FORZATO riprodotto con successo')
+              
+              // ✅ AVVIA monitoraggio continuo per mantenere sincronizzazione
+              if (!(window as any).leftStreamAudioSync) {
+                ;(window as any).leftStreamAudioSync = setInterval(() => {
+                  if (finalLeftAudio && leftStreamAudio) {
+                    // Sincronizza sempre il tempo
+                    const timeDiff = Math.abs(leftStreamAudio.currentTime - finalLeftAudio.currentTime)
+                    if (timeDiff > 0.5) { // Se differenza > 0.5 secondi
+                      leftStreamAudio.currentTime = finalLeftAudio.currentTime
+                      console.log('🔄 [STREAMING] Sincronizzato leftStreamAudio:', finalLeftAudio.currentTime)
+                    }
+                    
+                    // Assicurati che stia sempre riproducendo
+                    if (leftStreamAudio.paused && !finalLeftAudio.paused) {
+                      leftStreamAudio.play().catch(console.warn)
+                    }
+                  }
+                }, 1000) // Ogni secondo
+              }
+              
+              // ✅ VERIFICA IMMEDIATA che l'audio sia effettivamente in riproduzione
+              console.log('🔍 [STREAMING] Verifica leftStreamAudio FINALE:', {
+                paused: leftStreamAudio.paused,
+                currentTime: leftStreamAudio.currentTime,
+                volume: leftStreamAudio.volume,
+                muted: leftStreamAudio.muted,
+                duration: leftStreamAudio.duration,
+                readyState: leftStreamAudio.readyState
+              })
+              
+            } catch (e) {
+              console.error('❌ [STREAMING] Errore riproduzione FORZATA leftStreamAudio:', e)
+            }
+            
+            hasRealAudio = true
+            console.log('✅ [STREAMING] Deck sinistro catturato con successo (volume streaming: 100%, separato dal locale)')
+          } catch (e: any) {
+            console.error('❌ [STREAMING] Errore cattura deck sinistro:', e.message)
+          }
+        } else {
+          console.log('⚠️ [STREAMING] Deck sinistro non disponibile per cattura')
+        }
+
+        // Deck destro - STREAMING (sempre al 100%)
+        if (finalRightAudio && finalRightAudio.src && finalRightAudio.src.trim() !== '') {
+          try {
+            console.log('🎵 [STREAMING] Tentativo cattura deck destro per streaming...')
+            
+            // ✅ CRITICAL FIX: Notifica di inizio cattura
+            if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+              ;(window as any).addStreamingNotification('info', 'Cattura Audio', 'Tentativo cattura deck destro per streaming...', 'audio')
+            }
+            
+            // ✅ CRITICAL FIX: Crea un elemento audio CLONATO per lo streaming
+            const rightStreamAudio = new Audio(finalRightAudio.src)
+            
+            // ✅ CRITICAL FIX: Sincronizza TUTTE le proprietà dell'audio originale
+            rightStreamAudio.currentTime = finalRightAudio.currentTime
+            rightStreamAudio.playbackRate = finalRightAudio.playbackRate
+            rightStreamAudio.loop = finalRightAudio.loop
+            rightStreamAudio.muted = finalRightAudio.muted
+            
+            // ✅ CRITICAL FIX: Volume streaming SEMPRE al 100%, indipendentemente dal volume locale
+            rightStreamAudio.volume = 1.0
+            
+            // ✅ CRITICAL FIX: Sincronizza lo stato di riproduzione
+            if (finalRightAudio.paused) {
+              rightStreamAudio.pause()
+            } else {
+              rightStreamAudio.play().catch(console.error)
+            }
+            
+        // ✅ CRITICAL FIX: Sincronizzazione continua della posizione durante la riproduzione
+        const syncRightPosition = () => {
+          // ✅ CRITICAL FIX: Ottieni sempre gli elementi audio più recenti
+          const currentRightAudio = rightAudioRef.current
+          
+          if (rightStreamAudio && currentRightAudio) {
+            // ✅ CRITICAL FIX: Verifica se l'elemento audio locale è cambiato (nuova traccia)
+            if (rightStreamAudio.src !== currentRightAudio.src) {
+              console.log(`🔄 [SYNC RIGHT] Rilevato cambio traccia - aggiornando elemento audio dello streaming`)
+              rightStreamAudio.src = currentRightAudio.src
+              rightStreamAudio.load()
+              
+              // Sincronizza tutte le proprietà
+              rightStreamAudio.currentTime = currentRightAudio.currentTime
+              rightStreamAudio.playbackRate = currentRightAudio.playbackRate
+              rightStreamAudio.loop = currentRightAudio.loop
+              rightStreamAudio.muted = currentRightAudio.muted
+              rightStreamAudio.volume = 1.0
+              
+              // Sincronizza lo stato di riproduzione
+              if (currentRightAudio.paused) {
+                rightStreamAudio.pause()
+              } else {
+                rightStreamAudio.play().catch(console.error)
+              }
+            } else {
+              // Sincronizzazione normale della posizione
+              const timeDiff = Math.abs(rightStreamAudio.currentTime - currentRightAudio.currentTime)
+              // Sincronizza solo se la differenza è significativa (> 0.05s) per maggiore precisione
+              if (timeDiff > 0.05) {
+                console.log(`🔄 [SYNC RIGHT] Sincronizzazione posizione: ${currentRightAudio.currentTime.toFixed(2)}s (diff: ${timeDiff.toFixed(2)}s)`)
+                rightStreamAudio.currentTime = currentRightAudio.currentTime
+              }
+            }
+          }
+        }
+        
+        // ✅ CRITICAL FIX: Salva riferimento globale per sincronizzazione
+        ;(window as any).rightStreamAudio = rightStreamAudio
+        
+        // ✅ CRITICAL FIX: Avvia sincronizzazione continua solo se non è già attiva
+        if (!(window as any).rightSyncInterval) {
+          console.log('🔄 [SYNC RIGHT] Avvio sincronizzazione continua per deck destro')
+          ;(window as any).rightSyncInterval = setInterval(syncRightPosition, 200)
+        }
+            
+            // ✅ RIMOSSO: Event listeners che fermavano la sincronizzazione durante cambio traccia
+            // La sincronizzazione continua deve rimanere attiva per mantenere il stream audio
+            
+            const rightSource = mixContext.createMediaElementSource(rightStreamAudio)
+            const rightStreamGain = mixContext.createGain()
+            
+            // ✅ CROSSFADER: Applica il crossfader al deck destro
+            // Deck B: Volume = crossfader (0.0 = tutto A, 1.0 = tutto B)
+            const rightCrossfaderVolume = state.crossfader || 0.5
+            rightStreamGain.gain.setValueAtTime(rightCrossfaderVolume, mixContext.currentTime)
+            
+            rightSource.connect(rightStreamGain)
+            rightStreamGain.connect(mixerGain)
+            
+            // Salva il riferimento al gain del deck destro per PTT e crossfader
+            ;(window as any).rightDeckStreamGain = rightStreamGain
+            
+            // ✅ CRITICAL FIX: Notifica di successo cattura
+            if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+              ;(window as any).addStreamingNotification('success', 'Audio Catturato', 'Deck destro catturato con successo per streaming', 'audio')
+            }
+            
+            
+            hasRealAudio = true
+            console.log('✅ [STREAMING] Deck destro catturato con successo (volume streaming: 100%, separato dal locale)')
+          } catch (e: any) {
+            console.error('❌ [STREAMING] Errore cattura deck destro:', e.message)
+          }
+        } else {
+          console.log('⚠️ [STREAMING] Deck destro non disponibile per cattura')
+        }
+
+        // 🎤 MICROFONO
+        console.log('🎤 [MIC CHECK] Stato microfono:', {
+          micStreamRef: !!micStreamRef.current,
+          isEnabled: state.microphone.isEnabled,
+          isMuted: state.microphone.isMuted,
+          micStream: micStreamRef.current
+        })
+        
+        // ✅ CORREZIONE: Usa il microfono dalle impostazioni invece di quello generico
+        if (!micStreamRef.current) {
+          try {
+            console.log('🎤 [MIC] Richiesta accesso al microfono con impostazioni settings...')
+            const micStream = await createMicrophoneStream()
+            if (micStream) {
+              micStreamRef.current = micStream
+              console.log('🎤 [MIC] Accesso al microfono ottenuto con impostazioni corrette:', micStream)
+            } else {
+              console.warn('⚠️ [MIC] Fallback a microfono generico...')
+              const fallbackStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+              micStreamRef.current = fallbackStream
+              console.log('🎤 [MIC] Fallback microfono ottenuto:', fallbackStream)
+            }
+          } catch (e: any) {
+            console.error('❌ [MIC] Errore accesso al microfono:', e.message)
+          }
+        }
+        
+        // ✅ CRITICAL FIX: Crea SEMPRE il microfono per lo streaming (non solo per PTT)
+        if (micStreamRef.current) {
+          console.log('🎤 [MIC] Creazione MediaStreamSource per microfono...')
+          try {
+            const micSource = mixContext.createMediaStreamSource(micStreamRef.current)
+            
+            // ✅ CRITICAL FIX: Crea un gain separato per il microfono per gestire PTT
+            const micGain = mixContext.createGain()
+            micSource.connect(micGain)
+            
+            // ✅ CRITICAL FIX: Connetto SEMPRE il microfono al MediaStreamDestination per lo streaming
+            micGain.connect(destinationStream)
+            console.log('🎤 [MIC] Microfono connesso al MediaStreamDestination per streaming')
+            
+            // ✅ FIX: Connetto anche al mixer locale per il PTT
+            micGain.connect(mixerGain)
+            console.log('🎤 [MIC] Microfono connesso anche al mixer locale per PTT')
+            
+            // ✅ FIX: Salva SEMPRE i riferimenti PTT per aggiornamenti futuri
+            ;(window as any).currentPTTMicGain = micGain
+            ;(window as any).currentPTTMixerGain = mixerGain
+            ;(window as any).currentPTTContext = mixContext
+            
+            // ✅ CRITICAL FIX: Imposta il volume iniziale del microfono per lo streaming
+            if (pttActive) {
+              micGain.gain.setValueAtTime(1.0, mixContext.currentTime) // Microfono al 100%
+              console.log('🎤 [PTT] Microfono attivato al 100% per PTT e streaming')
+            } else {
+              micGain.gain.setValueAtTime(0.0, mixContext.currentTime) // Microfono al 0%
+              console.log('🎤 [MIC] Microfono creato ma silenziato (PTT non attivo) - disponibile per streaming')
+            }
+            
+            console.log('🎤 [MIC] Riferimenti PTT salvati globalmente:', {
+              currentPTTMicGain: !!(window as any).currentPTTMicGain,
+              currentPTTMixerGain: !!(window as any).currentPTTMixerGain,
+              currentPTTContext: !!(window as any).currentPTTContext
+            })
+            
+            hasRealAudio = true
+            console.log('✅ [MIC] Microfono creato e connesso con successo per streaming e PTT')
+        
+        console.log('🔄 [GETMIXEDSTREAM] Passaggio critico - prima del return...')
+            
+            try {
+              // ✅ CRITICAL FIX: Notifica di successo microfono
+              if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+                ;(window as any).addStreamingNotification('success', 'Microfono Attivo', 'Microfono creato e connesso con successo per streaming e PTT', 'audio')
+              }
+              console.log('🔄 [GETMIXEDSTREAM] Notifica microfono inviata...')
+            } catch (error) {
+              console.error('❌ [GETMIXEDSTREAM] Errore notifica microfono:', error)
+            }
+          } catch (e: any) {
+            console.error('❌ [MIC] Errore creazione microfono:', e.message)
+          }
+        } else {
+          console.warn('⚠️ [MIC] Microfono non disponibile per streaming:', {
+            micStreamRef: !!micStreamRef.current,
+            isEnabled: state.microphone.isEnabled,
+            isMuted: state.microphone.isMuted
+          })
+        }
+
+        // 🚨 FALLBACK OSCILLATOR SE NECESSARIO
+        if (!hasRealAudio) {
+          try {
+            const oscillator = mixContext.createOscillator()
+            const gainNode = mixContext.createGain()
+            
+            oscillator.frequency.setValueAtTime(440, mixContext.currentTime)
+            gainNode.gain.setValueAtTime(0.1, mixContext.currentTime)
+            
+            oscillator.connect(gainNode)
+            gainNode.connect(mixerGain)
+            
+            oscillator.start()
+          } catch (e: any) {
+            // Ignora errori per l'oscillator
+          }
+        }
+
+        // 📡 NOTIFICHE FINALI
+        if (hasRealAudio) {
+          // ✅ CRITICAL FIX: Notifica di successo con audio reale
+          if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+            ;(window as any).addStreamingNotification('success', 'Streaming Successo', '✅ STREAMING SUCCESSO: Audio reale catturato!', 'streaming')
+          } else {
+            console.log('✅ [STREAMING] Audio reale catturato con successo!')
+          }
+        } else {
+          // ✅ CRITICAL FIX: Notifica di warning per fallback
+          if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+            ;(window as any).addStreamingNotification('warning', 'Streaming Warning', '⚠️ STREAMING PROBLEMA: Solo oscillator, nessun audio reale!', 'streaming')
+          } else {
+            console.warn('⚠️ [STREAMING] Solo oscillator, nessun audio reale!')
+          }
+        }
+
+        // ✅ CRITICAL FIX: Assicurati che ci sia sempre un stream valido
+        if (!hasRealAudio) {
+          console.log('⚠️ [STREAMING] Nessun audio attivo, creo stream silenzioso per mantenere connessione...')
+          
+          // Crea un oscillator silenzioso per mantenere la connessione
+          const silentOscillator = mixContext.createOscillator()
+          const silentGain = mixContext.createGain()
+          silentGain.gain.setValueAtTime(0, mixContext.currentTime) // Completamente silenzioso
+          silentOscillator.connect(silentGain)
+          silentGain.connect(destinationStream)
+          silentOscillator.start()
+          
+          console.log('✅ [STREAMING] Stream silenzioso creato per mantenere connessione streaming')
+        }
+        
+        try {
+          // ✅ CRITICAL FIX: Notifica di completamento
+          if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+            ;(window as any).addStreamingNotification('success', 'Streaming Ready', '🎵 Mixed stream creato con successo! Audio pronto per streaming.', 'streaming')
+          }
+          console.log('🔄 [GETMIXEDSTREAM] Notifica completamento inviata...')
+        } catch (error) {
+          console.error('❌ [GETMIXEDSTREAM] Errore notifica completamento:', error)
+        }
+        
+        // ✅ FFmpeg già avviato all'inizio di getMixedStream
+        
+        console.log('✅ [STREAMING] getMixedStream completato - stream valido restituito')
+        console.log('🎵 [GETMIXEDSTREAM] Stream restituito:', !!destinationStream.stream, destinationStream.stream?.active, destinationStream.stream?.getTracks().length)
+        
+        // ✅ CRITICAL FIX: Avvia sincronizzazione continua se non è già attiva
+        if (typeof window !== 'undefined' && (window as any).startContinuousSync) {
+          console.log('🔄 [GETMIXEDSTREAM] Avvio sincronizzazione continua...')
+          ;(window as any).startContinuousSync()
+        } else {
+          console.log('⚠️ [GETMIXEDSTREAM] startContinuousSync non disponibile, riprovo tra 500ms...')
+          setTimeout(() => {
+            if (typeof window !== 'undefined' && (window as any).startContinuousSync) {
+              console.log('🔄 [GETMIXEDSTREAM] Avvio sincronizzazione continua (ritardato)...')
+              ;(window as any).startContinuousSync()
+            } else {
+              console.error('❌ [GETMIXEDSTREAM] startContinuousSync ancora non disponibile')
+            }
+          }, 500)
+        }
+        
+        console.log('🔄 [GETMIXEDSTREAM] Ultimo passaggio - prima del return finale...')
+        console.log('📡 [GETMIXEDSTREAM] Ritorno destinationStream.stream:', {
+          hasDestinationStream: !!destinationStream,
+          hasStream: !!destinationStream.stream,
+          streamType: typeof destinationStream.stream,
+          streamConstructor: destinationStream.stream?.constructor?.name,
+          isMediaStream: destinationStream.stream instanceof MediaStream,
+          active: destinationStream.stream?.active,
+          tracks: destinationStream.stream?.getTracks()?.length
+        })
+        return destinationStream.stream
+        
+      } catch (error: any) {
+        // ✅ CRITICAL FIX: Notifica di errore critico
+        if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+          ;(window as any).addStreamingNotification('error', 'Errore Critico', `❌ ERRORE CRITICO STREAMING: ${error.message}`, 'streaming')
+        } else {
+          console.error('❌ [STREAMING] Errore critico:', error.message)
+        }
+        return null
+      }
+    } catch (error) {
+      console.error('Error initializing stream:', error);
+      return null;
+    }
+  }
+
+  // ✅ EXPOSE: Esponi il database globalmente per compatibilità
+  ;(window as any).localDatabase = localDatabase
+  
+  // ✅ EXPOSE: Esponi getMixedStream globalmente per uso esterno
+  ;(window as any).getMixedStream = getMixedStream
+  
+  // ✅ EXPOSE: Funzione per avviare la sincronizzazione continua
+  ;(window as any).startContinuousSync = () => {
+    console.log('🔄 [SYNC] Avvio sincronizzazione continua richiesto...')
+    
+    // Verifica se gli elementi audio esistono
+    if (!leftAudioRef.current && !rightAudioRef.current) {
+      console.log('🔄 [SYNC] Nessun elemento audio disponibile per sincronizzazione')
+      return
+    }
+    
+    // Avvia sincronizzazione per deck sinistro se disponibile
+    if (leftAudioRef.current && !(window as any).leftSyncInterval) {
+      console.log('🔄 [SYNC] Avvio sincronizzazione deck sinistro...')
+      ;(window as any).leftSyncInterval = setInterval(() => {
+        const currentLeftAudio = leftAudioRef.current
+        if (currentLeftAudio && (window as any).leftStreamAudio) {
+          // Verifica cambio traccia
+          if ((window as any).leftStreamAudio.src !== currentLeftAudio.src) {
+            console.log(`🔄 [SYNC LEFT] Rilevato cambio traccia - aggiornando elemento audio dello streaming`)
+            ;(window as any).leftStreamAudio.src = currentLeftAudio.src
+            ;(window as any).leftStreamAudio.load()
+            
+            // Sincronizza tutte le proprietà
+            ;(window as any).leftStreamAudio.currentTime = currentLeftAudio.currentTime
+            ;(window as any).leftStreamAudio.playbackRate = currentLeftAudio.playbackRate
+            ;(window as any).leftStreamAudio.loop = currentLeftAudio.loop
+            ;(window as any).leftStreamAudio.muted = currentLeftAudio.muted
+            ;(window as any).leftStreamAudio.volume = 1.0
+            
+            // Sincronizza lo stato di riproduzione
+            if (currentLeftAudio.paused) {
+              console.log('🔄 [SYNC LEFT] Pausa leftStreamAudio - audio originale in pausa')
+              ;(window as any).leftStreamAudio.pause()
+            } else {
+              console.log('🔄 [SYNC LEFT] Riproduzione leftStreamAudio - audio originale in riproduzione')
+              ;(window as any).leftStreamAudio.play().catch((e: any) => {
+                console.error('❌ [SYNC LEFT] Errore riproduzione leftStreamAudio:', e)
+              })
+            }
+          } else {
+            // Sincronizzazione normale della posizione
+            const timeDiff = Math.abs((window as any).leftStreamAudio.currentTime - currentLeftAudio.currentTime)
+            if (timeDiff > 0.05) {
+              console.log(`🔄 [SYNC LEFT] Sincronizzazione posizione: ${currentLeftAudio.currentTime.toFixed(2)}s (diff: ${timeDiff.toFixed(2)}s)`)
+              ;(window as any).leftStreamAudio.currentTime = currentLeftAudio.currentTime
+            }
+          }
+        }
+      }, 200)
+    }
+    
+    // Avvia sincronizzazione per deck destro se disponibile
+    if (rightAudioRef.current && !(window as any).rightSyncInterval) {
+      console.log('🔄 [SYNC] Avvio sincronizzazione deck destro...')
+      ;(window as any).rightSyncInterval = setInterval(() => {
+        const currentRightAudio = rightAudioRef.current
+        if (currentRightAudio && (window as any).rightStreamAudio) {
+          // Verifica cambio traccia
+          if ((window as any).rightStreamAudio.src !== currentRightAudio.src) {
+            console.log(`🔄 [SYNC RIGHT] Rilevato cambio traccia - aggiornando elemento audio dello streaming`)
+            ;(window as any).rightStreamAudio.src = currentRightAudio.src
+            ;(window as any).rightStreamAudio.load()
+            
+            // Sincronizza tutte le proprietà
+            ;(window as any).rightStreamAudio.currentTime = currentRightAudio.currentTime
+            ;(window as any).rightStreamAudio.playbackRate = currentRightAudio.playbackRate
+            ;(window as any).rightStreamAudio.loop = currentRightAudio.loop
+            ;(window as any).rightStreamAudio.muted = currentRightAudio.muted
+            ;(window as any).rightStreamAudio.volume = 1.0
+            
+            // Sincronizza lo stato di riproduzione
+            if (currentRightAudio.paused) {
+              ;(window as any).rightStreamAudio.pause()
+            } else {
+              ;(window as any).rightStreamAudio.play().catch(console.error)
+            }
+          } else {
+            // Sincronizzazione normale della posizione
+            const timeDiff = Math.abs((window as any).rightStreamAudio.currentTime - currentRightAudio.currentTime)
+            if (timeDiff > 0.05) {
+              console.log(`🔄 [SYNC RIGHT] Sincronizzazione posizione: ${currentRightAudio.currentTime.toFixed(2)}s (diff: ${timeDiff.toFixed(2)}s)`)
+              ;(window as any).rightStreamAudio.currentTime = currentRightAudio.currentTime
+            }
+          }
+        }
+      }, 200)
+    }
+    
+    console.log('🔄 [SYNC] Sincronizzazione continua avviata')
+  }
+
+  // ✅ EXPOSE: Funzione per fermare la sincronizzazione continua
+  ;(window as any).stopContinuousSync = () => {
+    if ((window as any).leftSyncInterval) {
+      clearInterval((window as any).leftSyncInterval)
+      ;(window as any).leftSyncInterval = null
+      console.log('🔄 [SYNC] Sincronizzazione sinistra fermata')
+    }
+    if ((window as any).rightSyncInterval) {
+      clearInterval((window as any).rightSyncInterval)
+      ;(window as any).rightSyncInterval = null
+      console.log('🔄 [SYNC] Sincronizzazione destra fermata')
+    }
+  }
+  
+  // ✅ RIMOSSO: I metodi pauseStreaming/resumeStreaming sono ora gestiti dal ContinuousStreamingManager
+  // Non sovrascrivere più i metodi globali definiti in RebuiltDJConsole
+  
+  // ✅ HELPER: Funzione per attendere che streamingManager sia disponibile
+  const waitForStreamingManager = async (timeoutMs: number = 5000): Promise<any> => {
+    const startTime = Date.now()
+    console.log('🔍 [WAIT] Inizio ricerca StreamingManager...')
+    
+    while (Date.now() - startTime < timeoutMs) {
+      if ((window as any).streamingManager) {
+        console.log('📡 [WAIT] StreamingManager trovato dopo', Date.now() - startTime, 'ms')
+        console.log('📡 [WAIT] StreamingManager type:', typeof (window as any).streamingManager)
+        console.log('📡 [WAIT] StreamingManager updateStream method:', typeof (window as any).streamingManager.updateStream)
+        return (window as any).streamingManager
+      }
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    console.warn('⚠️ [WAIT] StreamingManager non trovato entro', timeoutMs, 'ms')
+    console.warn('⚠️ [WAIT] window.streamingManager:', (window as any).streamingManager)
+    return null
+  }
+  
+  // ✅ TRACKING: Sistema per tracciare tutti gli stream audio attivi
+  ;(window as any).activeAudioStreams = []
+  
+  // ✅ FUNZIONE: Aggiungi stream al tracking
+  const addAudioStreamToTracking = (stream: MediaStream) => {
+    if (!(window as any).activeAudioStreams) {
+      ;(window as any).activeAudioStreams = []
+    }
+    ;(window as any).activeAudioStreams.push(stream)
+    console.log('🎵 [TRACKING] Stream audio aggiunto al tracking:', stream.id)
+  }
+  
+  // ✅ FUNZIONE: Rimuovi stream dal tracking
+  const removeAudioStreamFromTracking = (stream: MediaStream) => {
+    if ((window as any).activeAudioStreams) {
+      const index = (window as any).activeAudioStreams.indexOf(stream)
+      if (index > -1) {
+        ;(window as any).activeAudioStreams.splice(index, 1)
+        console.log('🎵 [TRACKING] Stream audio rimosso dal tracking:', stream.id)
+      }
+    }
+  }
+  
+  // ✅ ESPONI: Funzioni di tracking globalmente
+  ;(window as any).addAudioStreamToTracking = addAudioStreamToTracking
+  ;(window as any).removeAudioStreamFromTracking = removeAudioStreamFromTracking
+  
+  // ✅ FUNZIONE: Enumera dispositivi audio output disponibili
+  const getAvailableAudioOutputDevices = async (): Promise<MediaDeviceInfo[]> => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const audioOutputs = devices.filter(device => device.kind === 'audiooutput')
+      console.log('🔊 [AUDIO] Dispositivi audio output disponibili:', audioOutputs)
+      return audioOutputs
+    } catch (error) {
+      console.error('❌ [AUDIO] Errore enumerazione dispositivi output:', error)
+      return []
+    }
+  }
+  
+  // ✅ ESPONI: Funzione per ottenere dispositivi audio output
+  ;(window as any).getAvailableAudioOutputDevices = getAvailableAudioOutputDevices
+  
+  // ✅ FUNZIONE: Inizializza AudioContext principale se non esiste
+  const ensureMainAudioContext = useCallback(() => {
+    if (!(window as any).__audioContexts || !(window as any).__audioContexts[0]) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+      if (AudioContextClass) {
+        const mainContext = new AudioContextClass()
+        if (!(window as any).__audioContexts) {
+          ;(window as any).__audioContexts = []
+        }
+        ;(window as any).__audioContexts[0] = mainContext
+        
+        // ✅ CRITICAL FIX: Esponi globalmente l'AudioContext principale immediatamente
+        ;(window as any).globalAudioContext = mainContext
+        
+        // ✅ CRITICAL FIX: Aggiorna anche lo stato Redux
+        dispatch({ type: 'SET_AUDIO_CONTEXT', payload: mainContext })
+        
+        console.log('🎵 [INIT] AudioContext principale inizializzato e esposto globalmente')
+        return mainContext
+      }
+    }
+    const mainContext = (window as any).__audioContexts && (window as any).__audioContexts[0]
+    if (mainContext && !(window as any).globalAudioContext) {
+      // ✅ CRITICAL FIX: Esponi globalmente anche se già esiste
+      ;(window as any).globalAudioContext = mainContext
+      
+      // ✅ CRITICAL FIX: Aggiorna anche lo stato Redux
+      dispatch({ type: 'SET_AUDIO_CONTEXT', payload: mainContext })
+      
+      console.log('🎵 [INIT] AudioContext principale esistente esposto globalmente')
+    }
+    return mainContext
+  }, [dispatch])
+  
+  // ✅ ESPONI: Funzione per inizializzare AudioContext principale
+  ;(window as any).ensureMainAudioContext = ensureMainAudioContext
+  
+  // ✅ CLEANUP: Funzione per pulire tutti gli stream audio
+  const cleanupAllAudioStreams = useCallback(() => {
+    try {
+      console.log('🧹 [CLEANUP] Inizio cleanup completo stream audio...')
+      
+      // ✅ CLEANUP: Ferma tutti gli stream audio tracciati
+      if ((window as any).activeAudioStreams && Array.isArray((window as any).activeAudioStreams)) {
+        console.log(`🧹 [CLEANUP] Trovati ${(window as any).activeAudioStreams.length} stream audio da fermare`)
+        
+        ;(window as any).activeAudioStreams.forEach((stream: MediaStream, index: number) => {
+          try {
+            if (stream && stream.getTracks) {
+              stream.getTracks().forEach(track => {
+                track.stop()
+                console.log(`🧹 [CLEANUP] Track fermato: ${track.kind} - ${track.label}`)
+              })
+            }
+          } catch (error) {
+            console.warn(`⚠️ [CLEANUP] Errore fermando stream ${index}:`, error)
+          }
+        })
+        
+        // ✅ CLEANUP: Pulisci l'array di tracking
+        ;(window as any).activeAudioStreams = []
+        console.log('🧹 [CLEANUP] Array di tracking stream pulito')
+      }
+      
+      // ✅ CLEANUP: Ferma il microfono se attivo
+      if (micStreamRef.current) {
+        try {
+          micStreamRef.current.getTracks().forEach(track => {
+            track.stop()
+            console.log(`🧹 [CLEANUP] Microfono fermato: ${track.label}`)
+          })
+          micStreamRef.current = null
+        } catch (error) {
+          console.warn('⚠️ [CLEANUP] Errore fermando microfono:', error)
+        }
+      }
+      
+      // ✅ CLEANUP: Ferma tutti gli elementi audio HTML
+      // ✅ CLEANUP: Ferma audio locale solo se non è in streaming
+      const isCurrentlyStreaming = (window as any).isCurrentlyStreaming
+      if (!isCurrentlyStreaming) {
+        if (leftAudioRef.current) {
+          try {
+            leftAudioRef.current.pause()
+            leftAudioRef.current.currentTime = 0
+            leftAudioRef.current.src = ''
+            console.log('🧹 [CLEANUP] Left deck audio fermato')
+          } catch (error) {
+            console.warn('⚠️ [CLEANUP] Errore fermando left deck:', error)
+          }
+        }
+        
+        if (rightAudioRef.current) {
+          try {
+            rightAudioRef.current.pause()
+            rightAudioRef.current.currentTime = 0
+            rightAudioRef.current.src = ''
+            console.log('🧹 [CLEANUP] Right deck audio fermato')
+          } catch (error) {
+            console.warn('⚠️ [CLEANUP] Errore fermando right deck:', error)
+          }
+        }
+      } else {
+        console.log('🧹 [CLEANUP] Audio locale mantenuto attivo durante streaming')
+      }
+      
+      // ✅ CLEANUP: Chiudi solo AudioContext temporanei, NON quello principale
+      if (typeof window !== 'undefined' && window.AudioContext) {
+        try {
+          // Cerca AudioContext attivi globalmente
+          const audioContexts = (window as any).__audioContexts || []
+          audioContexts.forEach((ctx: AudioContext, index: number) => {
+            // ✅ CORREZIONE: Non chiudere l'AudioContext principale (indice 0)
+            if (ctx && ctx.state !== 'closed' && index > 0) {
+              ctx.close()
+              console.log(`🧹 [CLEANUP] AudioContext temporaneo ${index} chiuso`)
+            } else if (index === 0) {
+              console.log('🧹 [CLEANUP] AudioContext principale mantenuto attivo')
+            }
+          })
+        } catch (error) {
+          console.warn('⚠️ [CLEANUP] Errore chiudendo AudioContext temporanei:', error)
+        }
+      }
+      
+      // ✅ CLEANUP: Pulisci riferimenti globali
+      ;(window as any).__currentStreamVolume__ = undefined
+      ;(window as any).__pttOriginalStreamVolume__ = undefined
+      
+      // ✅ CORREZIONE: Mantieni solo l'AudioContext principale
+      if ((window as any).__audioContexts && (window as any).__audioContexts.length > 0) {
+        ;(window as any).__audioContexts = [(window as any).__audioContexts[0]]
+        console.log('🧹 [CLEANUP] Mantenuto solo AudioContext principale')
+      }
+      
+      console.log('✅ [CLEANUP] Cleanup completo stream audio completato')
+      
+    } catch (error) {
+      console.error('❌ [CLEANUP] Errore durante cleanup stream audio:', error)
+    }
+  }, [])
+  
+  // ✅ ESPONI: Funzione di cleanup globalmente
+  ;(window as any).cleanupAllAudioStreams = cleanupAllAudioStreams
+  
+  // ✅ AUTO-RECONNECT: Funzione per ricollegare automaticamente i deck quando vengono creati dopo lo streaming
+  ;(window as any).reconnectDeckToStreaming = async (deckId: 'A' | 'B') => {
+    try {
+      console.log(`🎵 [AUTO-RECONNECT] Tentativo ricollegamento deck ${deckId} allo streaming...`)
+      
+      // Verifica che lo streaming sia attivo
+      if (!(window as any).isCurrentlyStreaming) {
+        console.log(`🎵 [AUTO-RECONNECT] Streaming non attivo, salto ricollegamento deck ${deckId}`)
+        return false
+      }
+      
+      // Cerca l'elemento audio del deck nel DOM
+      const deckAudioElement = document.querySelector(`audio.deck-audio[data-deck="${deckId}"]`) as HTMLAudioElement
+      if (!deckAudioElement || !deckAudioElement.src || deckAudioElement.src.trim() === '') {
+        console.log(`🎵 [AUTO-RECONNECT] Deck ${deckId} non ha audio valido, salto ricollegamento`)
+        return false
+      }
+      
+      console.log(`🎵 [AUTO-RECONNECT] Deck ${deckId} trovato con audio valido, procedo con ricollegamento...`)
+      
+      // ✅ CRITICAL FIX: Invece di cercare di ricollegare al mixer esistente,
+      // ricreiamo completamente il mixed stream per includere i nuovi deck
+      try {
+        // Notifica di inizio ricollegamento
+        if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+          ;(window as any).addStreamingNotification('info', 'Ricollegamento Deck', `Ricollegamento deck ${deckId} allo streaming...`, 'audio')
+        }
+        
+        // ✅ RICREA COMPLETAMENTE IL MIXED STREAM
+        console.log(`🎵 [AUTO-RECONNECT] Ricreazione mixed stream per includere deck ${deckId}...`)
+        
+        // Chiama getMixedStream per ricreare il stream con tutti i deck disponibili
+        const newMixedStream = await getMixedStream()
+        
+        if (newMixedStream) {
+          // ✅ AGGIORNA LO STREAMING MANAGER CON IL NUOVO STREAM
+          if ((window as any).streamingManager && typeof (window as any).streamingManager.updateStream === 'function') {
+            await (window as any).streamingManager.updateStream(newMixedStream)
+            console.log(`✅ [AUTO-RECONNECT] Streaming aggiornato con nuovo mixed stream`)
+          } else {
+            console.log(`⚠️ [AUTO-RECONNECT] StreamingManager non disponibile per aggiornamento`)
+          }
+          
+          // Notifica di successo
+          if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+            ;(window as any).addStreamingNotification('success', 'Deck Ricollegato', `Deck ${deckId} ricollegato con successo allo streaming`, 'audio')
+          }
+          
+          console.log(`✅ [AUTO-RECONNECT] Deck ${deckId} ricollegato con successo allo streaming`)
+          return true
+        } else {
+          throw new Error('getMixedStream ha restituito null')
+        }
+        
+      } catch (streamError: any) {
+        console.error(`❌ [AUTO-RECONNECT] Errore ricreazione mixed stream:`, streamError.message)
+        
+        // Notifica di errore
+        if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+          ;(window as any).addStreamingNotification('error', 'Errore Ricollegamento', `Errore ricollegamento deck ${deckId}: ${streamError.message}`, 'audio')
+        }
+        
+        return false
+      }
+      
+    } catch (error: any) {
+      console.error(`❌ [AUTO-RECONNECT] Errore generale ricollegamento deck ${deckId}:`, error.message)
+      
+      if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+        ;(window as any).addStreamingNotification('error', 'Errore Ricollegamento', `Errore ricollegamento deck ${deckId}: ${error.message}`, 'audio')
+      }
+      
+      return false
+    }
+  }
+  
+  // ✅ MONITORING: Funzione per monitoraggio continuo del server durante streaming
+  ;(window as any).startServerMonitoring = () => {
+    if ((window as any).__serverMonitoringInterval__) {
+      clearInterval((window as any).__serverMonitoringInterval__)
+    }
+    
+    console.log('🔍 [MONITORING] Avvio monitoraggio continuo del server...')
+    
+    ;(window as any).__serverMonitoringInterval__ = setInterval(async () => {
+      try {
+        // ✅ FIX: Controlla se l'utente ha richiesto la disconnessione
+        if ((window as any).globalStreamingManager?.isUserRequestedDisconnect) {
+          console.log('🛑 [MONITORING] Disconnessione richiesta dall\'utente - fermo monitoraggio')
+          return
+        }
+        
+        if ((window as any).isCurrentlyStreaming) {
+          console.log('🔍 [MONITORING] Verifica server durante streaming...')
+          
+          // ✅ CRITICAL FIX: Verifica diretta HTTP usando server di default
+          const defaultServer = await localDatabase.getDefaultIcecastServer()
+          if (defaultServer?.host && defaultServer?.port) {
+            const host = defaultServer.host
+            const port = defaultServer.port
+            1
+            const response = await fetch(`http://${host}:${port}/status-json.xsl`, {
+              method: 'GET',
+              cache: 'no-cache',
+              signal: AbortSignal.timeout(3000) // Timeout più breve per monitoraggio
+            })
+            
+            if (!response.ok) {
+              if (response.status === 404) {
+                throw new Error(`Server non raggiungibile - Endpoint non trovato (404)`)
+              } else if (response.status === 403) {
+                throw new Error(`Server non raggiungibile - Accesso negato (403)`)
+              } else if (response.status >= 500) {
+                throw new Error(`Server non raggiungibile - Errore server (${response.status})`)
+            } else {
+                throw new Error(`Server non raggiungibile - HTTP ${response.status}`)
+              }
+            }
+            
+            console.log('✅ [MONITORING] Server OK durante streaming')
+      } else {
+            throw new Error('Impostazioni streaming incomplete')
+          }
+        }
+      } catch (error: any) {
+        // ✅ FIX: Controlla se l'utente ha richiesto la disconnessione prima di gestire errori
+        if ((window as any).globalStreamingManager?.isUserRequestedDisconnect) {
+          console.log('🛑 [MONITORING] Disconnessione richiesta dall\'utente - ignoro errore server')
+          return
+        }
+        
+        console.error('🚨 [MONITORING] SERVER CADUTO durante streaming!', error.message)
+        
+        // ✅ CRITICAL FIX: Usa notifiche invece di alert che bloccano l'interfaccia
+        if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+          ;(window as any).addStreamingNotification('error', 'Server Caduto', `🚨 SERVER CADUTO!\n\n${error.message}\n\nLo streaming è stato fermato automaticamente.`, 'streaming')
+        } else {
+          // Fallback a console se le notifiche non sono disponibili
+          console.error('🚨 [MONITORING] Server caduto:', error.message)
+        }
+        
+        // Ferma lo streaming
+        if ((window as any).stopStreaming) {
+          ;(window as any).stopStreaming()
+        }
+      }
+    }, 5000) // Controlla ogni 5 secondi (più frequente)
+  }
+  
+  // ✅ STOP: Funzione per fermare il monitoraggio
+  ;(window as any).stopServerMonitoring = () => {
+    if ((window as any).__serverMonitoringInterval__) {
+      clearInterval((window as any).__serverMonitoringInterval__)
+      ;(window as any).__serverMonitoringInterval__ = null
+      console.log('🔍 [MONITORING] Monitoraggio server fermato')
+    }
+  }
+  
+  
+  // ✅ DEBUG: Funzione per verificare lo stato del database
+  ;(window as any).debugDatabaseStatus = async () => {
+    try {
+      console.log('🔍 [DB DEBUG] Verifica stato database...')
+      console.log('🔍 [DB DEBUG] Database importato:', !!localDatabase)
+      console.log('🔍 [DB DEBUG] Tipo database:', typeof localDatabase)
+      console.log('🔍 [DB DEBUG] Metodi disponibili:', Object.getOwnPropertyNames(Object.getPrototypeOf(localDatabase)))
+      
+      if (localDatabase) {
+        console.log('🔍 [DB DEBUG] Database disponibile, aspetto inizializzazione...')
+          await localDatabase.waitForInitialization()
+        console.log('🔍 [DB DEBUG] Database inizializzato!')
+        
+          const settings = await localDatabase.getSettings()
+        console.log('🔍 [DB DEBUG] Settings letti:', !!settings)
+        console.log('🔍 [DB DEBUG] Settings completi:', settings)
+        
+        if (settings?.streaming?.icecastServers && settings.streaming.icecastServers.length > 0) {
+          console.log('🔍 [DB DEBUG] ✅ Icecast servers configurati:', settings.streaming.icecastServers.length)
+          const defaultServer = settings.streaming.icecastServers.find(s => s.isDefault) || settings.streaming.icecastServers[0]
+          if (defaultServer) {
+            console.log('🔍 [DB DEBUG] Server di default:', {
+              host: defaultServer.host,
+              port: defaultServer.port,
+              mount: defaultServer.mount
+            })
+          }
+        } else {
+          console.log('🔍 [DB DEBUG] ❌ Nessun server Icecast configurato')
+        }
+      }
+    } catch (error: any) {
+      console.error('❌ [DB DEBUG] Errore verifica database:', error.message)
+    }
+  }
+  
+  // ✅ SERVER CHECK: Funzione per verificare la connessione al server streaming
+  ;(window as any).checkStreamingServerConnection = async (settings?: any) => {
+    try {
+      console.log('🔍 [SERVER CHECK] Verifica connessione al server streaming...')
+      
+      // ✅ CRITICAL FIX: Usa le impostazioni passate come parametro o leggi dal database
+      
+      try {
+        let s = settings // Usa le impostazioni passate come parametro
+        console.log('🔍 [SERVER CHECK] Parametro settings ricevuto:', !!s)
+        console.log('🔍 [SERVER CHECK] Tipo di settings:', typeof s)
+        
+                // ✅ CRITICAL FIX: FORZA sempre la lettura dal database per evitare problemi di timing
+        console.log('🔍 [SERVER CHECK] FORZO lettura dal database per evitare problemi...')
+        
+        // Aspetta che il database sia inizializzato e forza lettura settings
+        await localDatabase.waitForInitialization()
+        s = await localDatabase.getSettings()
+        console.log('🔍 [SERVER CHECK] Settings forzati dal database:', !!s)
+        
+        // ✅ USA SERVER DI DEFAULT SELEZIONATO
+        const defaultServer = await localDatabase.getDefaultIcecastServer()
+        console.log('🔍 [SERVER CHECK] DEBUG - Server di default:', defaultServer)
+        
+        if (!defaultServer) {
+          throw new Error('IMPOSTAZIONI STREAMING INCOMPLETE: Nessun server Icecast configurato')
+        }
+        
+        // ✅ CRITICAL FIX: Verifica che il server di default sia valido
+        if (!defaultServer.host || !defaultServer.port) {
+          throw new Error('IMPOSTAZIONI STREAMING INCOMPLETE: Server di default non valido')
+        }
+        
+        if (defaultServer.host.trim() === '' || defaultServer.port === 0) {
+          throw new Error('IMPOSTAZIONI STREAMING INCOMPLETE: Host vuoto o porta 0 nel server di default')
+        }
+        
+        console.log('🔍 [SERVER CHECK] ✅ Server di default valido, procedo con test connessione...')
+        
+        if (defaultServer?.host && defaultServer?.port) {
+          const host = defaultServer.host
+          const port = defaultServer.port
+          console.log(`🔍 [SERVER CHECK] Connessione Icecast configurata: http://${host}:${port}`)
+          console.log(`🔍 [SERVER CHECK] Server: ${defaultServer.name}, Host: ${host}, Porta: ${port}`)
+          
+          // ✅ CRITICAL FIX: Prova connessione HTTP per server Icecast
+          console.log(`🔍 [SERVER CHECK] Test connessione HTTP su: http://${host}:${port}`)
+          
+          try {
+            // ✅ CRITICAL FIX: Rimuovo no-cors per rilevare errori reali
+            const response = await fetch(`http://${host}:${port}/status-json.xsl`, {
+              method: 'GET',
+              cache: 'no-cache',
+              signal: AbortSignal.timeout(5000) // Timeout 5 secondi
+            })
+            
+            if (!response.ok) {
+              if (response.status === 404) {
+                throw new Error(`Server Icecast non raggiungibile su http://${host}:${port} - Endpoint non trovato (404)`)
+              } else if (response.status === 403) {
+                throw new Error(`Server Icecast non raggiungibile su http://${host}:${port} - Accesso negato (403)`)
+              } else if (response.status >= 500) {
+                throw new Error(`Server Icecast non raggiungibile su http://${host}:${port} - Errore server (${response.status})`)
+              } else {
+                throw new Error(`Server Icecast non raggiungibile su http://${host}:${port} - HTTP ${response.status}`)
+              }
+            }
+            
+            console.log(`✅ [SERVER CHECK] Server Icecast raggiungibile su http://${host}:${port}`)
+            
+            // ✅ CRITICAL FIX: Notifica di successo
+            if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+              ;(window as any).addStreamingNotification('success', 'Server Raggiungibile', `Server Icecast raggiungibile su http://${host}:${port}`, 'streaming')
+            }
+            
+            return true
+          } catch (httpError: any) {
+            console.error(`❌ [SERVER CHECK] Errore connessione HTTP:`, httpError.message)
+            throw new Error(`Server Icecast non raggiungibile su http://${host}:${port}`)
+          }
+        } else {
+          // ✅ CRITICAL FIX: NESSUN FALLBACK - Solo errore chiaro
+          const errorMsg = `🚨 IMPOSTAZIONI STREAMING INCOMPLETE!\n\nHost o porta non configurati correttamente.\n\nConfigurazione attuale:\n• Host: "${s?.streaming?.icecast?.host || 'NON IMPOSTATO'}"\n• Porta: ${s?.streaming?.icecast?.port || 'NON IMPOSTATA'}\n\nVai in Settings e configura:\n• Host: 82.145.63.6\n• Porta: 5040`
+          
+          console.error('❌ [SERVER CHECK]', errorMsg)
+          
+          // ✅ CRITICAL FIX: Notifica di errore
+          if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+            ;(window as any).addStreamingNotification('error', 'Impostazioni Incomplete', errorMsg, 'app')
+          }
+          
+          throw new Error(errorMsg)
+        }
+      } catch (settingsError: any) {
+        // ✅ CRITICAL FIX: Distinguo tra errore database e errore connessione
+        if (settingsError.message.includes('IMPOSTAZIONI STREAMING INCOMPLETE')) {
+          // Errore impostazioni
+          const errorMsg = `🚨 IMPOSTAZIONI STREAMING INCOMPLETE!\n\n${settingsError.message}\n\nVai in Settings e configura:\n• Host: 82.145.63.6\n• Porta: 5040`
+          console.error('❌ [SERVER CHECK] Impostazioni incomplete:', errorMsg)
+          throw new Error(errorMsg)
+        } else if (settingsError.message.includes('Server Icecast non raggiungibile')) {
+          // Errore connessione - lo rilancio così com'è
+          console.error('❌ [SERVER CHECK] Server non raggiungibile:', settingsError.message)
+          throw settingsError
+        } else {
+          // Altri errori - potrebbero essere errori database
+          const errorMsg = `🚨 ERRORE LETTURA IMPOSTAZIONI!\n\nImpossibile leggere le impostazioni dal database.\n\nErrore: ${settingsError.message}\n\nVerifica che il database sia accessibile e riprova.`
+          console.error('❌ [SERVER CHECK] Errore database:', errorMsg)
+          
+          // ✅ CRITICAL FIX: Notifica di errore
+          if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+            ;(window as any).addStreamingNotification('error', 'Errore Database', errorMsg, 'app')
+          }
+          
+          throw new Error(errorMsg)
+        }
+      }
+    } catch (error: any) {
+      // ✅ CRITICAL FIX: Rilancio l'errore così com'è - la logica di gestione è già nel catch interno
+      console.error('❌ [SERVER CHECK] Errore finale:', error.message)
+      throw error
+    }
+  }
+
+  // ✅ FIX: Funzione globale per aggiornare i volumi PTT dinamicamente
+  ;(window as any).updatePTTVolumesOnly = (pttActive: boolean) => {
+    try {
+      console.log(`🎤 [PTT UPDATE] Tentativo aggiornamento volumi PTT: ${pttActive ? 'ON' : 'OFF'}`)
+      
+      // ✅ CRITICAL FIX: Usa i riferimenti globali del mixer per il PTT
+      const micGain = (window as any).currentPTTMicGain
+      const mixerGain = (window as any).currentPTTMixerGain
+      const context = (window as any).currentPTTContext
+      
+      // ✅ CRITICAL FIX: PTT Ducking dalle impostazioni (default 75% = musica abbassata del 75% del volume corrente)
+      const pttDuckingLevel = (window as any).__pttDuckingLevel__ || 0.75 // Default 75% di abbassamento
+      
+      if (pttActive) {
+        // ✅ STORE: Salva il volume corrente del LiveStream prima del ducking
+        if (!(window as any).__pttOriginalStreamVolume__) {
+          // ✅ CRITICAL FIX: Ottieni il volume corrente del LiveStream dall'interfaccia
+          const currentStreamVolume = (window as any).__currentStreamVolume__ || 1.0 // Default 100%
+          ;(window as any).__pttOriginalStreamVolume__ = currentStreamVolume
+          
+          console.log(`🎤 [PTT] Volume originale del LiveStream salvato: ${Math.round(currentStreamVolume * 100)}%`)
+        }
+        
+        // ✅ CALCULATE: Calcola il volume ducked del LiveStream
+        const originalStreamVolume = (window as any).__pttOriginalStreamVolume__ || 1.0
+        const duckedStreamVolume = Math.max(0, originalStreamVolume * (1.0 - pttDuckingLevel))
+        
+        console.log(`🎤 [PTT DEBUG] Volume originale LiveStream: ${Math.round(originalStreamVolume * 100)}%, Ducking: ${Math.round(pttDuckingLevel * 100)}%, Volume finale: ${Math.round(duckedStreamVolume * 100)}%`)
+        
+        // ✅ PTT: Aggiorna il microfono per lo streaming
+        if (micGain && context) {
+          micGain.gain.setValueAtTime(1.0, context.currentTime) // Microfono al 100%
+          console.log(`🎤 [PTT UPDATE] Microfono attivato al 100% per streaming`)
+          
+          // ✅ CRITICAL FIX: Notifica di successo
+          if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+            ;(window as any).addStreamingNotification('info', 'PTT Attivato', 'Microfono attivato al 100% per streaming', 'audio')
+          }
+        }
+        
+        // ✅ CRITICAL FIX: Abbassa SOLO il volume del LiveStream usando setLiveStreamVolume (controlla SOLO l'interfaccia Live Stream)
+        if (typeof (window as any).setLiveStreamVolume === 'function') {
+          ;(window as any).setLiveStreamVolume(duckedStreamVolume)
+          console.log(`🎤 [PTT UPDATE] LiveStream abbassato del ${Math.round(pttDuckingLevel * 100)}% (da ${Math.round(originalStreamVolume * 100)}% a ${Math.round(duckedStreamVolume * 100)}%)`)
+      } else {
+          console.warn('⚠️ [PTT] Funzione setLiveStreamVolume non disponibile')
+        }
+        
+        // ✅ CRITICAL FIX: Aggiorna ANCHE il mixer WebAudio per abbassare realmente la musica
+        if (mixerGain && mixerGain.gain) {
+          mixerGain.gain.setValueAtTime(duckedStreamVolume, context.currentTime)
+          console.log(`🎤 [PTT UPDATE] Mixer WebAudio abbassato a ${Math.round(duckedStreamVolume * 100)}% per ducking reale`)
+        } else {
+          console.warn('⚠️ [PTT] Mixer WebAudio non disponibile per ducking')
+        }
+        
+      } else {
+        // ✅ RESTORE: Ripristina il volume originale del LiveStream (NON al 100%!)
+        const originalStreamVolume = (window as any).__pttOriginalStreamVolume__ || 1.0
+        
+        // ✅ PTT: Disattiva il microfono per lo streaming
+        if (micGain && context) {
+          micGain.gain.setValueAtTime(0.0, context.currentTime) // Microfono al 0%
+          console.log(`🎤 [PTT UPDATE] Microfono disattivato per streaming`)
+          
+          // ✅ CRITICAL FIX: Notifica di successo
+          if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+            ;(window as any).addStreamingNotification('info', 'PTT Disattivato', 'Microfono disattivato per streaming', 'audio')
+          }
+        }
+        
+        // ✅ CRITICAL FIX: Ripristina il volume originale del LiveStream usando setLiveStreamVolume
+        if (typeof (window as any).setLiveStreamVolume === 'function') {
+          ;(window as any).setLiveStreamVolume(originalStreamVolume)
+          console.log(`🎤 [PTT UPDATE] LiveStream ripristinato al volume originale: ${Math.round(originalStreamVolume * 100)}%`)
+          } else {
+          console.warn('⚠️ [PTT] Funzione setLiveStreamVolume non disponibile')
+        }
+        
+        // ✅ CRITICAL FIX: Ripristina ANCHE il mixer WebAudio al volume originale
+        if (mixerGain && mixerGain.gain) {
+          mixerGain.gain.setValueAtTime(originalStreamVolume, context.currentTime)
+          console.log(`🎤 [PTT UPDATE] Mixer WebAudio ripristinato a ${Math.round(originalStreamVolume * 100)}%`)
+          } else {
+          console.warn('⚠️ [PTT] Mixer WebAudio non disponibile per ripristino')
+        }
+        
+        // ✅ CLEANUP: Pulisci il volume originale salvato
+        ;(window as any).__pttOriginalStreamVolume__ = undefined
+      }
+      
+      // ✅ DEBUG: Log dei riferimenti disponibili
+      console.log(`🎤 [PTT DEBUG] Riferimenti disponibili:`, {
+        micGain: !!micGain,
+        context: !!context,
+        setLiveStreamVolume: typeof (window as any).setLiveStreamVolume === 'function',
+        originalStreamVolume: (window as any).__pttOriginalStreamVolume__
+      })
+
+          } catch (error) {
+      console.error('❌ [PTT ERROR] Errore durante aggiornamento volumi PTT:', error)
+    }
+  }
+
+  // ===== FUNZIONI ESSENZIALI =====
+
+  // Riproduce una track nel deck sinistro
+  const playLeftTrack = useCallback((track: AudioTrack) => {
+    console.log(`🎵 [LEFT DECK] Riproduzione track: ${track.title}`)
+    
+    try {
+      // ✅ CLEANUP: Pulisci audio precedente
+      if (leftAudioRef.current) {
+        leftAudioRef.current.pause()
+        leftAudioRef.current.currentTime = 0
+        leftAudioRef.current.src = ''
+        console.log('🧹 [LEFT DECK] Audio precedente pulito')
+      }
+      
+      // Aggiorna lo stato del deck
+      dispatch({ type: 'SET_LEFT_DECK_TRACK', payload: track })
+      dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: true })
+      
+      // Carica l'audio se c'è un URL
+      if (track.url && leftAudioRef.current) {
+        leftAudioRef.current.src = track.url
+        leftAudioRef.current.load()
+        
+        // ✅ FIX: Applica il volume locale corretto
+        leftAudioRef.current.volume = state.leftDeck.localVolume
+        
+        // Avvia la riproduzione
+        leftAudioRef.current.play().catch((error: any) => {
+          console.error('❌ Errore avvio riproduzione left deck:', error)
+          dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: false })
+        })
+      }
+      
+      console.log(`✅ [LEFT DECK] Track "${track.title}" caricata e avviata`)
+      
+      // ✅ CRITICAL FIX: NON aggiornare nulla al cambio traccia - il sistema gestirà automaticamente
+      // Il mixed stream si aggiorna automaticamente e il MediaRecorder continua a funzionare
+      console.log('🎵 [TRACK CHANGE LEFT] Traccia cambiata - sistema gestirà automaticamente lo streaming')
+      
+      // ✅ CRITICAL FIX: Avvia sincronizzazione continua se non è già attiva
+      if (typeof window !== 'undefined' && (window as any).startContinuousSync) {
+        console.log('🔄 [TRACK CHANGE] Avvio sincronizzazione continua per cambio traccia...')
+        ;(window as any).startContinuousSync()
+      }
+    } catch (error: any) {
+      console.error('❌ Errore caricamento left deck:', error)
+      dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: false })
+    }
+  }, [dispatch, state.leftDeck.localVolume, getMixedStream])
+
+  // Riproduce una track nel deck destro
+  const playRightTrack = useCallback((track: AudioTrack) => {
+    console.log(`🎵 [RIGHT DECK] Riproduzione track: ${track.title}`)
+    
+    try {
+      // ✅ CLEANUP: Pulisci audio precedente
+      if (rightAudioRef.current) {
+        rightAudioRef.current.pause()
+        rightAudioRef.current.currentTime = 0
+        rightAudioRef.current.src = ''
+        console.log('🧹 [RIGHT DECK] Audio precedente pulito')
+      }
+      
+      // Aggiorna lo stato del deck
+      dispatch({ type: 'SET_RIGHT_DECK_TRACK', payload: track })
+      dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: true })
+      
+      // Carica l'audio se c'è un URL
+      if (track.url && rightAudioRef.current) {
+        rightAudioRef.current.src = track.url
+        rightAudioRef.current.load()
+        
+        // ✅ FIX: Applica il volume locale corretto
+        rightAudioRef.current.volume = state.rightDeck.localVolume
+        
+        // Avvia la riproduzione
+        rightAudioRef.current.play().catch((error: any) => {
+          console.error('❌ Errore avvio riproduzione right deck:', error)
+          dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: false })
+        })
+      }
+      
+      console.log(`✅ [RIGHT DECK] Track "${track.title}" caricata e avviata`)
+      
+      // ✅ CRITICAL FIX: NON aggiornare nulla al cambio traccia - il sistema gestirà automaticamente
+      // Il mixed stream si aggiorna automaticamente e il MediaRecorder continua a funzionare
+      console.log('🎵 [TRACK CHANGE RIGHT] Traccia cambiata - sistema gestirà automaticamente lo streaming')
+      
+      // ✅ CRITICAL FIX: Avvia sincronizzazione continua se non è già attiva
+      if (typeof window !== 'undefined' && (window as any).startContinuousSync) {
+        console.log('🔄 [TRACK CHANGE] Avvio sincronizzazione continua per cambio traccia...')
+        ;(window as any).startContinuousSync()
+      }
+    } catch (error: any) {
+      console.error('❌ Errore caricamento right deck:', error)
+      dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: false })
+    }
+  }, [dispatch, state.rightDeck.localVolume, getMixedStream])
+
+  // ✅ FIX: Aggiorna i volumi locali degli elementi audio HTML
+  const updateLocalVolumes = useCallback(() => {
+    if (leftAudioRef.current) {
+      // ✅ FIX: Applica il volume locale corretto
+      const targetVolume = Math.max(0, Math.min(1, state.leftDeck.localVolume))
+      leftAudioRef.current.volume = targetVolume
+      console.log(`🔊 [LEFT DECK] Volume locale aggiornato: ${Math.round(targetVolume * 100)}%`)
+    }
+    
+    if (rightAudioRef.current) {
+      // ✅ FIX: Applica il volume locale corretto
+      const targetVolume = Math.max(0, Math.min(1, state.rightDeck.localVolume))
+      rightAudioRef.current.volume = targetVolume
+      console.log(`🔊 [RIGHT DECK] Volume locale aggiornato: ${Math.round(targetVolume * 100)}%`)
+    }
+  }, [state.leftDeck.localVolume, state.rightDeck.localVolume])
+
+  // ✅ FIX: Effetto per aggiornare i volumi locali quando cambiano
+  useEffect(() => {
+    console.log('🔊 [VOLUMES] Aggiornamento volumi locali richiesto')
+    updateLocalVolumes()
+  }, [updateLocalVolumes])
+
+  // ✅ FIX: Effetto per aggiornare i volumi quando cambia lo stato
+  useEffect(() => {
+    console.log('🔊 [VOLUMES] Stato volumi cambiato - aggiornamento automatico')
+    updateLocalVolumes()
+  }, [state.leftDeck.localVolume, state.rightDeck.localVolume])
+
+  // ✅ CORREZIONE: Funzione per configurare il dispositivo output audio
+  const configureAudioOutputDevice = useCallback(async () => {
+    try {
+      const outputDevice = settings?.audio?.outputDevice
+      if (!outputDevice || outputDevice === 'default') {
+        console.log('🔊 [AUDIO] Usando dispositivo output predefinito')
+        return
+      }
+
+      console.log(`🔊 [AUDIO] Configurazione dispositivo output: ${outputDevice}`)
+      
+      // ✅ CORREZIONE: Configura gli elementi audio per usare il dispositivo specifico
+      const audioElements = [leftAudioRef.current, rightAudioRef.current].filter(Boolean)
+      
+      for (const audioElement of audioElements) {
+        if (audioElement) {
+          try {
+            // ✅ CORREZIONE: Usa setSinkId se supportato (Chrome/Edge)
+            if ('setSinkId' in audioElement) {
+              await (audioElement as any).setSinkId(outputDevice)
+              console.log(`🔊 [AUDIO] Dispositivo output configurato per elemento audio: ${outputDevice}`)
+            } else {
+              console.warn('⚠️ [AUDIO] setSinkId non supportato, usa dispositivo predefinito')
+            }
+          } catch (error) {
+            console.warn(`⚠️ [AUDIO] Errore configurazione dispositivo output:`, error)
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ [AUDIO] Errore configurazione dispositivo output:', error)
+    }
+  }, [settings?.audio?.outputDevice])
+
+  // ✅ CORREZIONE: Effetto per applicare la scheda audio configurata
+  useEffect(() => {
+    configureAudioOutputDevice()
+  }, [configureAudioOutputDevice])
+
+  // ✅ CORREZIONE: Effetto per riconfigurare quando gli elementi audio sono pronti
+  useEffect(() => {
+    if (leftAudioRef.current || rightAudioRef.current) {
+      console.log('🔊 [AUDIO] Elementi audio pronti, riconfigurazione dispositivo output...')
+      configureAudioOutputDevice()
+    }
+  }, [leftAudioRef.current, rightAudioRef.current, configureAudioOutputDevice])
+
+  // ✅ CLEANUP: Effetto per pulire gli stream audio quando il componente viene smontato
+  useEffect(() => {
+    return () => {
+      console.log('🧹 [CLEANUP] AudioProvider smontato, cleanup automatico...')
+      // ✅ CLEANUP: Pulisci il debounce timeout
+      if (seekDebounceRef.current) {
+        clearTimeout(seekDebounceRef.current)
+        seekDebounceRef.current = null
+      }
+      cleanupAllAudioStreams()
+    }
+  }, [cleanupAllAudioStreams])
+
+  // ✅ CLEANUP: Listener per chiusura finestra/app
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      console.log('🧹 [CLEANUP] App in chiusura, cleanup stream audio...')
+      cleanupAllAudioStreams()
+    }
+
+    const handleUnload = () => {
+      console.log('🧹 [CLEANUP] App chiusa, cleanup finale...')
+      cleanupAllAudioStreams()
+    }
+
+    // ✅ CLEANUP: Aggiungi listener per chiusura
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    window.addEventListener('unload', handleUnload)
+
+    // ✅ CLEANUP: Rimuovi listener quando il componente viene smontato
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      window.removeEventListener('unload', handleUnload)
+    }
+  }, [cleanupAllAudioStreams])
+
+  // ✅ CLEANUP: Cleanup iniziale per rimuovere stream residui
+  useEffect(() => {
+    console.log('🧹 [CLEANUP] Cleanup iniziale per rimuovere stream residui...')
+    cleanupAllAudioStreams()
+    
+    // ✅ INIZIALIZZA: AudioContext principale
+    ensureMainAudioContext()
+  }, [cleanupAllAudioStreams, ensureMainAudioContext]) // Solo all'inizializzazione
+
+  // ✅ FIX: Funzioni per impostare i volumi locali dei deck
+  const setLeftLocalVolume = useCallback((volume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, volume))
+    dispatch({ type: 'SET_LEFT_DECK_LOCAL_VOLUME', payload: clampedVolume })
+    
+    // ✅ CRITICAL FIX: Aggiorna SOLO il volume HTML locale, NON quello streaming
+    if (leftAudioRef.current) {
+      leftAudioRef.current.volume = clampedVolume
+      console.log(`🔊 [LEFT DECK] Volume locale impostato: ${Math.round(clampedVolume * 100)}% (HTML solo)`)
+    }
+  }, [dispatch])
+
+  const setRightLocalVolume = useCallback((volume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, volume))
+    dispatch({ type: 'SET_RIGHT_DECK_LOCAL_VOLUME', payload: clampedVolume })
+    
+    // ✅ CRITICAL FIX: Aggiorna SOLO il volume HTML locale, NON quello streaming
+    if (rightAudioRef.current) {
+      rightAudioRef.current.volume = clampedVolume
+      console.log(`🔊 [RIGHT DECK] Volume locale impostato: ${Math.round(clampedVolume * 100)}% (HTML solo)`)
+    }
+  }, [dispatch])
+
+  // ✅ DEBOUNCE: Debounce per evitare troppi aggiornamenti rapidi
+  const seekDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // ✅ NUOVO: Funzioni seek per spostare la canzone
+  const seekLeftTo = useCallback(async (time: number) => {
+    console.log('🎯 [SEEK LEFT] Funzione seekLeftTo chiamata con time:', time)
+    console.log('🎯 [SEEK LEFT] leftAudioRef.current:', !!leftAudioRef.current)
+    console.log('🎯 [SEEK LEFT] leftAudioRef.current.src:', leftAudioRef.current?.src)
+    
+    if (leftAudioRef.current && leftAudioRef.current.src) {
+      const duration = leftAudioRef.current.duration || 0
+      const clampedTime = Math.max(0, Math.min(duration, time))
+      leftAudioRef.current.currentTime = clampedTime
+      dispatch({ type: 'SET_LEFT_DECK_TIME', payload: clampedTime })
+      console.log(`⏩ [LEFT DECK] Seek to ${clampedTime.toFixed(2)}s`)
+      
+      // ✅ CRITICAL FIX: Debounce per evitare troppi aggiornamenti rapidi
+      if (seekDebounceRef.current) {
+        clearTimeout(seekDebounceRef.current)
+      }
+      
+      // ✅ CRITICAL FIX: NON fermare lo streaming per seek - solo sincronizzazione continua
+      console.log('🎯 [SEEK LEFT] Seek completato - sincronizzazione continua gestirà l\'aggiornamento')
+      
+      // ✅ CRITICAL FIX: Forza sincronizzazione immediata della posizione dopo il seek
+      setTimeout(() => {
+        const leftAudio = leftAudioRef.current
+        if (leftAudio) {
+          console.log(`🔄 [SEEK SYNC] Forzando sincronizzazione posizione: ${leftAudio.currentTime.toFixed(2)}s`)
+          // La sincronizzazione continua gestirà il resto
+        }
+      }, 100)
+    }
+  }, [dispatch, getMixedStream])
+
+  const seekRightTo = useCallback(async (time: number) => {
+    console.log('🎯 [SEEK RIGHT] Funzione seekRightTo chiamata con time:', time)
+    console.log('🎯 [SEEK RIGHT] rightAudioRef.current:', !!rightAudioRef.current)
+    console.log('🎯 [SEEK RIGHT] rightAudioRef.current.src:', rightAudioRef.current?.src)
+    
+    if (rightAudioRef.current && rightAudioRef.current.src) {
+      const duration = rightAudioRef.current.duration || 0
+      const clampedTime = Math.max(0, Math.min(duration, time))
+      rightAudioRef.current.currentTime = clampedTime
+      dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: clampedTime })
+      console.log(`⏩ [RIGHT DECK] Seek to ${clampedTime.toFixed(2)}s`)
+      
+      // ✅ CRITICAL FIX: Debounce per evitare troppi aggiornamenti rapidi
+      if (seekDebounceRef.current) {
+        clearTimeout(seekDebounceRef.current)
+      }
+      
+      // ✅ CRITICAL FIX: NON fermare lo streaming per seek - solo sincronizzazione continua
+      console.log('🎯 [SEEK RIGHT] Seek completato - sincronizzazione continua gestirà l\'aggiornamento')
+      
+      // ✅ CRITICAL FIX: Forza sincronizzazione immediata della posizione dopo il seek
+      setTimeout(() => {
+        const rightAudio = rightAudioRef.current
+        if (rightAudio) {
+          console.log(`🔄 [SEEK SYNC] Forzando sincronizzazione posizione: ${rightAudio.currentTime.toFixed(2)}s`)
+          // La sincronizzazione continua gestirà il resto
+        }
+      }, 100)
+    }
+  }, [dispatch, getMixedStream])
+
+  // ✅ NUOVO: Funzioni di controllo playback
+  const pauseLeftTrack = useCallback(() => {
+    if (leftAudioRef.current && leftAudioRef.current.src) {
+      leftAudioRef.current.pause()
+      dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: false })
+      console.log('⏸️ [LEFT DECK] Paused')
+      
+      // ✅ CRITICAL FIX: Pausa anche lo streaming quando l'audio locale viene messo in pausa
+      if (typeof window !== 'undefined' && (window as any).streamingManager && (window as any).streamingManager.isCurrentlyStreaming()) {
+        console.log('⏸️ [STREAMING SYNC] Pausa streaming per sincronizzazione con deck A')
+        
+        // Pausa lo streaming temporaneamente
+        if (typeof window !== 'undefined' && (window as any).pauseStreaming) {
+          ;(window as any).pauseStreaming()
+          console.log('⏸️ [STREAMING SYNC] Streaming pausato per sincronizzazione')
+        } else {
+          console.log('⚠️ [STREAMING SYNC] Funzione pauseStreaming non disponibile')
+        }
+      }
+    }
+  }, [dispatch])
+
+  const resumeLeftTrack = useCallback(() => {
+    if (leftAudioRef.current && leftAudioRef.current.src) {
+      leftAudioRef.current.play().catch((error: any) => {
+        console.error('❌ Errore resume left deck:', error)
+      })
+      dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: true })
+      console.log('▶️ [LEFT DECK] Resumed')
+      
+      // ✅ CRITICAL FIX: Riprendi anche lo streaming quando l'audio locale viene ripreso
+      if (typeof window !== 'undefined' && (window as any).streamingManager && (window as any).streamingManager.isCurrentlyStreaming()) {
+        console.log('▶️ [STREAMING SYNC] Riprendi streaming per sincronizzazione con deck A')
+        
+        // Riprendi lo streaming
+        if (typeof window !== 'undefined' && (window as any).resumeStreaming) {
+          ;(window as any).resumeStreaming()
+          console.log('▶️ [STREAMING SYNC] Streaming ripreso per sincronizzazione')
+        } else {
+          console.log('⚠️ [STREAMING SYNC] Funzione resumeStreaming non disponibile')
+        }
+      }
+    }
+  }, [dispatch])
+
+  const stopLeftTrack = useCallback(() => {
+    if (leftAudioRef.current) {
+      leftAudioRef.current.pause()
+      leftAudioRef.current.currentTime = 0
+      dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: false })
+      dispatch({ type: 'SET_LEFT_DECK_TIME', payload: 0 })
+      console.log('⏹️ [LEFT DECK] Stopped')
+    }
+  }, [dispatch])
+
+  const pauseRightTrack = useCallback(() => {
+    if (rightAudioRef.current && rightAudioRef.current.src) {
+      rightAudioRef.current.pause()
+      dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: false })
+      console.log('⏸️ [RIGHT DECK] Paused')
+      
+      // ✅ CRITICAL FIX: Pausa anche lo streaming quando l'audio locale viene messo in pausa
+      if (typeof window !== 'undefined' && (window as any).streamingManager && (window as any).streamingManager.isCurrentlyStreaming()) {
+        console.log('⏸️ [STREAMING SYNC] Pausa streaming per sincronizzazione con deck B')
+        
+        // Pausa lo streaming temporaneamente
+        if (typeof window !== 'undefined' && (window as any).pauseStreaming) {
+          ;(window as any).pauseStreaming()
+          console.log('⏸️ [STREAMING SYNC] Streaming pausato per sincronizzazione')
+        } else {
+          console.log('⚠️ [STREAMING SYNC] Funzione pauseStreaming non disponibile')
+        }
+      }
+    }
+  }, [dispatch])
+
+  const resumeRightTrack = useCallback(() => {
+    if (rightAudioRef.current && rightAudioRef.current.src) {
+      rightAudioRef.current.play().catch((error: any) => {
+        console.error('❌ Errore resume right deck:', error)
+      })
+      dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: true })
+      console.log('▶️ [RIGHT DECK] Resumed')
+      
+      // ✅ CRITICAL FIX: Riprendi anche lo streaming quando l'audio locale viene ripreso
+      if (typeof window !== 'undefined' && (window as any).streamingManager && (window as any).streamingManager.isCurrentlyStreaming()) {
+        console.log('▶️ [STREAMING SYNC] Riprendi streaming per sincronizzazione con deck B')
+        
+        // Riprendi lo streaming
+        if (typeof window !== 'undefined' && (window as any).resumeStreaming) {
+          ;(window as any).resumeStreaming()
+          console.log('▶️ [STREAMING SYNC] Streaming ripreso per sincronizzazione')
+        } else {
+          console.log('⚠️ [STREAMING SYNC] Funzione resumeStreaming non disponibile')
+        }
+      }
+    }
+  }, [dispatch])
+
+  const stopRightTrack = useCallback(() => {
+    if (rightAudioRef.current) {
+      rightAudioRef.current.pause()
+      rightAudioRef.current.currentTime = 0
+      dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: false })
+      dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: 0 })
+      console.log('⏹️ [RIGHT DECK] Stopped')
+    }
+  }, [dispatch])
+
+  // ✅ NUOVO: Funzione universale per play/pause
+  const handlePlayPauseDefinitive = useCallback(async (side: 'left' | 'right') => {
+    const audioRef = side === 'left' ? leftAudioRef : rightAudioRef
+    const isPlaying = side === 'left' ? state.leftDeck.isPlaying : state.rightDeck.isPlaying
+    
+    if (audioRef.current && audioRef.current.src) {
+      if (isPlaying) {
+        // ✅ PAUSA: Ferma audio locale E streaming
+        audioRef.current.pause()
+        dispatch({ type: side === 'left' ? 'SET_LEFT_DECK_PLAYING' : 'SET_RIGHT_DECK_PLAYING', payload: false })
+        console.log(`⏸️ [${side.toUpperCase()} DECK] Paused`)
+        
+        // ✅ CRITICAL: Ferma anche lo streaming quando pausa
+        if ((window as any).pauseStreaming) {
+          console.log(`⏸️ [STREAMING] Pausa streaming richiesta da ${side} deck`)
+          ;(window as any).pauseStreaming()
+        }
+      } else {
+        try {
+          // ✅ PLAY: Avvia audio locale E streaming
+          await audioRef.current.play()
+          dispatch({ type: side === 'left' ? 'SET_LEFT_DECK_PLAYING' : 'SET_RIGHT_DECK_PLAYING', payload: true })
+          console.log(`▶️ [${side.toUpperCase()} DECK] Playing`)
+          
+          // ✅ CRITICAL: Avvia anche lo streaming quando riprende
+          if ((window as any).resumeStreaming) {
+            console.log(`▶️ [STREAMING] Riprendi streaming richiesto da ${side} deck`)
+            ;(window as any).resumeStreaming()
+          }
+        } catch (error: any) {
+          console.error(`❌ Errore play ${side} deck:`, error)
+        }
+      }
+    }
+  }, [leftAudioRef, rightAudioRef, state.leftDeck.isPlaying, state.rightDeck.isPlaying, dispatch])
+
+  // ✅ FIX: Funzione per il ducking dello streaming
+  const setStreamDucking = useCallback((active: boolean) => {
+    console.log(`🎤 [STREAMING] Ducking ${active ? 'attivato' : 'disattivato'}`)
+    
+    // ✅ CRITICAL FIX: Aggiorna i volumi PTT dinamicamente
+    if (typeof (window as any).updatePTTVolumesOnly === 'function') {
+      // ✅ CRITICAL FIX: Imposta il livello di ducking dalle impostazioni
+      const duckingPercent = settings?.microphone?.duckingPercent ?? 75
+      const pttDuckingLevel = duckingPercent / 100 // Converte da percentuale a decimale
+      ;(window as any).__pttDuckingLevel__ = pttDuckingLevel
+      
+      // ✅ CRITICAL FIX: Log sicuro per evitare errori
+      if (typeof console !== 'undefined' && console.log) {
+        console.log(`🎤 [PTT] Ducking level impostato dalle impostazioni: ${duckingPercent}% (${pttDuckingLevel})`)
+      }
+      
+      // ✅ CRITICAL FIX: Aggiorna i volumi PTT
+      (window as any).updatePTTVolumesOnly(active)
+          } else {
+      console.warn('⚠️ [PTT] Funzione updatePTTVolumesOnly non disponibile')
+    }
+  }, [settings?.microphone?.duckingPercent])
+
+  // ✅ FIX: Funzione per impostare il volume master dello streaming
+  const setStreamMasterVolume = useCallback((volume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, volume))
+    console.log(`🔊 [STREAMING] Volume master streaming impostato: ${Math.round(clampedVolume * 100)}%`)
+    
+    // ✅ CRITICAL FIX: Salva il volume corrente globalmente per il PTT
+    ;(window as any).__currentStreamVolume__ = clampedVolume
+    
+    // I deck mantengono sempre il 100% per lo streaming, indipendentemente dal volume locale
+    if (leftAudioRef.current) leftAudioRef.current.volume = clampedVolume
+    if (rightAudioRef.current) rightAudioRef.current.volume = clampedVolume
+  }, [leftAudioRef.current, rightAudioRef.current])
+
+  // ✅ FIX: Funzione per impostare il volume master generale (controlla il mixer gain)
+  const setMasterVolume = useCallback((volume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, volume))
+    console.log(`🔊 [MASTER] Volume master generale impostato: ${Math.round(clampedVolume * 100)}%`)
+    
+    // ✅ CRITICAL FIX: Usa la funzione globale per il volume del mixer
+    if (typeof (window as any).audioContextSetMasterVolume === 'function') {
+      ;(window as any).audioContextSetMasterVolume(clampedVolume)
+    }
+  }, [])
+
+  // ✅ CROSSFADER: Funzione per impostare il crossfader (solo per streaming)
+  const setCrossfader = useCallback((value: number) => {
+    const clampedValue = Math.max(0, Math.min(1, value))
+    console.log(`🎚️ [CROSSFADER] Crossfader impostato: ${Math.round(clampedValue * 100)}% (A=${Math.round((1-clampedValue)*100)}%, B=${Math.round(clampedValue*100)}%)`)
+    
+    // Aggiorna lo stato
+    dispatch({ type: 'SET_CROSSFADER', payload: clampedValue })
+    
+    // ✅ CROSSFADER: Aggiorna il crossfader per lo streaming se disponibile
+    if (typeof window !== 'undefined' && (window as any).updateStreamingCrossfader) {
+      ;(window as any).updateStreamingCrossfader(clampedValue)
+    }
+  }, [])
+
+  // ✅ CRITICAL FIX: Funzione che controlla SOLO il volume del Live Stream nell'interfaccia
+  const setLiveStreamVolume = useCallback((volume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, volume))
+    console.log(`🔊 [LIVE STREAM] Volume Live Stream impostato: ${Math.round(clampedVolume * 100)}%`)
+    
+    // ✅ CRITICAL FIX: Aggiorna SOLO il volume del Live Stream nell'interfaccia
+    // Questo NON tocca il Master locale, solo il Live Stream!
+    
+    // 1. Emetti evento custom per aggiornare l'interfaccia
+    window.dispatchEvent(new CustomEvent('djconsole:stream-volume-change', {
+      detail: { volume: clampedVolume }
+    }))
+    
+    // 2. Aggiorna lo stato locale per mantenere la sincronizzazione
+    ;(window as any).__currentStreamVolume__ = clampedVolume
+    
+    console.log(`🔊 [INTERFACE] Volume Live Stream aggiornato nell'interfaccia: ${Math.round(clampedVolume * 100)}%`)
+  }, [])
+
+  // ✅ CRITICAL FIX: Rendi disponibile setStreamMasterVolume globalmente per il PTT
+  ;(window as any).setStreamMasterVolume = setStreamMasterVolume
+
+  // ✅ CRITICAL FIX: Rendi disponibile setMasterVolume globalmente per il PTT
+  ;(window as any).setMasterVolume = setMasterVolume
+
+  // ✅ CRITICAL FIX: Rendi disponibile setLiveStreamVolume globalmente per il PTT
+  ;(window as any).setLiveStreamVolume = setLiveStreamVolume
+
+  // ✅ CROSSFADER: Funzione per aggiornare il crossfader dinamicamente durante lo streaming
+  ;(window as any).updateStreamingCrossfader = (crossfaderValue: number) => {
+    try {
+      console.log(`🎚️ [CROSSFADER] Aggiornamento crossfader streaming a ${Math.round(crossfaderValue * 100)}%`)
+      
+      const leftGain = (window as any).leftDeckStreamGain
+      const rightGain = (window as any).rightDeckStreamGain
+      const context = (window as any).currentMixContext
+      
+      if (leftGain && rightGain && context) {
+        // Deck A: Volume = 1.0 - crossfader
+        const leftVolume = 1.0 - crossfaderValue
+        leftGain.gain.setValueAtTime(leftVolume, context.currentTime)
+        
+        // Deck B: Volume = crossfader
+        const rightVolume = crossfaderValue
+        rightGain.gain.setValueAtTime(rightVolume, context.currentTime)
+        
+        console.log(`🎚️ [CROSSFADER] Streaming aggiornato: A=${Math.round(leftVolume * 100)}%, B=${Math.round(rightVolume * 100)}%`)
+      } else {
+        console.warn('⚠️ [CROSSFADER] Gain nodes non disponibili per aggiornamento crossfader')
+      }
+    } catch (error: any) {
+      console.error('❌ [CROSSFADER] Errore aggiornamento crossfader streaming:', error.message)
+    }
+  }
+
+  // ✅ CRITICAL FIX: Inizializza il volume corrente del LiveStream per il PTT
+  ;(window as any).__currentStreamVolume__ = 1.0 // Default al 100% (come richiesto dall'utente)
+
+  // Aggiunge track al deck specificato
+  const addToDeck = async (track: any, deck: 'left' | 'right') => {
+    console.log(`🎵 [DECK] Aggiunta track "${track.title}" al deck ${deck}`)
+    
+    try {
+      // Converti DatabaseTrack in AudioTrack
+      const audioTrack: AudioTrack = {
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        duration: track.duration,
+        url: '' // Sarà impostato dopo aver ottenuto il blob
+      }
+      
+      if (deck === 'left') {
+        dispatch({ type: 'SET_LEFT_DECK_TRACK', payload: audioTrack })
+        // Carica l'audio nel deck sinistro
+        if (leftAudioRef.current) {
+          // Crea URL dal blob
+          const blob = await getBlob(track.blobId)
+          if (blob) {
+            const url = URL.createObjectURL(blob)
+            leftAudioRef.current.src = url
+            leftAudioRef.current.load()
+            console.log(`✅ [DECK] Track caricata nel deck sinistro: ${track.title}`)
+            
+            // ✅ AUTO-RECONNECT: Ricollega automaticamente il deck allo streaming se attivo
+            if (typeof window !== 'undefined' && (window as any).reconnectDeckToStreaming) {
+              try {
+                // ✅ CRITICAL: Aspetta che il deck sia completamente caricato prima del ricollegamento
+                console.log('🎵 [DECK] Aspetto caricamento completo deck A prima del ricollegamento...')
+                await new Promise(resolve => setTimeout(resolve, 500)) // 500ms delay
+                
+                await (window as any).reconnectDeckToStreaming('A')
+                console.log('✅ [DECK] Deck A ricollegato automaticamente allo streaming')
+              } catch (reconnectError: any) {
+                console.warn('⚠️ [DECK] Ricollegamento automatico deck A fallito:', reconnectError.message)
+              }
+            }
+            
+            // ✅ CRITICAL FIX: Forza la ricreazione del mixed stream se lo streaming è attivo
+            if (typeof window !== 'undefined' && (window as any).isCurrentlyStreaming) {
+              try {
+                console.log('🎵 [DECK LEFT] Streaming attivo rilevato - forzo ricreazione mixed stream...')
+                console.log('🎵 [DECK LEFT] isCurrentlyStreaming:', (window as any).isCurrentlyStreaming)
+                
+                // ✅ RICREA COMPLETAMENTE IL MIXED STREAM
+                const newMixedStream = await getMixedStream()
+                console.log('🎵 [DECK LEFT] newMixedStream creato:', !!newMixedStream, newMixedStream?.active, newMixedStream?.getTracks().length)
+                
+                if (newMixedStream) {
+                  // ✅ ATTENDI CHE STREAMINGMANAGER SIA DISPONIBILE
+                  console.log('🎵 [DECK LEFT] Chiamata waitForStreamingManager...')
+                  const streamingManager = await waitForStreamingManager()
+                  console.log('🎵 [DECK LEFT] streamingManager ricevuto:', !!streamingManager)
+                  
+                  if (streamingManager) {
+                    // ✅ AGGIORNA LO STREAMING MANAGER CON IL NUOVO STREAM
+                    console.log('📡 [DECK LEFT] StreamingManager disponibile, aggiorno stream...')
+                    console.log('📡 [DECK LEFT] Chiamata updateStream con stream:', !!newMixedStream)
+                    const updated = await streamingManager.updateStream(newMixedStream)
+                    console.log('📡 [DECK LEFT] updateStream risultato:', updated)
+                    
+                    if (updated) {
+                      console.log('✅ [DECK] Mixed stream ricreato e aggiornato con successo per deck A')
+                      
+                      // Notifica di successo
+                      if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+                        ;(window as any).addStreamingNotification('success', 'Deck A Connesso', 'Deck A connesso automaticamente allo streaming', 'audio')
+                      }
+                    } else {
+                      console.warn('⚠️ [DECK] Aggiornamento streaming fallito per deck A')
+                    }
+                  } else {
+                    console.warn('⚠️ [DECK] StreamingManager non disponibile per aggiornamento')
+                  }
+                } else {
+                  console.warn('⚠️ [DECK] Nuovo mixed stream non valido')
+                }
+              } catch (streamError: any) {
+                console.error('❌ [DECK] Errore ricreazione mixed stream per deck A:', streamError.message)
+              }
+            }
+          } else {
+            console.error(`❌ [DECK] Blob non trovato per track: ${track.title}`)
+          }
+        }
+      } else {
+        dispatch({ type: 'SET_RIGHT_DECK_TRACK', payload: audioTrack })
+        // Carica l'audio nel deck destro
+        if (rightAudioRef.current) {
+          // Crea URL dal blob
+          const blob = await getBlob(track.blobId)
+          if (blob) {
+            const url = URL.createObjectURL(blob)
+            rightAudioRef.current.src = url
+            rightAudioRef.current.load()
+            console.log(`✅ [DECK] Track caricata nel deck destro: ${track.title}`)
+            
+            // ✅ AUTO-RECONNECT: Ricollega automaticamente il deck allo streaming se attivo
+            if (typeof window !== 'undefined' && (window as any).reconnectDeckToStreaming) {
+              try {
+                // ✅ CRITICAL: Aspetta che il deck sia completamente caricato prima del ricollegamento
+                console.log('🎵 [DECK] Aspetto caricamento completo deck B prima del ricollegamento...')
+                await new Promise(resolve => setTimeout(resolve, 500)) // 500ms delay
+                
+                await (window as any).reconnectDeckToStreaming('B')
+                console.log('✅ [DECK] Deck B ricollegato automaticamente allo streaming')
+              } catch (reconnectError: any) {
+                console.warn('⚠️ [DECK] Ricollegamento automatico deck B fallito:', reconnectError.message)
+              }
+            }
+            
+            // ✅ CRITICAL FIX: Forza la ricreazione del mixed stream se lo streaming è attivo
+            if (typeof window !== 'undefined' && (window as any).isCurrentlyStreaming) {
+              try {
+                console.log('🎵 [DECK] Streaming attivo rilevato - forzo ricreazione mixed stream...')
+                
+                // ✅ RICREA COMPLETAMENTE IL MIXED STREAM
+                const newMixedStream = await getMixedStream()
+                
+                if (newMixedStream) {
+                  // ✅ ATTENDI CHE STREAMINGMANAGER SIA DISPONIBILE
+                  const streamingManager = await waitForStreamingManager()
+                  
+                  if (streamingManager) {
+                    // ✅ AGGIORNA LO STREAMING MANAGER CON IL NUOVO STREAM
+                    console.log('📡 [DECK RIGHT] StreamingManager disponibile, aggiorno stream...')
+                    console.log('📡 [DECK RIGHT] Chiamata updateStream con stream:', !!newMixedStream)
+                    const updated = await streamingManager.updateStream(newMixedStream)
+                    console.log('📡 [DECK RIGHT] updateStream risultato:', updated)
+                    
+                    if (updated) {
+                      console.log('✅ [DECK] Mixed stream ricreato e aggiornato con successo per deck B')
+                      
+                      // Notifica di successo
+                      if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
+                        ;(window as any).addStreamingNotification('success', 'Deck B Connesso', 'Deck B connesso automaticamente allo streaming', 'audio')
+                      }
+                    } else {
+                      console.warn('⚠️ [DECK] Aggiornamento streaming fallito per deck B')
+                    }
+                  } else {
+                    console.warn('⚠️ [DECK] StreamingManager non disponibile per aggiornamento')
+                  }
+                } else {
+                  console.warn('⚠️ [DECK] Nuovo mixed stream non valido')
+                }
+              } catch (streamError: any) {
+                console.error('❌ [DECK] Errore ricreazione mixed stream per deck B:', streamError.message)
+              }
+            }
+        } else {
+            console.error(`❌ [DECK] Blob non trovato per track: ${track.title}`)
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error(`❌ [DECK] Errore caricamento track nel deck ${deck}:`, error)
+    }
+  }
+
+  // Incrementa il play count di una track
+  const incrementPlayCount = async (trackId: string) => {
+    try {
+      await localDatabase.waitForInitialization()
+      // Incrementa il play count direttamente nella traccia
+      const track = await localDatabase.getTrack(trackId)
+      if (track) {
+        const newPlayCount = (track.playCount || 0) + 1
+        await localDatabase.updateTrack(trackId, { playCount: newPlayCount })
+        console.log(`✅ Play count incrementato per track ${trackId}: ${newPlayCount}`)
+      }
+    } catch (error: any) {
+      console.error(`❌ Errore incremento play count per track ${trackId}:`, error)
+    }
+  }
+
+  // ===== INIZIALIZZAZIONE DATABASE =====
+  useEffect(() => {
+    if (window.indexedDB) {
+      const request = window.indexedDB.open('djconsole', 1)
+      
+      request.onerror = () => {
+        console.error('❌ Error opening IndexedDB for audio persistence')
+      }
+      
+      request.onsuccess = () => {
+        console.log('✅ IndexedDB opened successfully for audio persistence')
+      }
+      
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result
+        
+        // Crea la tabella per lo stato audio
+        if (!db.objectStoreNames.contains('audioState')) {
+          const audioStore = db.createObjectStore('audioState', { keyPath: 'id' })
+          audioStore.createIndex('timestamp', 'timestamp', { unique: false })
+          console.log('✅ Audio state store created in IndexedDB')
+        }
+      }
+    }
+  }, [])
+
+  // ✅ CONFIGURAZIONE MICROFONO CON ISOLAMENTO AUDIO SISTEMA
+  const createMicrophoneStream = async (): Promise<MediaStream | null> => {
+    try {
+      // ✅ CLEANUP: Pulisci stream microfono precedente se esiste
+      if (micStreamRef.current) {
+        console.log('🧹 [MICROPHONE] Pulizia stream microfono precedente...')
+        try {
+          micStreamRef.current.getTracks().forEach(track => {
+            track.stop()
+            console.log(`🧹 [MICROPHONE] Track microfono fermato: ${track.label}`)
+          })
+        } catch (error) {
+          console.warn('⚠️ [MICROPHONE] Errore fermando track precedenti:', error)
+        }
+        micStreamRef.current = null
+      }
+      
+      // ✅ CORREZIONE: Usa le impostazioni del microfono dalle settings
+      const settings = await localDatabase.getSettings();
+      const micSettings = settings?.microphone || {
+        inputDevice: 'default',
+        sampleRate: 48000,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: false
+      };
+      
+      console.log('🎤 [MIC] Usando impostazioni microfono dalle settings:', micSettings);
+      
+      // ✅ CORREZIONE: Seleziona dispositivo microfono specifico se configurato
+      let deviceId = undefined;
+      if (micSettings.inputDevice && micSettings.inputDevice !== 'default') {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const audioInputs = devices.filter(device => device.kind === 'audioinput');
+          console.log('🎤 [MIC] Dispositivi audio input disponibili:', audioInputs);
+          
+          const selectedDevice = audioInputs.find(device => 
+            device.label === micSettings.inputDevice || 
+            device.deviceId === micSettings.inputDevice
+          );
+          
+          if (selectedDevice) {
+            deviceId = selectedDevice.deviceId;
+            console.log('🎤 [MIC] Usando dispositivo microfono specifico:', selectedDevice.label, selectedDevice.deviceId);
+          } else {
+            console.warn('⚠️ [MIC] Dispositivo microfono non trovato, uso default');
+          }
+        } catch (error) {
+          console.warn('⚠️ [MIC] Errore enumerazione dispositivi:', error);
+        }
+      }
+      
+      // ✅ SOLUZIONE PRATICA: Configurazione microfono per minimizzare cattura audio sistema
+      const constraints = {
+        audio: {
+          // ✅ PARAMETRI BASE per isolamento
+          echoCancellation: micSettings.echoCancellation,        // Usa impostazione settings
+          noiseSuppression: micSettings.noiseSuppression,        // Usa impostazione settings
+          autoGainControl: micSettings.autoGainControl,          // Usa impostazione settings
+          latency: 0,                    // Latenza minima
+          sampleRate: micSettings.sampleRate,             // Usa impostazione settings
+          channelCount: 1,               // Mono per ridurre latenza
+          sampleSize: 16,                // 16-bit per compatibilità
+          ...(deviceId && { deviceId: deviceId }),  // ✅ CORREZIONE: Usa dispositivo specifico
+          
+          // ✅ PARAMETRI GOOGLE per isolamento avanzato
+          googEchoCancellation: true,        // Cancellazione eco Google
+          googNoiseSuppression: true,        // Soppressione rumore Google
+          googAutoGainControl: false,        // Controllo guadagno manuale
+          googHighpassFilter: true,          // Filtro passa-alto
+          googTypingNoiseDetection: true,    // Rilevamento rumore tastiera
+          googAudioMirroring: false,         // Disabilita mirroring
+          
+          // ✅ PARAMETRI AGGIUNTIVI per isolamento massimo
+          googDAEchoCancellation: true,      // Cancellazione eco digitale avanzata
+          googNoiseReduction: true,          // Riduzione rumore avanzata
+          googBeamforming: true,             // Beamforming per direzionalità
+          
+          // ✅ PARAMETRI SPECIFICI per prevenire cattura audio sistema
+          suppressLocalAudioPlayback: true,  // Esclude audio locale (se supportato)
+          googEchoCancellation2: true,       // Cancellazione eco v2
+          googNoiseSuppression2: true,       // Soppressione rumore v2
+          googHighpassFilter2: true,         // Filtro passa-alto v2
+          googTypingNoiseDetection2: true,   // Rilevamento rumore tastiera v2
+          googAudioMirroring2: false         // Disabilita mirroring v2
+        }
+      };
+
+      console.log('🎤 [MIC] Configurazione anti-eco + esclusione audio live applicata:', constraints);
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      // ✅ NUOVO: Verifica che l'audio live non venga catturato
+      console.log('🎤 [MIC] Stream microfono creato con esclusione audio live');
+      console.log('🎤 [MIC] Audio tracks:', stream.getAudioTracks().map(track => ({
+        id: track.id,
+        label: track.label,
+        enabled: track.enabled,
+        muted: track.muted,
+        settings: track.getSettings()
+      })));
+      
+      // ✅ TRACKING: Aggiungi stream al tracking
+      if ((window as any).addAudioStreamToTracking) {
+        ;(window as any).addAudioStreamToTracking(stream);
+      }
+      
+      // ✅ CLEANUP: Chiudi solo AudioContext temporanei del microfono, NON quello principale
+      if (typeof window !== 'undefined' && window.AudioContext) {
+        try {
+          // Cerca AudioContext attivi globalmente
+          const audioContexts = (window as any).__audioContexts || []
+          audioContexts.forEach((ctx: AudioContext, index: number) => {
+            // ✅ CORREZIONE: Non chiudere l'AudioContext principale (indice 0)
+            if (ctx && ctx.state !== 'closed' && index > 0) {
+              ctx.close()
+              console.log(`🧹 [MICROPHONE] AudioContext temporaneo ${index} chiuso`)
+            } else if (index === 0) {
+              console.log('🧹 [MICROPHONE] AudioContext principale mantenuto attivo')
+            }
+          })
+        } catch (error) {
+          console.warn('⚠️ [MICROPHONE] Errore chiudendo AudioContext temporanei:', error)
+        }
+      }
+      
+      // ✅ CORREZIONE: Assicurati che l'AudioContext principale sia disponibile
+      let audioCtx = ensureMainAudioContext()
+      
+      if (!audioCtx) {
+        throw new Error('Impossibile creare AudioContext per microfono')
+      }
+      
+      console.log('🎤 [MIC] AudioContext principale disponibile per microfono')
+      const source = audioCtx.createMediaStreamSource(stream);
+      const destination = audioCtx.createMediaStreamDestination();
+      
+      // ✅ FILTRO PER RIDURRE LATENZA
+      const lowpassFilter = audioCtx.createBiquadFilter();
+      lowpassFilter.type = 'lowpass';
+      lowpassFilter.frequency.value = 8000; // Taglia frequenze alte per ridurre latenza
+      lowpassFilter.Q.value = 0.5;          // Q basso per transizione graduale
+      
+      // ✅ FILTRO PER RIDURRE RUMORE
+      const noiseFilter = audioCtx.createBiquadFilter();
+      noiseFilter.type = 'highpass';
+      noiseFilter.frequency.value = 80;     // Taglia frequenze basse (rumore)
+      noiseFilter.Q.value = 1.0;
+      
+      // ✅ GAIN PRINCIPALE MICROFONO
+      const microphoneGain = audioCtx.createGain();
+      microphoneGain.gain.setValueAtTime(1, audioCtx.currentTime);
+      
+      // ✅ REVERBERO: Crea nodo reverbero
+      const reverbNode = audioCtx.createConvolver();
+      const reverbGain = audioCtx.createGain();
+      const dryGain = audioCtx.createGain();
+      
+      // Genera impulso di reverbero
+      const reverbLength = audioCtx.sampleRate * 2; // 2 secondi
+      const reverbBuffer = audioCtx.createBuffer(2, reverbLength, audioCtx.sampleRate);
+      const leftChannel = reverbBuffer.getChannelData(0);
+      const rightChannel = reverbBuffer.getChannelData(1);
+      
+      for (let i = 0; i < reverbLength; i++) {
+        const time = i / audioCtx.sampleRate;
+        const decay = Math.exp(-time * 2) * (Math.random() * 2 - 1) * 0.3;
+        leftChannel[i] = decay;
+        rightChannel[i] = decay * 0.8;
+      }
+      
+      reverbNode.buffer = reverbBuffer;
+      reverbGain.gain.setValueAtTime(0, audioCtx.currentTime); // Inizia disattivato
+      dryGain.gain.setValueAtTime(1, audioCtx.currentTime);
+      
+      // ✅ CONNESSIONE CON REVERBERO
+      source.connect(lowpassFilter);
+      lowpassFilter.connect(noiseFilter);
+      noiseFilter.connect(microphoneGain);
+      
+      // Split del segnale: dry e wet
+      microphoneGain.connect(dryGain);
+      microphoneGain.connect(reverbNode);
+      reverbNode.connect(reverbGain);
+      
+      // Mix dry e wet
+      dryGain.connect(destination);
+      reverbGain.connect(destination);
+      
+      // ✅ ESPONI controlli microfono globalmente
+      ;(window as any).microphoneGain = microphoneGain;
+      ;(window as any).microphoneReverbGain = reverbGain;
+      ;(window as any).microphoneDryGain = dryGain;
+      
+      // ✅ ESPONI anche i nodi principali per gli effetti audio
+      ;(window as any).destinationStream = destination;
+      
+      console.log('🎤 [MIC] Filtri anti-eco e reverbero applicati con successo');
+      
+      return destination.stream;
+      
+    } catch (error) {
+      console.error('❌ [MIC] Errore creazione stream microfono anti-eco:', error);
+      return null;
+    }
+  };
+
+
+  // ✅ NUOVO: Sistema di controllo microfono intelligente
+  const createSmartMicrophoneControl = () => {
+    let isMicrophoneActive = false;
+    let microphoneStream: MediaStream | null = null;
+    
+    const enableMicrophone = async (): Promise<boolean> => {
+      try {
+        if (isMicrophoneActive && microphoneStream) {
+          console.log('🎤 [SMART-MIC] Microfono già attivo');
+          return true;
+        }
+        
+        console.log('🎤 [SMART-MIC] Attivazione microfono...');
+        
+        // Crea stream microfono con configurazione isolata e impostazioni corrette
+        console.log('🎤 [SMART-MIC] Creazione stream microfono con impostazioni settings...');
+        microphoneStream = await createMicrophoneStream();
+        if (!microphoneStream) {
+          throw new Error('Impossibile creare stream microfono');
+        }
+        
+        console.log('🎤 [SMART-MIC] Stream microfono creato con successo:', {
+          id: microphoneStream.id,
+          active: microphoneStream.active,
+          tracks: microphoneStream.getTracks().length
+        });
+        
+        // ✅ TRACKING: Aggiungi al tracking globale
+        if ((window as any).addAudioStreamToTracking) {
+          ;(window as any).addAudioStreamToTracking(microphoneStream);
+        }
+        
+        isMicrophoneActive = true;
+        console.log('✅ [SMART-MIC] Microfono attivato con successo');
+        return true;
+        
+      } catch (error) {
+        console.error('❌ [SMART-MIC] Errore attivazione microfono:', error);
+        return false;
+      }
+    };
+    
+    const disableMicrophone = (): void => {
+      try {
+        console.log('🎤 [SMART-MIC] Disattivazione microfono...');
+        
+        if (microphoneStream) {
+          // ✅ TRACKING: Rimuovi dal tracking globale
+          if ((window as any).removeAudioStreamFromTracking) {
+            ;(window as any).removeAudioStreamFromTracking(microphoneStream);
+          }
+          
+          microphoneStream.getTracks().forEach(track => {
+            track.stop();
+            track.enabled = false;
+          });
+          microphoneStream = null;
+        }
+        
+        isMicrophoneActive = false;
+        console.log('✅ [SMART-MIC] Microfono disattivato');
+        
+      } catch (error) {
+        console.error('❌ [SMART-MIC] Errore disattivazione microfono:', error);
+      }
+    };
+    
+    const getMicrophoneStream = (): MediaStream | null => {
+      return microphoneStream;
+    };
+    
+    const isActive = (): boolean => {
+      return isMicrophoneActive;
+    };
+    
+    // Esponi funzioni globalmente
+    (window as any).smartMicrophone = {
+      enable: enableMicrophone,
+      disable: disableMicrophone,
+      getStream: getMicrophoneStream,
+      isActive: isActive
+    };
+    
+    return {
+      enable: enableMicrophone,
+      disable: disableMicrophone,
+      getStream: getMicrophoneStream,
+      isActive: isActive
+    };
+  };
+
+  // ✅ INIZIALIZZA: Controllo intelligente microfono (dopo la definizione)
+  const smartMicrophoneControl = createSmartMicrophoneControl();
+  ;(window as any).smartMicrophoneControl = smartMicrophoneControl;
+
+  return (
+    <AudioContext.Provider value={{
+      // Stato
+      state,
+      
+      // Refs
+      leftAudioRef,
+      rightAudioRef,
+      micStreamRef,
+      soundEffectsManagerRef,
+      microphoneEffectsManagerRef,
+      
+      // Funzioni
+      getMixedStream,
+      createMicrophoneStream,
+      createSmartMicrophoneControl,
+      getAvailableAudioOutputDevices,
+      ensureMainAudioContext,
+      playLeftTrack,
+      playRightTrack,
+      pauseLeftTrack,
+      resumeLeftTrack,
+      stopLeftTrack,
+      pauseRightTrack,
+      resumeRightTrack,
+      stopRightTrack,
+      handlePlayPauseDefinitive,
+      setLeftLocalVolume,
+      setRightLocalVolume,
+      seekLeftTo,
+      seekRightTo,
+      setStreamDucking,
+      setStreamMasterVolume,
+      setMasterVolume,
+      setCrossfader,
+      addToDeck,
+      incrementPlayCount,
+      
+      // Dispatch per modifiche di stato
+      dispatch
+    }}>
+      {/* Elementi audio globali */}
+      <audio
+        ref={leftAudioRef}
+        preload="metadata"
+        data-deck="A"
+        className="deck-audio"
+        // ✅ FIX: Usa la scheda audio configurata nelle impostazioni
+        onLoadedMetadata={() => {
+          if (leftAudioRef.current) {
+            dispatch({ type: 'SET_LEFT_DECK_DURATION', payload: leftAudioRef.current.duration })
+          }
+        }}
+        onTimeUpdate={() => {
+          if (leftAudioRef.current) {
+            const currentTime = leftAudioRef.current.currentTime
+            const duration = leftAudioRef.current.duration
+            
+            // ✅ FIX: Evita di mostrare tempo maggiore della durata
+            if (currentTime <= duration && currentTime >= 0) {
+              dispatch({ type: 'SET_LEFT_DECK_TIME', payload: currentTime })
+              // ✅ DEBUG: Verifica che il tempo si aggiorni
+              console.log(`⏰ [LEFT DECK] Time update: ${currentTime.toFixed(2)}s / ${duration.toFixed(2)}s`)
+            }
+          }
+        }}
+        onPlay={() => dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: true })}
+        onPause={() => dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: false })}
+        onEnded={() => {
+          console.log('🔚 [LEFT DECK] onEnded event triggered!')
+          dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: false })
+          // ✅ FIX: Resetta il tempo a 0 quando finisce
+          dispatch({ type: 'SET_LEFT_DECK_TIME', payload: 0 })
+          
+          // ✅ AUTO-ADVANCE: Emetti evento per auto-avanzamento
+          const trackEndedEvent = new CustomEvent('djconsole:track-ended', {
+            detail: { deckId: 'A' }
+          })
+          window.dispatchEvent(trackEndedEvent)
+          console.log('🔚 [LEFT DECK] Track ended - auto-advance event emitted')
+        }}
+        onVolumeChange={() => {
+          if (leftAudioRef.current) {
+            dispatch({ type: 'SET_LEFT_DECK_LOCAL_VOLUME', payload: leftAudioRef.current.volume })
+          }
+        }}
+      />
+      
+      <audio
+        ref={rightAudioRef}
+        preload="metadata"
+        data-deck="B"
+        className="deck-audio"
+        onLoadedMetadata={() => {
+          if (rightAudioRef.current) {
+            dispatch({ type: 'SET_RIGHT_DECK_DURATION', payload: rightAudioRef.current.duration })
+          }
+        }}
+        onTimeUpdate={() => {
+          if (rightAudioRef.current) {
+            const currentTime = rightAudioRef.current.currentTime
+            const duration = rightAudioRef.current.duration
+            
+            // ✅ FIX: Evita di mostrare tempo maggiore della durata
+            if (currentTime <= duration && currentTime >= 0) {
+              dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: currentTime })
+              // ✅ DEBUG: Verifica che il tempo si aggiorni
+              console.log(`⏰ [RIGHT DECK] Time update: ${currentTime.toFixed(2)}s / ${duration.toFixed(2)}s`)
+            }
+          }
+        }}
+        onPlay={() => dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: true })}
+        onPause={() => dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: false })}
+        onEnded={() => {
+          console.log('🔚 [RIGHT DECK] onEnded event triggered!')
+          dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: false })
+          // ✅ FIX: Resetta il tempo a 0 quando finisce
+          dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: 0 })
+          
+          // ✅ AUTO-ADVANCE: Emetti evento per auto-avanzamento
+          const trackEndedEvent = new CustomEvent('djconsole:track-ended', {
+            detail: { deckId: 'B' }
+          })
+          window.dispatchEvent(trackEndedEvent)
+          console.log('🔚 [RIGHT DECK] Track ended - auto-advance event emitted')
+        }}
+        onVolumeChange={() => {
+          if (rightAudioRef.current) {
+            dispatch({ type: 'SET_RIGHT_DECK_LOCAL_VOLUME', payload: rightAudioRef.current.volume })
+          }
+        }}
+      />
+      
+      {children}
+    </AudioContext.Provider>
+  )
+}
+
+// ===== HOOKS =====
+export function useAudio() {
+  const context = useContext(AudioContext)
+  if (context === undefined) {
+    throw new Error('useAudio must be used within an AudioProvider')
+  }
+  return context
+}
+
+
+

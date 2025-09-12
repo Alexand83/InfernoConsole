@@ -1,0 +1,300 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Tema Dark (default) */
+    --dj-primary: #1a1a2e;
+    --dj-secondary: #16213e;
+    --dj-accent: #0f3460;
+    --dj-highlight: #e94560;
+    --dj-success: #00d4aa;
+    --dj-warning: #ffa726;
+    --dj-error: #ef5350;
+    --dj-dark: #0f0f23;
+    --dj-light: #f8f9fa;
+    --dj-accent-20: rgba(15, 52, 96, 0.2);
+    --dj-accent-30: rgba(15, 52, 96, 0.3);
+  }
+
+  /* Tema Light - Contrasto Estremo */
+  .light {
+    --dj-primary: #e0e3e6;
+    --dj-secondary: #d1d5d9;
+    --dj-accent: #1a1a1a;
+    --dj-highlight: #1565c0;
+    --dj-success: #2e7d32;
+    --dj-warning: #f57c00;
+    --dj-error: #d32f2f;
+    --dj-dark: #f8f9fa;
+    --dj-light: #000000;
+    --dj-accent-20: rgba(26, 26, 26, 0.2);
+    --dj-accent-30: rgba(26, 26, 26, 0.3);
+  }
+
+  /* Regole specifiche per tema Light - Massimo contrasto */
+  .light .text-white {
+    color: #000000 !important;
+  }
+  
+  .light .text-dj-light {
+    color: #000000 !important;
+  }
+  
+  .light .text-dj-light\/60 {
+    color: rgba(0, 0, 0, 0.8) !important;
+  }
+  
+  .light .text-dj-light\/80 {
+    color: rgba(0, 0, 0, 0.9) !important;
+  }
+
+  /* Tema Infernale 🔥 */
+  .infernal {
+    --dj-primary: #1a0a0a;
+    --dj-secondary: #2d0f0f;
+    --dj-accent: #8b0000;
+    --dj-highlight: #ff4500;
+    --dj-success: #ff6347;
+    --dj-warning: #ff8c00;
+    --dj-error: #ff0000;
+    --dj-dark: #000000;
+    --dj-light: #ffd700;
+    --dj-accent-20: rgba(139, 0, 0, 0.2);
+    --dj-accent-30: rgba(139, 0, 0, 0.3);
+  }
+
+  * {
+    border-color: var(--dj-accent-20);
+  }
+  
+  body {
+    background-color: var(--dj-dark);
+    color: var(--dj-light);
+    font-family: 'Inter', sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .dj-button {
+    @apply bg-dj-accent hover:bg-dj-highlight text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105 active:scale-95;
+  }
+  
+  .dj-button-secondary {
+    @apply bg-dj-secondary hover:bg-dj-accent text-dj-light font-medium py-2 px-4 rounded-lg transition-all duration-200 border border-dj-accent;
+  }
+  
+  .dj-card {
+    background-color: var(--dj-secondary);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    border: 1px solid var(--dj-accent-20);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+  
+  .dj-input {
+    background-color: var(--dj-primary);
+    border: 1px solid var(--dj-accent-30);
+    border-radius: 0.5rem;
+    padding: 0.5rem 1rem;
+    color: var(--dj-light);
+  }
+  
+  .dj-input::placeholder {
+    color: var(--dj-light);
+    opacity: 0.5;
+  }
+  
+  .dj-input:focus {
+    outline: none;
+    ring: 2px;
+    ring-color: var(--dj-highlight);
+    border-color: transparent;
+  }
+  
+  .dj-slider {
+    @apply w-full h-2 bg-dj-primary rounded-lg appearance-none cursor-pointer slider-thumb;
+  }
+  
+  .slider-thumb {
+    @apply appearance-none w-6 h-6 bg-dj-highlight rounded-full cursor-pointer;
+  }
+  
+  .waveform-container {
+    background-color: var(--dj-primary);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    border: 1px solid var(--dj-accent-20);
+  }
+  
+  .deck-container {
+    background: linear-gradient(to bottom right, var(--dj-secondary), var(--dj-primary));
+    border-radius: 0.5rem;
+    padding: 1rem;
+    border: 1px solid var(--dj-accent-30);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+  
+  .playlist-item {
+    background-color: var(--dj-primary);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-left: 4px solid transparent;
+  }
+  
+  .playlist-item:hover {
+    background-color: var(--dj-accent-20);
+    border-left-color: var(--dj-highlight);
+  }
+  
+  .playlist-item.active {
+    background-color: var(--dj-accent-20);
+    border-left: 4px solid var(--dj-highlight);
+  }
+}
+
+@layer utilities {
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  }
+  
+  .glow {
+    box-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
+  }
+  
+  .glass {
+    backdrop-filter: blur(10px);
+    background: rgba(22, 33, 62, 0.8);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-dj-primary;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-dj-accent rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-dj-highlight;
+}
+
+/* Audio visualization animations */
+@keyframes audio-wave {
+  0%, 100% { transform: scaleY(0.1); }
+  50% { transform: scaleY(1); }
+}
+
+.audio-bar {
+  animation: audio-wave 0.5s ease-in-out infinite;
+}
+
+.audio-bar:nth-child(1) { animation-delay: 0s; }
+.audio-bar:nth-child(2) { animation-delay: 0.1s; }
+.audio-bar:nth-child(3) { animation-delay: 0.2s; }
+.audio-bar:nth-child(4) { animation-delay: 0.3s; }
+.audio-bar:nth-child(5) { animation-delay: 0.4s; }
+
+/* Nuovi slider per DJ Console v2 */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.slider:hover {
+  transform: scaleY(1.1);
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  border: 2px solid #374151;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  border: 2px solid #374151;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Crossfader speciale */
+.crossfader::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  background: linear-gradient(45deg, #10b981, #3b82f6);
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 1px #374151, 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Animazioni per i deck */
+@keyframes deck-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+.deck-active {
+  animation: deck-pulse 2s ease-in-out infinite;
+}
+
+/* Slider verticali per il mixer */
+.vertical-slider {
+  writing-mode: vertical-lr; /* Standard vertical writing mode */
+  -webkit-writing-mode: vertical-lr;
+  width: 8px !important;
+  height: 128px !important;
+  transform: rotate(180deg); /* Flip to match expected slider behavior */
+}
+
+.vertical-slider::-webkit-slider-thumb {
+  width: 16px;
+  height: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  border: 2px solid #374151;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.vertical-slider::-moz-range-thumb {
+  width: 16px;
+  height: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  border: 2px solid #374151;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}

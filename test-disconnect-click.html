@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disconnect Click Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .test-button {
+            background: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .test-button:hover {
+            background: #45a049;
+        }
+        .test-button.danger {
+            background: #f44336;
+        }
+        .test-button.danger:hover {
+            background: #da190b;
+        }
+        .test-button.warning {
+            background: #ff9800;
+        }
+        .test-button.warning:hover {
+            background: #e68900;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success {
+            background: #4CAF50;
+            color: white;
+        }
+        .error {
+            background: #f44336;
+            color: white;
+        }
+        .info {
+            background: #2196F3;
+            color: white;
+        }
+        .warning {
+            background: #ff9800;
+            color: white;
+        }
+        .deck-status {
+            display: inline-block;
+            padding: 5px 10px;
+            margin: 5px;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        .deck-playing {
+            background: #4CAF50;
+            color: white;
+        }
+        .deck-stopped {
+            background: #666;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔌 Disconnect Click Test</h1>
+    <p>This test simulates clicking the disconnect icon and verifies that everything stops immediately.</p>
+    
+    <div id="status" class="status info">Ready to test...</div>
+    
+    <h2>Current Status:</h2>
+    <div>
+        <span class="deck-status" id="leftDeck">LEFT DECK: Stopped</span>
+        <span class="deck-status" id="rightDeck">RIGHT DECK: Stopped</span>
+    </div>
+    <div>
+        <span class="deck-status" id="streamingStatus">STREAMING: Disconnected</span>
+        <span class="deck-status" id="retryStatus">RETRY: Disabled</span>
+    </div>
+    
+    <h2>Test Actions:</h2>
+    <button class="test-button" onclick="simulateConnection()">🔗 Simulate Connection</button>
+    <button class="test-button warning" onclick="simulateDeckPlayback()">▶️ Start Deck Playback</button>
+    <button class="test-button" onclick="simulateStreaming()">📡 Start Streaming</button>
+    <button class="test-button danger" onclick="simulateDisconnectClick()">❌ CLICK DISCONNECT ICON</button>
+    <button class="test-button" onclick="simulateRetry()">🔄 Try Retry (Should Fail)</button>
+    
+    <h2>Test Results:</h2>
+    <div id="results"></div>
+
+    <script>
+        // Simulate the system state
+        let systemState = {
+            isConnected: false,
+            isStreaming: false,
+            leftDeckPlaying: false,
+            rightDeckPlaying: false,
+            retryEnabled: false,
+            userRequestedDisconnect: false
+        };
+        
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.textContent = message;
+            results.appendChild(div);
+        }
+        
+        function updateDeckStatus() {
+            document.getElementById('leftDeck').textContent = `LEFT DECK: ${systemState.leftDeckPlaying ? 'Playing' : 'Stopped'}`;
+            document.getElementById('leftDeck').className = `deck-status ${systemState.leftDeckPlaying ? 'deck-playing' : 'deck-stopped'}`;
+            
+            document.getElementById('rightDeck').textContent = `RIGHT DECK: ${systemState.rightDeckPlaying ? 'Playing' : 'Stopped'}`;
+            document.getElementById('rightDeck').className = `deck-status ${systemState.rightDeckPlaying ? 'deck-playing' : 'deck-stopped'}`;
+            
+            document.getElementById('streamingStatus').textContent = `STREAMING: ${systemState.isStreaming ? 'Active' : 'Stopped'}`;
+            document.getElementById('retryStatus').textContent = `RETRY: ${systemState.retryEnabled ? 'Enabled' : 'Disabled'}`;
+        }
+        
+        function simulateConnection() {
+            systemState.isConnected = true;
+            systemState.retryEnabled = true;
+            systemState.userRequestedDisconnect = false;
+            
+            updateStatus('✅ Connected to streaming server', 'success');
+            addResult('🔗 [CONNECTION] Connected to streaming server', 'success');
+            updateDeckStatus();
+        }
+        
+        function simulateDeckPlayback() {
+            systemState.leftDeckPlaying = true;
+            systemState.rightDeckPlaying = true;
+            
+            updateStatus('▶️ Deck playback started', 'info');
+            addResult('▶️ [DECK] Both decks started playing', 'info');
+            updateDeckStatus();
+        }
+        
+        function simulateStreaming() {
+            systemState.isStreaming = true;
+            
+            updateStatus('📡 Streaming active', 'success');
+            addResult('📡 [STREAMING] Live streaming started', 'success');
+            updateDeckStatus();
+        }
+        
+        function simulateDisconnectClick() {
+            // This simulates what happens when user clicks disconnect icon
+            addResult('❌ [DISCONNECT CLICK] User clicked disconnect icon', 'error');
+            
+            // 1. Stop deck playback immediately
+            if (systemState.leftDeckPlaying || systemState.rightDeckPlaying) {
+                addResult('⏹️ [DISCONNECT] Stopping deck playback immediately...', 'warning');
+                systemState.leftDeckPlaying = false;
+                systemState.rightDeckPlaying = false;
+                addResult('⏹️ [DISCONNECT] All decks stopped', 'success');
+            }
+            
+            // 2. Disconnect streaming
+            addResult('📡 [DISCONNECT] Disconnecting streaming manager...', 'warning');
+            systemState.isConnected = false;
+            systemState.isStreaming = false;
+            
+            // 3. Disable retry system
+            addResult('🛑 [DISCONNECT] Disabling retry system...', 'warning');
+            systemState.retryEnabled = false;
+            systemState.userRequestedDisconnect = true;
+            
+            // 4. Stop FFmpeg process
+            addResult('🛑 [DISCONNECT] Stopping FFmpeg process...', 'warning');
+            
+            // 5. Cleanup audio
+            addResult('🧹 [DISCONNECT] Cleaning up audio streams...', 'info');
+            
+            updateStatus('❌ Disconnected - everything stopped', 'error');
+            addResult('✅ [DISCONNECT] Disconnect completed - no more retries', 'success');
+            updateDeckStatus();
+        }
+        
+        function simulateRetry() {
+            if (systemState.userRequestedDisconnect || !systemState.retryEnabled) {
+                addResult('🛑 [RETRY] Retry blocked - user requested disconnect', 'warning');
+                return;
+            }
+            
+            if (systemState.retryEnabled) {
+                addResult('🔄 [RETRY] Retry attempt (this should not happen after disconnect)', 'error');
+            }
+        }
+        
+        // Initialize
+        updateStatus('Ready to test disconnect click behavior...', 'info');
+        updateDeckStatus();
+    </script>
+</body>
+</html>

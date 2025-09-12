@@ -1,0 +1,133 @@
+{
+  "name": "dj-console",
+  "version": "1.0.0",
+  "description": "Professional DJ Console with RadioBoss-style interface",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext js,jsx,ts,tsx",
+    "lint:fix": "eslint . --ext js,jsx,ts,tsx --fix",
+    "electron": "electron .",
+    "dist": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:win:nsis": "npm run build && electron-builder --win --config build/electron-builder-win.yml",
+    "dist:win:portable": "npm run build && electron-builder --win --config build/electron-builder-win.yml --target portable",
+    "dist:all": "npm run build && electron-builder -mwl",
+    "build:win": "npm run build && electron-builder --win --config build/electron-builder-win.yml",
+    "build:win:clean": "npm run clean && npm run build:win",
+    "clean": "rimraf dist dist-electron node_modules/.cache"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.0.0",
+    "framer-motion": "^10.16.4",
+    "lucide-react": "^0.263.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-dropzone": "^14.2.3",
+    "react-hook-form": "^7.45.4",
+    "react-router-dom": "^6.8.0",
+    "tailwind-merge": "^1.14.0",
+    "zustand": "^4.4.1"
+  },
+  "devDependencies": {
+    "@electron/notarize": "^2.3.2",
+    "@types/react": "^18.2.15",
+    "@types/react-dom": "^18.2.7",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitejs/plugin-react": "^4.0.3",
+    "autoprefixer": "^10.4.14",
+    "electron": "^28.2.0",
+    "electron-builder": "^25.1.8",
+    "eslint": "^8.45.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.3",
+    "postcss": "^8.4.27",
+    "rimraf": "^5.0.5",
+    "tailwindcss": "^3.3.3",
+    "typescript": "^5.0.2",
+    "vite": "^4.4.5"
+  },
+  "build": {
+    "appId": "com.djconsole.app",
+    "productName": "DJ Console",
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/@ffmpeg-installer/**"
+    ],
+    "generateUpdatesFilesForAllChannels": false,
+    "publish": null,
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.music",
+      "identity": null,
+      "artifactName": "DJ-Console-${version}-mac-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "icon": "build/icon.icns",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "DJ Console richiede l'accesso al microfono per la trasmissione live e il mix con la musica."
+      }
+    },
+    "afterSign": "build/after-sign.js",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        }
+      ],
+      "artifactName": "DJ-Console-${version}-win-${arch}.${ext}",
+      "requestedExecutionLevel": "asInvoker",
+      "generateUpdatesFilesForAllChannels": false,
+      "publish": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DJ Console",
+      "include": "build/installer.nsh"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "DJ-Console-${version}-linux-${arch}.${ext}",
+      "category": "AudioVideo"
+    }
+  },
+  "keywords": [
+    "dj",
+    "console",
+    "music",
+    "playlist",
+    "audio",
+    "radioboss"
+  ],
+  "author": "DJ Console Team",
+  "license": "MIT"
+}

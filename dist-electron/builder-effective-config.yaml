@@ -1,0 +1,55 @@
+directories:
+  output: dist-electron
+  buildResources: build
+appId: com.djconsole.app
+productName: DJ Console
+copyright: Copyright © 2024 DJ Console Team
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - ia32
+    - target: portable
+      arch:
+        - x64
+  artifactName: DJ-Console-${version}-win-${arch}.${ext}
+  requestedExecutionLevel: asInvoker
+  icon: build/icon.ico
+  publisherName: DJ Console Team
+  verifyUpdateCodeSignature: false
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: DJ Console
+  include: build/installer.nsh
+  perMachine: false
+  deleteAppDataOnUninstall: true
+  displayLanguageSelector: true
+  installerLanguages:
+    - it_IT
+    - en_US
+files:
+  - filter:
+      - dist/**
+      - electron/**
+      - package.json
+      - node_modules/@ffmpeg-installer/**
+asar: true
+asarUnpack:
+  - node_modules/@ffmpeg-installer/**
+  - node_modules/ffmpeg-static/**
+extraResources:
+  - from: node_modules/@ffmpeg-installer/ffmpeg.exe
+    to: ffmpeg.exe
+compression: maximum
+generateUpdatesFilesForAllChannels: false
+publish: null
+electronVersion: 28.3.3

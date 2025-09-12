@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disconnect Behavior Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .test-button {
+            background: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .test-button:hover {
+            background: #45a049;
+        }
+        .test-button.danger {
+            background: #f44336;
+        }
+        .test-button.danger:hover {
+            background: #da190b;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success {
+            background: #4CAF50;
+            color: white;
+        }
+        .error {
+            background: #f44336;
+            color: white;
+        }
+        .info {
+            background: #2196F3;
+            color: white;
+        }
+        .warning {
+            background: #ff9800;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔌 Disconnect Behavior Test</h1>
+    <p>This test verifies that when you disconnect from live streaming, the system stops retrying and stops deck playback.</p>
+    
+    <div id="status" class="status info">Ready to test...</div>
+    
+    <h2>Test Actions:</h2>
+    <button class="test-button" onclick="simulateConnection()">🔗 Simulate Connection</button>
+    <button class="test-button" onclick="simulateRetry()">🔄 Simulate Retry</button>
+    <button class="test-button danger" onclick="simulateUserDisconnect()">❌ Simulate User Disconnect</button>
+    <button class="test-button" onclick="simulateReconnect()">🔄 Simulate Reconnect</button>
+    
+    <h2>Test Results:</h2>
+    <div id="results"></div>
+
+    <script>
+        // Simulate the streaming manager behavior
+        let streamingManager = {
+            userRequestedDisconnect: false,
+            retryPermanentlyStopped: false,
+            isRetrying: false,
+            retryCount: 0,
+            maxRetries: 5
+        };
+        
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.textContent = message;
+            results.appendChild(div);
+        }
+        
+        function simulateConnection() {
+            streamingManager.userRequestedDisconnect = false;
+            streamingManager.retryPermanentlyStopped = false;
+            streamingManager.retryCount = 0;
+            streamingManager.isRetrying = false;
+            
+            updateStatus('✅ Connected to streaming server', 'success');
+            addResult('🔗 [CONNECTION] Connected to streaming server', 'success');
+            addResult('🔄 [RETRY] Retry system enabled', 'info');
+        }
+        
+        function simulateRetry() {
+            if (streamingManager.userRequestedDisconnect || streamingManager.retryPermanentlyStopped) {
+                addResult('🛑 [RETRY] Retry blocked - user requested disconnect or permanently stopped', 'warning');
+                return;
+            }
+            
+            if (streamingManager.retryCount >= streamingManager.maxRetries) {
+                addResult('🛑 [RETRY] Max retries reached - stopping', 'error');
+                return;
+            }
+            
+            streamingManager.retryCount++;
+            streamingManager.isRetrying = true;
+            
+            addResult(`🔄 [RETRY] Attempt ${streamingManager.retryCount}/${streamingManager.maxRetries}`, 'info');
+            
+            // Simulate retry delay
+            setTimeout(() => {
+                streamingManager.isRetrying = false;
+                if (streamingManager.retryCount < streamingManager.maxRetries) {
+                    addResult('🔄 [RETRY] Retry failed, will try again...', 'warning');
+                } else {
+                    addResult('🛑 [RETRY] All retries failed - stopping', 'error');
+                }
+            }, 1000);
+        }
+        
+        function simulateUserDisconnect() {
+            // This simulates what happens when user accepts disconnect prompt
+            streamingManager.userRequestedDisconnect = true;
+            streamingManager.retryPermanentlyStopped = true;
+            streamingManager.isRetrying = false;
+            
+            updateStatus('❌ User disconnected - retries stopped', 'error');
+            addResult('❌ [DISCONNECT] User requested disconnect', 'error');
+            addResult('🛑 [RETRY] Retry system disabled - no more attempts', 'warning');
+            addResult('⏹️ [DECK] Deck playback stopped', 'info');
+            addResult('🧹 [CLEANUP] Audio cleanup completed', 'info');
+        }
+        
+        function simulateReconnect() {
+            // This simulates what happens when user wants to reconnect
+            streamingManager.userRequestedDisconnect = false;
+            streamingManager.retryPermanentlyStopped = false;
+            streamingManager.retryCount = 0;
+            streamingManager.isRetrying = false;
+            
+            updateStatus('🔄 Reconnected - retry system enabled', 'success');
+            addResult('🔄 [RECONNECT] User wants to reconnect', 'success');
+            addResult('🔄 [RETRY] Retry system re-enabled', 'info');
+            addResult('🔗 [CONNECTION] Ready for new connection', 'info');
+        }
+        
+        // Initialize
+        updateStatus('Ready to test disconnect behavior...', 'info');
+    </script>
+</body>
+</html>

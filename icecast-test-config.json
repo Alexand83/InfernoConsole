@@ -1,0 +1,11 @@
+{
+  "host": "dj.onlinewebone.com",
+  "port": 8004,
+  "username": "source",
+  "password": "inferno@inferno",
+  "mountpoint": "/live",
+  "useSSL": false,
+  "djName": "DJ Test Console",
+  "format": "mp3",
+  "bitrate": 128
+}

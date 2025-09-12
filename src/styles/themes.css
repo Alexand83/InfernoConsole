@@ -1,0 +1,296 @@
+/* Variabili CSS per temi e animazioni */
+:root {
+  /* Tema scuro (default) */
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-accent: #334155;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+  --accent-color: #6366f1;
+  --accent-hover: #4f46e5;
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --error-color: #ef4444;
+  
+  /* Animazioni */
+  --enable-animations: 1;
+  --transition-duration: 0.2s;
+  --transition-timing: ease-in-out;
+}
+
+/* Tema chiaro */
+.light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f1f5f9;
+  --bg-accent: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --accent-color: #6366f1;
+  --accent-hover: #4f46e5;
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --error-color: #ef4444;
+}
+
+/* Tema scuro */
+.dark {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-accent: #334155;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+  --accent-color: #6366f1;
+  --accent-hover: #4f46e5;
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --error-color: #ef4444;
+}
+
+/* Tema infernal */
+.infernal {
+  --bg-primary: #1a0000;
+  --bg-secondary: #330000;
+  --bg-accent: #4d0000;
+  --text-primary: #ff6666;
+  --text-secondary: #ff9999;
+  --text-muted: #cc6666;
+  --accent-color: #ff0000;
+  --accent-hover: #cc0000;
+  --success-color: #ff6600;
+  --warning-color: #ff9900;
+  --error-color: #ff3333;
+}
+
+/* Animazioni condizionali */
+* {
+  transition-property: color, background-color, border-color, opacity, transform;
+  transition-duration: calc(var(--transition-duration) * var(--enable-animations));
+  transition-timing-function: var(--transition-timing);
+}
+
+/* Disabilita animazioni quando richiesto */
+.no-animations * {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Classi utility per temi */
+.bg-theme-primary { background-color: var(--bg-primary); }
+.bg-theme-secondary { background-color: var(--bg-secondary); }
+.bg-theme-accent { background-color: var(--bg-accent); }
+.text-theme-primary { color: var(--text-primary); }
+.text-theme-secondary { color: var(--text-secondary); }
+.text-theme-muted { color: var(--text-muted); }
+.border-theme-accent { border-color: var(--accent-color); }
+
+/* Transizioni fluide per cambi di tema */
+body {
+  transition: background-color var(--transition-duration) var(--transition-timing);
+}
+
+/* Hover effects condizionali */
+.hover-effect:hover {
+  transform: translateY(calc(-2px * var(--enable-animations)));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, calc(0.1 * var(--enable-animations)));
+}
+
+/* Pulse animation condizionale */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+.pulse-animation {
+  animation: pulse 2s infinite;
+  animation-play-state: calc(var(--enable-animations) * running);
+}
+
+/* Fade in/out condizionale */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Pulsante pericolo per azioni critiche */
+.dj-button-danger {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+}
+
+.dj-button-danger:hover {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.4);
+}
+
+.dj-button-danger:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+}
+
+.dj-button-danger:focus {
+  outline: 2px solid #fca5a5;
+  outline-offset: 2px;
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+  animation-play-state: calc(var(--enable-animations) * running);
+}
+
+.fade-out {
+  animation: fadeOut 0.3s ease-in-out;
+  animation-play-state: calc(var(--enable-animations) * running);
+}
+
+/* Slide animations condizionali */
+@keyframes slideInFromLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slideInFromRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.slide-in-left {
+  animation: slideInFromLeft 0.3s ease-out;
+  animation-play-state: calc(var(--enable-animations) * running);
+}
+
+.slide-in-right {
+  animation: slideInFromRight 0.3s ease-out;
+  animation-play-state: calc(var(--enable-animations) * running);
+}
+
+/* Responsive design per temi */
+@media (prefers-color-scheme: dark) {
+  .auto-theme {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-accent: #334155;
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --text-muted: #64748b;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  .auto-theme {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f1f5f9;
+    --bg-accent: #e2e8f0;
+    --text-primary: #0f172a;
+    --text-secondary: #334155;
+    --text-muted: #64748b;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --accent-color: #0000ff;
+    --accent-hover: #0000cc;
+    --text-primary: #000000;
+    --text-secondary: #333333;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f0f0f0;
+  }
+  
+  .dark {
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    --bg-primary: #000000;
+    --bg-secondary: #333333;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --enable-animations: 0;
+    --transition-duration: 0s;
+  }
+  
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Stili per DJ Console che rispondono ai temi */
+
+/* Tema chiaro - override di alcune classi Tailwind */
+.light .bg-gray-900 {
+  background-color: var(--bg-primary) !important;
+}
+
+.light .bg-gray-800 {
+  background-color: var(--bg-secondary) !important;
+}
+
+.light .bg-gray-700 {
+  background-color: var(--bg-accent) !important;
+}
+
+.light .text-white {
+  color: var(--text-primary) !important;
+}
+
+.light .text-gray-300 {
+  color: var(--text-secondary) !important;
+}
+
+.light .text-gray-400 {
+  color: var(--text-muted) !important;
+}
+
+/* Tema infernal - override di alcune classi Tailwind */
+.infernal .bg-gray-900 {
+  background-color: var(--bg-primary) !important;
+}
+
+.infernal .bg-gray-800 {
+  background-color: var(--bg-secondary) !important;
+}
+
+.infernal .bg-gray-700 {
+  background-color: var(--bg-accent) !important;
+}
+
+.infernal .text-white {
+  color: var(--text-primary) !important;
+}
+
+.infernal .text-gray-300 {
+  color: var(--text-secondary) !important;
+}
+
+.infernal .text-gray-400 {
+  color: var(--text-muted) !important;
+}
+
+.infernal .hover\:bg-gray-600:hover {
+  background-color: var(--bg-accent) !important;
+}
+
+.infernal .hover\:bg-gray-700:hover {
+  background-color: var(--accent-color) !important;
+}

@@ -1,0 +1,34 @@
+{
+  "name": "dj-console-streaming-server",
+  "version": "1.0.0",
+  "description": "Professional DJ Console Streaming Server with Icecast support",
+  "main": "streaming-server.js",
+  "scripts": {
+    "start": "node streaming-server.js",
+    "dev": "nodemon streaming-server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "dj",
+    "console",
+    "streaming",
+    "icecast",
+    "shoutcast",
+    "radio",
+    "live",
+    "audio"
+  ],
+  "author": "DJ Console Pro",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
