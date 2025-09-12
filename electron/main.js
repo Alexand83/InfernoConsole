@@ -1,9 +1,12 @@
- const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
 const http = require('http')
 const https = require('https')
 const fs = require('fs')
+
+// ✅ AUTO-UPDATER: Importa il modulo auto-updater
+const AppUpdater = require('./updater')
 
 // ✅ FIX: Gestione globale errori per prevenire popup
 process.on('uncaughtException', (error) => {
@@ -158,6 +161,9 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow()
+  
+  // ✅ AUTO-UPDATER: Inizializza l'auto-updater
+  new AppUpdater()
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
