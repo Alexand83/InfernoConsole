@@ -125,3 +125,16 @@ jobs:
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
+
+    - name: Upload Release Assets Manually
+      if: failure()
+      run: |
+        echo "⚠️ Release automatico fallito, ma gli artifact sono stati creati!"
+        echo "📦 Gli artifact sono disponibili nella sezione 'Actions' di questo workflow"
+        echo "🎯 Puoi creare manualmente il release su GitHub:"
+        echo "   1. Vai su https://github.com/Alexand83/InfernoConsole/releases"
+        echo "   2. Clicca 'Create a new release'"
+        echo "   3. Seleziona il tag ${{ github.ref_name }}"
+        echo "   4. Scarica gli artifact da questo workflow e caricali"
+        echo "   5. Pubblica il release"
