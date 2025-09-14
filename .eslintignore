@@ -1,0 +1,13 @@
+dist/
+dist-electron/
+build/
+node_modules/
+*.config.js
+*.config.ts
+electron/
+public/
+test-*.js
+test-*.html
+debug-*.js
+check-*.js
+quick-*.js
