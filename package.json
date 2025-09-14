@@ -67,11 +67,6 @@
       "node_modules/@ffmpeg-installer/**"
     ],
     "generateUpdatesFilesForAllChannels": false,
-    "publish": {
-      "provider": "github",
-      "owner": "Alexand83",
-      "repo": "InfernoConsole"
-    },
     "forceCodeSigning": false,
     "mac": {
       "target": [
