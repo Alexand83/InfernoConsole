@@ -120,7 +120,8 @@ jobs:
         files: |
           dist/windows/*
           dist/macos/*
-        draft: false
+        draft: true
         prerelease: false
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
