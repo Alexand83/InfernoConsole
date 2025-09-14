@@ -113,35 +113,6 @@ export function refreshVersionInfo(): void {
   cachedVersionInfo = null;
 }
 
-/**
- * Controlla se c'è una nuova versione disponibile
- * (per auto-update)
- */
-export async function checkForUpdates(): Promise<{
-  hasUpdate: boolean;
-  latestVersion?: string;
-  currentVersion: string;
-}> {
-  const currentVersion = getAppVersion();
-  
-  try {
-    // In futuro possiamo controllare GitHub API per nuove versioni
-    // const response = await fetch('https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest');
-    // const data = await response.json();
-    // const latestVersion = data.tag_name.replace('v', '');
-    
-    return {
-      hasUpdate: false, // Per ora sempre false
-      currentVersion,
-    };
-  } catch (error) {
-    console.error('Errore nel controllo aggiornamenti:', error);
-    return {
-      hasUpdate: false,
-      currentVersion,
-    };
-  }
-}
 
 /**
  * Ottiene il changelog per la versione corrente
