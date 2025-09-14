@@ -8,7 +8,6 @@ yarn-error.log*
 dist/
 dist-electron/
 build/
-!build/icon.*
 
 # Electron builds (too large for GitHub)
 *.exe
