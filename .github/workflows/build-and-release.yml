@@ -53,14 +53,14 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: build-windows-latest
-        path: dist-electron/*.exe
+        path: dist/*.exe
 
     - name: Upload macOS artifacts
       if: matrix.os == 'macos-latest'
       uses: actions/upload-artifact@v4
       with:
         name: build-macos-latest
-        path: dist-electron/*.dmg
+        path: dist/*.dmg
 
   release:
     needs: build
