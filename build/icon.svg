@@ -1,0 +1,40 @@
+
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- Sfondo con gradiente inferno -->
+  <defs>
+    <linearGradient id="infernoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff4500;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#ff6347;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ff8c00;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="consoleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2c2c2c;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1a1a1a;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Sfondo circolare -->
+  <circle cx="128" cy="128" r="120" fill="url(#infernoGradient)" stroke="#000" stroke-width="4"/>
+  
+  <!-- Console DJ -->
+  <rect x="60" y="100" width="136" height="80" rx="8" fill="url(#consoleGradient)" stroke="#fff" stroke-width="2"/>
+  
+  <!-- Faders/Controlli -->
+  <rect x="80" y="120" width="8" height="40" fill="#ff4500" rx="2"/>
+  <rect x="100" y="120" width="8" height="40" fill="#ff4500" rx="2"/>
+  <rect x="120" y="120" width="8" height="40" fill="#ff4500" rx="2"/>
+  <rect x="140" y="120" width="8" height="40" fill="#ff4500" rx="2"/>
+  <rect x="160" y="120" width="8" height="40" fill="#ff4500" rx="2"/>
+  
+  <!-- Cuffie DJ -->
+  <ellipse cx="128" cy="60" rx="40" ry="20" fill="none" stroke="#fff" stroke-width="3"/>
+  <rect x="88" y="60" width="8" height="20" fill="#fff"/>
+  <rect x="160" y="60" width="8" height="20" fill="#fff"/>
+  
+  <!-- Fiamme decorative -->
+  <path d="M 40 180 Q 50 160 60 180 Q 70 160 80 180 Q 90 160 100 180" stroke="#ff4500" stroke-width="3" fill="none"/>
+  <path d="M 156 180 Q 166 160 176 180 Q 186 160 196 180 Q 206 160 216 180" stroke="#ff4500" stroke-width="3" fill="none"/>
+  
+  <!-- Testo "IC" -->
+  <text x="128" y="220" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#fff" text-anchor="middle">IC</text>
+</svg>
