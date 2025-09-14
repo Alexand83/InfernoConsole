@@ -72,6 +72,7 @@
       "owner": "Alexand83",
       "repo": "InfernoConsole"
     },
+    "forceCodeSigning": false,
     "mac": {
       "target": [
         "dmg",
@@ -88,7 +89,6 @@
         "NSMicrophoneUsageDescription": "DJ Console richiede l'accesso al microfono per la trasmissione live e il mix con la musica."
       }
     },
-    "afterSign": "build/after-sign.js",
     "win": {
       "target": [
         {
@@ -101,7 +101,8 @@
       ],
       "artifactName": "DJ-Console-${version}-win-${arch}.${ext}",
       "requestedExecutionLevel": "asInvoker",
-      "generateUpdatesFilesForAllChannels": false
+      "generateUpdatesFilesForAllChannels": false,
+      "sign": false
     },
     "nsis": {
       "oneClick": false,
