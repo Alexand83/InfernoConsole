@@ -20,7 +20,7 @@
     "clean": "rimraf dist dist-electron node_modules/.cache",
     "generate-icon": "node scripts/generate-icon.js",
     "convert-icon": "node scripts/convert-to-ico.js",
-    "create-icon": "npm run generate-icon && node scripts/create-compatible-ico.js",
+    "create-icon": "npm run generate-icon && node scripts/create-valid-ico-final.js",
     "update-version": "node scripts/update-version.js",
     "version:patch": "npm version patch && npm run update-version",
     "version:minor": "npm version minor && npm run update-version",
