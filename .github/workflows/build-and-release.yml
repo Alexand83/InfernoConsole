@@ -1,3 +1,0 @@
-# DISABLED WORKFLOW - Using build-and-release-simple.yml instead
-# This workflow has been disabled due to artifact synchronization issues
-# The new simplified workflow handles build and release in a single job per OS
