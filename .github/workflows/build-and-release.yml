@@ -11,6 +11,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     
     strategy:
+      fail-fast: false  # ✅ Non fermare altri build se uno fallisce
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
         include:
@@ -78,7 +79,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') && (needs.build.result == 'success' || needs.build.result == 'partial')
     
     steps:
     - name: Checkout code
