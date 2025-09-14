@@ -7,7 +7,7 @@ import { useTranslation } from '../i18n'
 import UpdateChecker from './UpdateChecker'
 import LibrariesInfo from './LibrariesInfo'
 import { updateConfig } from '../config/updateConfig'
-import { getVersionInfo, formatVersion, getChangelog } from '../utils/versionSync'
+import { getVersionInfo, formatVersion, getChangelog, refreshVersionInfo } from '../utils/versionSync'
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('audio')
@@ -20,10 +20,41 @@ const Settings = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [editingServer, setEditingServer] = useState<string | null>(null)
   const [lastUpdateCheck, setLastUpdateCheck] = useState<string>('')
+  const [versionInfo, setVersionInfo] = useState<any>(null)
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false)
   
   // Configurazione aggiornamenti
   const updateUrl = updateConfig.updateUrl
   const currentVersion = updateConfig.currentVersion
+
+  // Carica informazioni di versione
+  useEffect(() => {
+    const loadVersionInfo = async () => {
+      try {
+        const info = await getVersionInfo()
+        setVersionInfo(info)
+      } catch (error) {
+        console.error('Errore nel caricamento informazioni versione:', error)
+      }
+    }
+    
+    loadVersionInfo()
+  }, [])
+
+  // Funzione per controllare aggiornamenti
+  const handleCheckUpdates = async () => {
+    setIsCheckingUpdates(true)
+    try {
+      refreshVersionInfo()
+      const info = await getVersionInfo()
+      setVersionInfo(info)
+      setLastUpdateCheck(new Date().toLocaleString('it-IT'))
+    } catch (error) {
+      console.error('Errore nel controllo aggiornamenti:', error)
+    } finally {
+      setIsCheckingUpdates(false)
+    }
+  }
 
   const handleSettingChange = (category: string, key: string, value: any) => {
     updateSetting(category as keyof AppSettings, key, value)
@@ -37,7 +68,7 @@ const Settings = () => {
       const settingsData = {
         settings: settings,
         timestamp: new Date().toISOString(),
-        version: getVersionInfo().version
+        version: versionInfo?.version || 'Unknown'
       }
       
       const dataStr = JSON.stringify(settingsData, null, 2)
@@ -987,10 +1018,35 @@ const Settings = () => {
                 <div className="bg-dj-primary rounded-lg p-4 border border-dj-accent/20">
                   <h3 className="text-lg font-medium text-white mb-3">{t('settings.about')}</h3>
                   <div className="space-y-2 text-sm text-dj-light/60">
-                    <div>{t('settings.version')}: {formatVersion(getVersionInfo())}</div>
-                    <div>{t('settings.build')}: {getVersionInfo().buildDate}</div>
+                    <div>{t('settings.version')}: {versionInfo ? formatVersion(versionInfo) : 'Caricamento...'}</div>
+                    <div>{t('settings.build')}: {versionInfo ? versionInfo.buildDate : 'Caricamento...'}</div>
                     <div>{t('settings.license')}: MIT</div>
                     <div>{t('settings.author')}: Alessandro(NeverAgain)</div>
+                  </div>
+                  
+                  {/* Pulsante per controllare aggiornamenti */}
+                  <div className="mt-4 pt-4 border-t border-dj-accent/20">
+                    <button
+                      onClick={handleCheckUpdates}
+                      disabled={isCheckingUpdates}
+                      className="bg-dj-accent hover:bg-dj-accent/80 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isCheckingUpdates ? 'Controllo aggiornamenti...' : 'Controlla aggiornamenti'}
+                    </button>
+                    
+                    {versionInfo?.isUpdateAvailable && (
+                      <div className="mt-2 p-2 bg-green-500/20 border border-green-500/30 rounded-lg">
+                        <p className="text-green-400 text-sm">
+                          🚀 Aggiornamento disponibile: {versionInfo.latestVersion}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {lastUpdateCheck && (
+                      <p className="text-xs text-dj-light/40 mt-2">
+                        Ultimo controllo: {lastUpdateCheck}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
