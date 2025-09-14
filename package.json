@@ -20,7 +20,11 @@
     "clean": "rimraf dist dist-electron node_modules/.cache",
     "generate-icon": "node scripts/generate-icon.js",
     "convert-icon": "node scripts/convert-to-ico.js",
-    "create-icon": "npm run generate-icon && node scripts/auto-convert-icon.js"
+    "create-icon": "npm run generate-icon && node scripts/auto-convert-icon.js",
+    "update-version": "node scripts/update-version.js",
+    "version:patch": "npm version patch && npm run update-version",
+    "version:minor": "npm version minor && npm run update-version",
+    "version:major": "npm version major && npm run update-version"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

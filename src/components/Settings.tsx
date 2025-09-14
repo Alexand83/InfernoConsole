@@ -7,6 +7,7 @@ import { useTranslation } from '../i18n'
 import UpdateChecker from './UpdateChecker'
 import LibrariesInfo from './LibrariesInfo'
 import { updateConfig } from '../config/updateConfig'
+import { getVersionInfo, formatVersion, getChangelog } from '../utils/versionSync'
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('audio')
@@ -36,7 +37,7 @@ const Settings = () => {
       const settingsData = {
         settings: settings,
         timestamp: new Date().toISOString(),
-        version: '1.0.0'
+        version: getVersionInfo().version
       }
       
       const dataStr = JSON.stringify(settingsData, null, 2)
@@ -986,8 +987,8 @@ const Settings = () => {
                 <div className="bg-dj-primary rounded-lg p-4 border border-dj-accent/20">
                   <h3 className="text-lg font-medium text-white mb-3">{t('settings.about')}</h3>
                   <div className="space-y-2 text-sm text-dj-light/60">
-                    <div>{t('settings.version')}: 1.0.0</div>
-                    <div>{t('settings.build')}: 2024.01.01</div>
+                    <div>{t('settings.version')}: {formatVersion(getVersionInfo())}</div>
+                    <div>{t('settings.build')}: {getVersionInfo().buildDate}</div>
                     <div>{t('settings.license')}: MIT</div>
                     <div>{t('settings.author')}: Alessandro(NeverAgain)</div>
                   </div>
