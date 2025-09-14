@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false  # ✅ Non fermare altri build se uno fallisce
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        os: [windows-latest, macos-latest]
         include:
           - os: windows-latest
             platform: win
@@ -21,9 +21,6 @@ jobs:
           - os: macos-latest
             platform: mac
             artifact: DJ-Console-*-mac-*.dmg
-          - os: ubuntu-latest
-            platform: linux
-            artifact: DJ-Console-*-linux-*.AppImage
 
     steps:
     - name: Checkout code
@@ -51,10 +48,6 @@ jobs:
       env:
         CSC_IDENTITY_AUTO_DISCOVERY: false
 
-    - name: Build Electron app (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: npm run dist:all
-
     - name: Upload Windows artifacts
       if: matrix.os == 'windows-latest'
       uses: actions/upload-artifact@v4
@@ -68,13 +61,6 @@ jobs:
       with:
         name: macos-build
         path: dist-electron/*.dmg
-
-    - name: Upload Linux artifacts
-      if: matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: linux-build
-        path: dist-electron/*.AppImage
 
   release:
     needs: build
@@ -96,12 +82,6 @@ jobs:
       with:
         name: macos-build
         path: dist/macos
-
-    - name: Download Linux artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: linux-build
-        path: dist/linux
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
@@ -127,11 +107,10 @@ jobs:
           
           **Windows**: Installa il file `.exe` per Windows 10/11
           **macOS**: Installa il file `.dmg` per macOS 10.15+
-          **Linux**: Usa il file `.AppImage` per distribuzioni Linux moderne
           
           ### 🚀 Installazione
           1. Scarica il file appropriato per il tuo sistema
-          2. Esegui l'installer (Windows/macOS) o rendi eseguibile l'AppImage (Linux)
+          2. Esegui l'installer (Windows/macOS)
           3. Avvia DJ Console Pro e goditi la tua sessione DJ!
           
           ### 📝 Note
@@ -141,7 +120,6 @@ jobs:
         files: |
           dist/windows/*
           dist/macos/*
-          dist/linux/*
         draft: false
         prerelease: false
       env:
