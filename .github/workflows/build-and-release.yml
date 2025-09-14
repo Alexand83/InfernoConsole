@@ -74,13 +74,13 @@ jobs:
     - name: Download Windows artifacts
       uses: actions/download-artifact@v4
       with:
-        name: windows-build
+        name: build-windows-latest
         path: dist/windows
 
     - name: Download macOS artifacts
       uses: actions/download-artifact@v4
       with:
-        name: macos-build
+        name: build-macos-latest
         path: dist/macos
 
     - name: Create Release
