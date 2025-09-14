@@ -1,6 +1,6 @@
 {
   "name": "dj-console",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "Professional DJ Console with RadioBoss-style interface",
   "main": "electron/main.js",
   "scripts": {
@@ -115,13 +115,9 @@
       "runAfterFinish": false,
       "deleteAppDataOnUninstall": false,
       "perMachine": false,
-      "allowElevation": true,
       "installerIcon": null,
       "uninstallerIcon": null,
       "installerHeaderIcon": null,
-      "createStartMenuShortcut": true,
-      "createDesktopShortcut": true,
-      "shortcutName": "DJ Console",
       "include": "build/installer.nsh"
     },
     "linux": {
