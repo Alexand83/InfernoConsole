@@ -70,7 +70,7 @@
     "asarUnpack": [
       "node_modules/@ffmpeg-installer/**"
     ],
-    "generateUpdatesFilesForAllChannels": false,
+    "generateUpdatesFilesForAllChannels": true,
     "forceCodeSigning": false,
     "publish": null,
     "mac": {
@@ -101,7 +101,8 @@
       "artifactName": "DJ-Console-${version}-win-${arch}.${ext}",
       "requestedExecutionLevel": "asInvoker",
       "generateUpdatesFilesForAllChannels": false,
-      "sign": false
+      "sign": false,
+      "publisherName": "Alessandro(NeverAgain)"
     },
     "nsis": {
       "oneClick": false,
@@ -109,7 +110,19 @@
       "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "DJ Console"
+      "shortcutName": "DJ Console",
+      "differentialPackage": true,
+      "runAfterFinish": false,
+      "deleteAppDataOnUninstall": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "installerIcon": null,
+      "uninstallerIcon": null,
+      "installerHeaderIcon": null,
+      "createStartMenuShortcut": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "DJ Console",
+      "include": "build/installer.nsh"
     },
     "linux": {
       "target": [
