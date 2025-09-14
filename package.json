@@ -109,8 +109,7 @@
       "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "DJ Console",
-      "include": "build/installer.nsh"
+      "shortcutName": "DJ Console"
     },
     "linux": {
       "target": [
