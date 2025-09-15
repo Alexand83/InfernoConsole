@@ -26,7 +26,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('ffmpeg-error')
     ipcRenderer.removeAllListeners('ffmpeg-disconnected')
     ipcRenderer.removeAllListeners('ffmpeg-connected')
-  }
+  },
+  // ✅ NUOVO: Listener per progresso download aggiornamenti
+  on: (event, callback) => ipcRenderer.on(event, callback),
+  removeListener: (event, callback) => ipcRenderer.removeListener(event, callback)
 })
 
 // Expose minimal APIs if needed in future (IPC, fs, etc.)

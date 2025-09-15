@@ -38,11 +38,10 @@ try {
 function writeLog(level, message) {
   try {
     const logDir = app ? app.getPath('userData') : process.cwd()
-    const logFile = path.join(logDir, 'djconsole.log')
+    const logFile = path.join(logDir, 'djconsole.log'
     const line = `[${new Date().toISOString()}] [${String(level).toUpperCase()}] ${message}\n`
     fs.appendFileSync(logFile, line, { encoding: 'utf8' })
-    if (process.env.NODE_ENV === 'development') {
-      // eslint-disable-next-line no-console
+    if (process.env.NODE_ENV === 'development') {o voglc de
       console.log(line.trim())
     }
   } catch {}
@@ -109,8 +108,15 @@ async function resolveDevServerUrl() {
   return found
 }
 
+let mainWindow
+
+// Funzione per ottenere la finestra principale (per l'updater)
+function getMainWindow() {
+  return mainWindow
+}
+
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     webPreferences: {
@@ -832,5 +838,8 @@ ipcMain.handle('db-save', async (_evt, payload) => {
     return { ok: false, error: e.message }
   }
 })
+
+// Esporta la funzione per l'updater
+module.exports = { getMainWindow }
 
 

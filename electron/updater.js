@@ -40,6 +40,17 @@ class AppUpdater {
       log_message = log_message + ' - Downloaded ' + progressObj.percent + '%'
       log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')'
       console.log('📥 Download aggiornamento:', log_message)
+      
+      // Invia il progresso al renderer process
+      const mainWindow = require('./main').getMainWindow()
+      if (mainWindow) {
+        mainWindow.webContents.send('download-progress', {
+          percent: Math.round(progressObj.percent),
+          bytesPerSecond: progressObj.bytesPerSecond,
+          transferred: progressObj.transferred,
+          total: progressObj.total
+        })
+      }
     })
 
     autoUpdater.on('update-downloaded', (info) => {

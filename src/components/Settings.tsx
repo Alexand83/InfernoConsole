@@ -7,7 +7,7 @@ import { useTranslation } from '../i18n'
 import UpdateChecker from './UpdateChecker'
 import LibrariesInfo from './LibrariesInfo'
 import { updateConfig } from '../config/updateConfig'
-import { getVersionInfo, formatVersion, getChangelog, refreshVersionInfo } from '../utils/versionSync'
+import { getVersionInfo, formatVersion, getChangelog, refreshVersionInfo, downloadUpdate, installUpdate } from '../utils/versionSync'
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('audio')
@@ -22,6 +22,8 @@ const Settings = () => {
   const [lastUpdateCheck, setLastUpdateCheck] = useState<string>('')
   const [versionInfo, setVersionInfo] = useState<any>(null)
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState(0)
   
   // Configurazione aggiornamenti
   const updateUrl = updateConfig.updateUrl
@@ -41,6 +43,24 @@ const Settings = () => {
     loadVersionInfo()
   }, [])
 
+  // Listener per il progresso del download
+  useEffect(() => {
+    const handleDownloadProgress = (event: any, progress: any) => {
+      setDownloadProgress(progress.percent)
+    }
+
+    // Aggiungi listener per il progresso del download
+    if (window.electronAPI) {
+      window.electronAPI.on('download-progress', handleDownloadProgress)
+    }
+
+    return () => {
+      if (window.electronAPI) {
+        window.electronAPI.removeListener('download-progress', handleDownloadProgress)
+      }
+    }
+  }, [])
+
   // Funzione per controllare aggiornamenti
   const handleCheckUpdates = async () => {
     setIsCheckingUpdates(true)
@@ -53,6 +73,31 @@ const Settings = () => {
       console.error('Errore nel controllo aggiornamenti:', error)
     } finally {
       setIsCheckingUpdates(false)
+    }
+  }
+
+  // Funzione per scaricare l'aggiornamento
+  const handleDownloadUpdate = async () => {
+    setIsDownloading(true)
+    setDownloadProgress(0)
+    try {
+      await downloadUpdate()
+      alert('Download completato! Clicca "Installa e Riavvia" per applicare l\'aggiornamento.')
+    } catch (error) {
+      console.error('Errore nel download aggiornamento:', error)
+      alert('Errore nel download dell\'aggiornamento. Riprova più tardi.')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
+  // Funzione per installare l'aggiornamento
+  const handleInstallUpdate = async () => {
+    try {
+      await installUpdate()
+    } catch (error) {
+      console.error('Errore nell\'installazione aggiornamento:', error)
+      alert('Errore nell\'installazione dell\'aggiornamento. Riprova più tardi.')
     }
   }
 
@@ -1043,9 +1088,41 @@ const Settings = () => {
                   
                   {versionInfo?.isUpdateAvailable && (
                     <div className="mt-2 p-2 bg-green-500/20 border border-green-500/30 rounded-lg">
-                      <p className="text-green-400 text-sm">
+                      <p className="text-green-400 text-sm mb-3">
                         🚀 Aggiornamento disponibile: {versionInfo.latestVersion}
                       </p>
+                      
+                      {/* Pulsanti per download e installazione */}
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={handleDownloadUpdate}
+                          disabled={isDownloading}
+                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isDownloading ? 'Download...' : 'Scarica Aggiornamento'}
+                        </button>
+                        
+                        <button
+                          onClick={handleInstallUpdate}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
+                        >
+                          Installa e Riavvia
+                        </button>
+                      </div>
+                      
+                      {isDownloading && (
+                        <div className="mt-2">
+                          <div className="w-full bg-gray-700 rounded-full h-2">
+                            <div 
+                              className="bg-green-500 h-2 rounded-full transition-all duration-300" 
+                              style={{ width: `${downloadProgress}%` }}
+                            ></div>
+                          </div>
+                          <p className="text-xs text-dj-light/60 mt-1">
+                            Download in corso... {downloadProgress}%
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                   

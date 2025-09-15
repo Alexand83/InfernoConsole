@@ -1,4 +1,6 @@
 // Utility per sincronizzare la versione con package.json e GitHub
+import { app, ipcMain } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import packageJson from '../../package.json';
 
 export interface VersionInfo {
@@ -10,6 +12,8 @@ export interface VersionInfo {
   gitCommit?: string;
   gitBranch?: string;
   buildNumber?: string;
+  downloadProgress?: number;
+  isDownloading?: boolean;
 }
 
 // Cache per le informazioni di versione
@@ -39,27 +43,72 @@ function formatItalianDate(date: Date): string {
 }
 
 /**
- * Controlla se ci sono aggiornamenti disponibili
+ * Controlla se ci sono aggiornamenti disponibili usando electron-updater
  */
 async function checkForUpdates(): Promise<{ latestVersion?: string; isUpdateAvailable: boolean }> {
   try {
-    // Controlla GitHub API per la versione più recente
-    const response = await fetch('https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest');
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    if (app.isPackaged) {
+      // Usa electron-updater per app compilate
+      const result = await autoUpdater.checkForUpdatesAndNotify();
+      if (result && result.updateInfo) {
+        return {
+          latestVersion: result.updateInfo.version,
+          isUpdateAvailable: true
+        };
+      }
+    } else {
+      // Fallback a GitHub API per sviluppo
+      const response = await fetch('https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const latestVersion = data.tag_name.replace('v', '');
+      const currentVersion = getAppVersion();
+      
+      return {
+        latestVersion,
+        isUpdateAvailable: currentVersion !== latestVersion
+      };
     }
     
-    const data = await response.json();
-    const latestVersion = data.tag_name.replace('v', '');
-    const currentVersion = getAppVersion();
-    
-    return {
-      latestVersion,
-      isUpdateAvailable: currentVersion !== latestVersion
-    };
+    return { isUpdateAvailable: false };
   } catch (error) {
     console.error('Errore nel controllo aggiornamenti:', error);
     return { isUpdateAvailable: false };
+  }
+}
+
+/**
+ * Scarica automaticamente l'aggiornamento
+ */
+export async function downloadUpdate(): Promise<void> {
+  try {
+    if (app.isPackaged) {
+      await autoUpdater.downloadUpdate();
+    } else {
+      throw new Error('Download automatico disponibile solo in versione compilata');
+    }
+  } catch (error) {
+    console.error('Errore nel download aggiornamento:', error);
+    throw error;
+  }
+}
+
+/**
+ * Installa l'aggiornamento e riavvia l'app
+ */
+export async function installUpdate(): Promise<void> {
+  try {
+    if (app.isPackaged) {
+      autoUpdater.quitAndInstall();
+    } else {
+      throw new Error('Installazione automatica disponibile solo in versione compilata');
+    }
+  } catch (error) {
+    console.error('Errore nell\'installazione aggiornamento:', error);
+    throw error;
   }
 }
 
