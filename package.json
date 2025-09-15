@@ -102,6 +102,7 @@
       "requestedExecutionLevel": "asInvoker",
       "generateUpdatesFilesForAllChannels": false,
       "sign": false,
+      "forceCodeSigning": false,
       "publisherName": "Alessandro(NeverAgain)"
     },
     "nsis": {
@@ -118,7 +119,7 @@
       "installerIcon": null,
       "uninstallerIcon": null,
       "installerHeaderIcon": null,
-      "include": "build/installer.nsh"
+      "include": "./build/installer.nsh"
     },
     "linux": {
       "target": [

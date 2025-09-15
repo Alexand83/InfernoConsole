@@ -23,12 +23,7 @@
   nsExec::ExecToLog 'taskkill /f /im "node.exe"'
   Pop $0
   
-  ; Controlla se ci sono file bloccati
-  nsExec::ExecToLog 'handle.exe -p "DJ Console.exe"'
-  Pop $0
-  StrCmp $0 0 +2
-    Sleep 3000
-  
+  ; Aspetta un momento per assicurarsi che i processi siano terminati
   Sleep 2000
 !macroend
 
