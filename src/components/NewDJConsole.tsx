@@ -7,6 +7,7 @@ import AudioManager from '../audio/AudioManager'
 import '../audio/GlobalAudioPersistence' // Auto-inizializza la persistenza
 import { usePlaylist } from '../contexts/PlaylistContext'
 import { useSettings } from '../contexts/SettingsContext'
+import { useStreaming } from '../contexts/StreamingContext'
 import { localDatabase } from '../database/LocalDatabase'
 import { getBlob } from '../database/BlobStore'
 import { StreamingManager } from '../audio/StreamingManager'
@@ -38,12 +39,31 @@ const NewDJConsole: React.FC = () => {
   // Settings context
   const { settings } = useSettings()
   
+  // Streaming context
+  const { } = useStreaming()
+  
   // Audio context for mixed stream
   const { getMixedStream } = useAudio()
   
   // Stati locali
   const [deckATrack, setDeckATrack] = useState<Track | null>(null)
   const [deckBTrack, setDeckBTrack] = useState<Track | null>(null)
+  
+  // ✅ NUOVO: Stato per tracciare se i deck sono vuoti (aggiornamento in tempo reale)
+  const [decksEmpty, setDecksEmpty] = useState(true)
+  
+  // ✅ NUOVO: Aggiorna lo stato dei deck vuoti in tempo reale
+  useEffect(() => {
+    const isEmpty = !deckATrack && !deckBTrack
+    setDecksEmpty(prev => {
+      // Solo aggiorna se è cambiato
+      if (prev !== isEmpty) {
+        return isEmpty
+      }
+      return prev
+    })
+  }, [deckATrack, deckBTrack])
+  
   const [deckAVolume, setDeckAVolume] = useState(0.8)
   const [deckBVolume, setDeckBVolume] = useState(0.8)
   const [masterVolume, setMasterVolume] = useState(0.8)
@@ -103,10 +123,8 @@ const NewDJConsole: React.FC = () => {
   
   // 🚨 CRITICAL FIX: Attiva automaticamente il microfono all'avvio
   useEffect(() => {
-    console.log('🎤 [STARTUP] Auto-enabling microphone at startup')
     audioManager.setMicrophoneEnabled(true)
     audioManager.setMicVolume(micVolume)
-    console.log('🎤 [STARTUP] Microphone auto-enabled at', Math.round(micVolume * 100), '%')
   }, [audioManager, micVolume])
 
   // Sincronizza con Audio Manager
@@ -278,6 +296,15 @@ const NewDJConsole: React.FC = () => {
     // Segnala che ci sono nuove notifiche se il pannello è chiuso
     if (!showNotificationPanel && type === 'error') {
       setNotificationPanelHasNew(true)
+    }
+    
+    // ✅ NUOVO: Usa anche il sistema globale di notifiche se disponibile
+    if (typeof window !== 'undefined' && (window as any).addStreamingNotification && typeof (window as any).addStreamingNotification === 'function') {
+      try {
+        (window as any).addStreamingNotification(type, title, message, 'streaming')
+      } catch (error) {
+        console.warn('⚠️ [NOTIFICATION] Errore nell\'invio notifica globale:', error)
+      }
     }
   }, [showNotificationPanel])
   
@@ -1039,14 +1066,11 @@ const NewDJConsole: React.FC = () => {
   
   // Gestione fine traccia con auto-advance
   const handleTrackEnd = useCallback(async (deckId: 'A' | 'B') => {
-    console.log(`🔚 Track ended on Deck ${deckId}`)
-    
     // 🚨 FIX: Non fare auto-advance se il deck ha volume 0% per evitare salti audio
     const currentDeckState = audioManager.getDeck(deckId)
     const deckVolume = currentDeckState.volume
     
     if (deckVolume === 0) {
-      console.log(`🔇 [AUTO-ADVANCE] Skipping auto-advance for Deck ${deckId} (volume is 0% - avoiding audio jump)`)
       return
     }
     
@@ -1236,6 +1260,22 @@ const NewDJConsole: React.FC = () => {
       } else {
         // START streaming
         console.log('📡 Starting streaming...')
+        
+        // ✅ NUOVO: Controlla se i deck sono vuoti prima di permettere l'avvio
+        if (decksEmpty) {
+          console.log('🚫 [STREAMING] Tentativo di avvio streaming con deck vuoti - bloccato')
+          
+          // Mostra notifica di avviso
+          console.log('📢 [NOTIFICATION] Invio notifica di avviso...')
+          addStreamingNotification(
+            'warning',
+            'Streaming non disponibile',
+            'Devi caricare almeno una canzone in uno dei deck prima di avviare lo streaming'
+          )
+          
+          return // Blocca l'avvio dello streaming
+        }
+        
         setStreamError(null)
         setStreamStatus('connecting')
         
@@ -2426,7 +2466,7 @@ const NewDJConsole: React.FC = () => {
       addStreamingNotification('error', 'Errore di Connessione', 
         `Impossibile avviare lo streaming: ${errorMessage}`)
     }
-  }, [isStreaming, streamingManager, getMixedStream, audioManager])
+  }, [isStreaming, streamingManager, getMixedStream, audioManager, decksEmpty])
   
   // Push-to-talk
   const [pttActive, setPttActive] = useState(false)
@@ -2778,7 +2818,7 @@ const NewDJConsole: React.FC = () => {
             {/* Streaming */}
             <button
               onClick={handleToggleStreaming}
-              disabled={streamStatus === 'connecting'}
+              disabled={streamStatus === 'connecting' || (streamStatus === 'disconnected' && decksEmpty)}
               className={`p-2 rounded-lg transition-all duration-200 relative ${
                 isStreaming
                   ? 'bg-blue-500 text-white shadow-lg ring-2 ring-blue-300'
@@ -2788,6 +2828,8 @@ const NewDJConsole: React.FC = () => {
                   ? 'bg-green-500 text-white shadow-lg'
                   : streamError
                   ? 'bg-red-500 text-white shadow-lg'
+                  : (streamStatus === 'disconnected' && decksEmpty)
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-50'
                   : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
               title={
@@ -2795,6 +2837,7 @@ const NewDJConsole: React.FC = () => {
                 streamStatus === 'connecting' ? 'Connecting...' :
                 streamStatus === 'connected' ? 'Start Streaming' :
                 streamError ? `Error: ${streamError}` :
+                (streamStatus === 'disconnected' && decksEmpty) ? 'Carica almeno una canzone in uno dei deck per avviare lo streaming' :
                 'Start Streaming'
               }
             >

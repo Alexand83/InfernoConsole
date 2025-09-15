@@ -1974,8 +1974,10 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const duration = leftAudioRef.current.duration || 0
       const clampedTime = Math.max(0, Math.min(duration, time))
       leftAudioRef.current.currentTime = clampedTime
-      dispatch({ type: 'SET_LEFT_DECK_TIME', payload: clampedTime })
-      console.log(`⏩ [LEFT DECK] Seek to ${clampedTime.toFixed(2)}s`)
+      // ✅ OPTIMIZATION: Arrotonda il tempo per ridurre re-render
+      const roundedTime = Math.floor(clampedTime * 10) / 10
+      dispatch({ type: 'SET_LEFT_DECK_TIME', payload: roundedTime })
+      console.log(`⏩ [LEFT DECK] Seek to ${roundedTime.toFixed(2)}s`)
       
       // ✅ CRITICAL FIX: Debounce per evitare troppi aggiornamenti rapidi
       if (seekDebounceRef.current) {
@@ -2005,8 +2007,10 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const duration = rightAudioRef.current.duration || 0
       const clampedTime = Math.max(0, Math.min(duration, time))
       rightAudioRef.current.currentTime = clampedTime
-      dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: clampedTime })
-      console.log(`⏩ [RIGHT DECK] Seek to ${clampedTime.toFixed(2)}s`)
+      // ✅ OPTIMIZATION: Arrotonda il tempo per ridurre re-render
+      const roundedTime = Math.floor(clampedTime * 10) / 10
+      dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: roundedTime })
+      console.log(`⏩ [RIGHT DECK] Seek to ${roundedTime.toFixed(2)}s`)
       
       // ✅ CRITICAL FIX: Debounce per evitare troppi aggiornamenti rapidi
       if (seekDebounceRef.current) {
@@ -2859,9 +2863,9 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             
             // ✅ FIX: Evita di mostrare tempo maggiore della durata
             if (currentTime <= duration && currentTime >= 0) {
-              dispatch({ type: 'SET_LEFT_DECK_TIME', payload: currentTime })
-              // ✅ DEBUG: Verifica che il tempo si aggiorni
-              console.log(`⏰ [LEFT DECK] Time update: ${currentTime.toFixed(2)}s / ${duration.toFixed(2)}s`)
+              // ✅ OPTIMIZATION: Aggiorna ogni 0.1 secondi per bilanciare fluidità e stabilità
+              const roundedTime = Math.floor(currentTime * 10) / 10
+              dispatch({ type: 'SET_LEFT_DECK_TIME', payload: roundedTime })
             }
           }
         }}
@@ -2904,9 +2908,9 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             
             // ✅ FIX: Evita di mostrare tempo maggiore della durata
             if (currentTime <= duration && currentTime >= 0) {
-              dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: currentTime })
-              // ✅ DEBUG: Verifica che il tempo si aggiorni
-              console.log(`⏰ [RIGHT DECK] Time update: ${currentTime.toFixed(2)}s / ${duration.toFixed(2)}s`)
+              // ✅ OPTIMIZATION: Aggiorna ogni 0.1 secondi per bilanciare fluidità e stabilità
+              const roundedTime = Math.floor(currentTime * 10) / 10
+              dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: roundedTime })
             }
           }
         }}

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useMemo } from 'react'
 import { useSettings } from '../contexts/SettingsContext'
 
 interface DynamicWaveformProps {
@@ -30,13 +30,18 @@ const DynamicWaveform: React.FC<DynamicWaveformProps> = ({
     return null
   }
 
-  // Calcola la posizione corrente nel waveform
-  const currentPosition = duration > 0 ? (currentTime / duration) * waveformData.length : 0
+  // Calcola la posizione corrente nel waveform (bilanciato per fluidità)
+  const currentPosition = useMemo(() => {
+    if (duration <= 0 || !waveformData || waveformData.length === 0) return 0
+    // ✅ FIX: Arrotonda a blocchi di 1 barra per massima fluidità
+    const rawPosition = (currentTime / duration) * waveformData.length
+    return Math.floor(rawPosition)
+  }, [currentTime, duration, waveformData?.length || 0])
 
-  // Disegna il waveform sul canvas
+  // Disegna il waveform sul canvas (ottimizzato per ridurre re-render)
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || waveformData.length === 0) return
+    if (!canvas || !waveformData || waveformData.length === 0) return
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -71,11 +76,11 @@ const DynamicWaveform: React.FC<DynamicWaveformProps> = ({
       ctx.fillStyle = color
       ctx.fillRect(x, y, barWidth - 1, barHeight)
 
-      // Aggiungi effetto di brillantezza se la traccia è in riproduzione
-      if (isPlaying && index <= currentPosition) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
-        ctx.fillRect(x, y, barWidth - 1, barHeight)
-      }
+           // Aggiungi effetto di brillantezza se la traccia è in riproduzione (bilanciato per fluidità)
+           if (isPlaying && index <= currentPosition && index % 2 === 0) {
+             ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
+             ctx.fillRect(x, y, barWidth - 1, barHeight)
+           }
     })
 
     // Disegna la LINEA ROSSA PRINCIPALE per la posizione corrente
@@ -108,16 +113,16 @@ const DynamicWaveform: React.FC<DynamicWaveformProps> = ({
       ctx.arc(lineX, height / 2, 4, 0, 2 * Math.PI)
       ctx.fill()
       
-      // Effetto pulsante se sta suonando
+      // Effetto pulsante se sta suonando (bilanciato per fluidità)
       if (isPlaying) {
-        const pulse = 0.7 + Math.sin(Date.now() * 0.008) * 0.3
+        const pulse = 0.9 + Math.sin(Date.now() * 0.005) * 0.1
         ctx.fillStyle = `rgba(239, 68, 68, ${pulse})`
         ctx.beginPath()
-        ctx.arc(lineX, height / 2, 12, 0, 2 * Math.PI)
+        ctx.arc(lineX, height / 2, 10, 0, 2 * Math.PI)
         ctx.fill()
       }
     }
-  }, [waveformData, currentTime, duration, isPlaying, hoveredIndex])
+  }, [waveformData, currentPosition, currentTime, duration, isPlaying, hoveredIndex])
 
   // Gestisce il click sul waveform per seek
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -146,7 +151,7 @@ const DynamicWaveform: React.FC<DynamicWaveformProps> = ({
   // Gestisce il movimento del mouse per hover
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
-    if (!canvas || waveformData.length === 0) return
+    if (!canvas || !waveformData || waveformData.length === 0) return
 
     const rect = canvas.getBoundingClientRect()
     const x = e.clientX - rect.left
@@ -168,27 +173,19 @@ const DynamicWaveform: React.FC<DynamicWaveformProps> = ({
   // Animazione ottimizzata per ridurre il lag
   useEffect(() => {
     if (isPlaying && settings.interface.animations) {
-      const animate = () => {
+      // Riduci la frequenza di aggiornamento per migliorare le performance
+      const interval = setInterval(() => {
         // Solo aggiorna il canvas quando necessario
         if (canvasRef.current) {
           const canvas = canvasRef.current
           const ctx = canvas.getContext('2d')
           if (ctx) {
-            // Effetto di pulsazione più leggero e meno frequente
+            // Effetto di pulsazione bilanciato per fluidità
             const pulse = 0.9 + Math.sin(Date.now() * 0.005) * 0.1
             ctx.globalAlpha = pulse
           }
         }
-        animationRef.current = requestAnimationFrame(animate)
-      }
-      
-      // Riduci la frequenza di aggiornamento per migliorare le performance
-      const interval = setInterval(() => {
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current)
-        }
-        animationRef.current = requestAnimationFrame(animate)
-      }, 100) // Aggiorna ogni 100ms invece di ogni frame
+      }, 200) // Aggiorna ogni 200ms per bilanciare fluidità e stabilità
       
       return () => clearInterval(interval)
     } else {
@@ -232,4 +229,5 @@ const DynamicWaveform: React.FC<DynamicWaveformProps> = ({
   )
 }
 
-export default DynamicWaveform
+export default React.memo(DynamicWaveform)
+

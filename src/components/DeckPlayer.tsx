@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { 
   Play, 
   Pause, 
@@ -50,6 +50,11 @@ const DeckPlayer: React.FC<DeckPlayerProps> = ({
   const [duration, setDuration] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [showWaveform, setShowWaveform] = useState(true)
+
+  // ✅ FIX: Genera waveformData una sola volta per traccia
+  const waveformData = useMemo(() => {
+    return Array.from({ length: 120 }, () => 0.3 + Math.random() * 0.4)
+  }, [track?.id || 'default'])
   
   // Riferimenti
   const progressRef = useRef<HTMLInputElement>(null)
@@ -256,7 +261,7 @@ const DeckPlayer: React.FC<DeckPlayerProps> = ({
             {track && showWaveform && (
               <div className="mb-3">
                 <DynamicWaveform
-                  waveformData={Array.from({ length: 120 }, () => 0.3 + Math.random() * 0.4)}
+                  waveformData={waveformData}
                   currentTime={currentTime}
                   duration={duration}
                   isPlaying={isPlaying}

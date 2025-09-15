@@ -12,6 +12,7 @@ import { AudioProvider } from './contexts/AudioContext'
 import { PlaylistProvider } from './contexts/PlaylistContext'
 import { SettingsProvider } from './contexts/SettingsContext'
 import { TimerProvider } from './contexts/TimerContext'
+import { StreamingProvider } from './contexts/StreamingContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import './styles/themes.css'
 
@@ -73,7 +74,8 @@ function App() {
       <TimerProvider>
         <AudioProvider>
           <PlaylistProvider>
-            <ErrorBoundary>
+            <StreamingProvider>
+              <ErrorBoundary>
               <div className="flex flex-col min-h-screen bg-dj-dark">
                 <TopNav />
                 <main className="flex-1 overflow-y-auto transition-opacity duration-200 ease-in-out">
@@ -96,7 +98,8 @@ function App() {
                   </React.Suspense>
                 </main>
               </div>
-            </ErrorBoundary>
+              </ErrorBoundary>
+            </StreamingProvider>
           </PlaylistProvider>
         </AudioProvider>
       </TimerProvider>

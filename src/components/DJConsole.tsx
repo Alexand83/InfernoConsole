@@ -116,30 +116,10 @@ const DJConsole = memo(() => {
 
   // Log per tracciare il ciclo di vita del componente
   useEffect(() => {
-    console.log('🎛️ [DJConsole] Component mounted')
-    console.log('🎛️ [DJConsole] Component ID:', Math.random().toString(36).substr(2, 9))
-    console.log('🎛️ [DJConsole] Initial state:', {
-      leftDeck: {
-        track: audioState.leftDeck.track,
-        isPlaying: audioState.leftDeck.isPlaying,
-        isActive: audioState.leftDeck.isActive
-        // currentTime: RIMOSSO - ora gestito dal TimerContext
-      },
-      rightDeck: {
-        track: audioState.rightDeck.track,
-        isPlaying: audioState.rightDeck.isPlaying,
-        isActive: audioState.rightDeck.isActive
-        // currentTime: RIMOSSO - ora gestito dal TimerContext
-      }
-    })
-    
     // NOTIFICA che la console è stata montata per ripristinare i controlli audio
     window.dispatchEvent(new CustomEvent('djconsole:console-mounted'))
     
     return () => {
-      console.log('🎛️ [DJConsole] Component unmounting')
-      console.log('🎛️ [DJConsole] Component ID:', Math.random().toString(36).substr(2, 9))
-      
       // NOTIFICA che la console è stata smontata per preservare lo stato audio
       window.dispatchEvent(new CustomEvent('djconsole:console-unmounted'))
     }

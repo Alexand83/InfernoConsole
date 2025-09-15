@@ -1,6 +1,6 @@
 import DynamicWaveform from './DynamicWaveform'
 import TimerDisplay from './TimerDisplay'
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { 
   Play, 
   Pause, 
@@ -174,6 +174,14 @@ const AudioDeck: React.FC<AudioDeckProps> = ({ side, isActive, onActivate, track
   // Il track corrente è sempre quello del deck, indipendentemente da isActive
   const currentTrack = (side === 'left' ? audioState.leftDeck.track : audioState.rightDeck.track) || track
 
+  // ✅ FIX: Genera waveformData una sola volta per traccia
+  const waveformData = useMemo(() => {
+    if ((currentTrack as any)?.waveform) {
+      return (currentTrack as any).waveform
+    }
+    return Array.from({ length: 120 }, () => 0.3 + Math.random() * 0.4)
+  }, [currentTrack?.id || 'default'])
+
   // Il deck sta suonando se ha una traccia caricata ed è in playing, indipendentemente da isActive
   const isThisTrackPlaying = (side === 'left' ? 
     audioState.leftDeck.track?.id === currentTrack?.id && audioState.leftDeck.isPlaying :
@@ -236,7 +244,7 @@ const AudioDeck: React.FC<AudioDeckProps> = ({ side, isActive, onActivate, track
       {currentTrack && (
         <div className="mb-2">
           <DynamicWaveform
-            waveformData={(currentTrack as any)?.waveform || Array.from({ length: 120 }, () => 0.3 + Math.random() * 0.4)}
+            waveformData={waveformData}
             currentTime={deckCurrentTime}
             duration={deckDuration || 0}
             isPlaying={true} // ← SEMPRE TRUE: ora la waveform controlla autonomamente l'audio

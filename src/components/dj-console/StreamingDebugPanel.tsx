@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { X, Terminal, Radio, Bell, AlertTriangle, CheckCircle, Info, AlertCircle } from 'lucide-react'
 
 export interface Notification {
@@ -59,25 +59,31 @@ const StreamingDebugPanel: React.FC<StreamingDebugPanelProps> = ({
     }
   }, [maxNotifications])
 
-  if (!isVisible) return null
+  // ✅ FIX: Imposta automaticamente il tab 'debug' quando il pannello si apre
+  useEffect(() => {
+    if (isVisible && debugMessages.length > 0) {
+      setActiveTab('debug')
+    }
+  }, [isVisible, debugMessages.length])
 
-  const getStatusColor = () => {
+
+  const getStatusColor = useCallback(() => {
     if (isStreaming) return 'text-blue-400'
     if (streamStatus === 'connected') return 'text-green-400'
     if (streamStatus === 'connecting') return 'text-yellow-400'
     if (streamError) return 'text-red-400'
     return 'text-gray-400'
-  }
+  }, [isStreaming, streamStatus, streamError])
 
-  const getStatusIcon = () => {
+  const getStatusIcon = useCallback(() => {
     if (isStreaming) return '🔵'
     if (streamStatus === 'connected') return '🟢'
     if (streamStatus === 'connecting') return '🟡'
     if (streamError) return '🔴'
     return '⚫'
-  }
+  }, [isStreaming, streamStatus, streamError])
 
-  const getIcon = (type: string) => {
+  const getIcon = useCallback((type: string) => {
     switch (type) {
       case 'success':
         return <CheckCircle className="w-3 h-3 text-green-500" />
@@ -90,9 +96,9 @@ const StreamingDebugPanel: React.FC<StreamingDebugPanelProps> = ({
       default:
         return <Info className="w-3 h-3 text-gray-500" />
     }
-  }
+  }, [])
 
-  const getTypeColor = (type: string) => {
+  const getTypeColor = useCallback((type: string) => {
     switch (type) {
       case 'success':
         return 'border-l-green-500 bg-green-900/20'
@@ -105,24 +111,27 @@ const StreamingDebugPanel: React.FC<StreamingDebugPanelProps> = ({
       default:
         return 'border-l-gray-500 bg-gray-900/20'
     }
-  }
+  }, [])
 
-  const clearNotifications = () => {
+  const clearNotifications = useCallback(() => {
     setNotifications([])
-  }
+  }, [])
 
-  const removeNotification = (id: string) => {
+  const removeNotification = useCallback((id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id))
-  }
+  }, [])
 
-  const filteredNotifications = notifications.filter(n => n.category === activeTab)
+  const filteredNotifications = useMemo(() => 
+    notifications.filter(n => n.category === activeTab), 
+    [notifications, activeTab]
+  )
 
-  const getTabCount = (category: 'streaming' | 'audio' | 'app') => {
+  const getTabCount = useCallback((category: 'streaming' | 'audio' | 'app') => {
     return notifications.filter(n => n.category === category).length
-  }
+  }, [notifications])
 
   return (
-    <div className="fixed bottom-4 right-4 w-96 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-50 max-h-96 overflow-hidden">
+    <div className={`fixed bottom-4 right-4 w-96 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-50 max-h-96 overflow-hidden ${!isVisible ? 'hidden' : ''}`}>
       {/* Header */}
       <div className="flex items-center justify-between p-3 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center space-x-2">
@@ -216,22 +225,29 @@ const StreamingDebugPanel: React.FC<StreamingDebugPanelProps> = ({
               </div>
             ) : (
               <div className="space-y-1">
-                {debugMessages.map((msg, index) => (
-                  <div 
-                    key={index}
-                    className={`text-xs font-mono break-words ${
-                      msg.includes('error') || msg.includes('fail') || msg.includes('Error') || msg.includes('Failed')
-                        ? 'text-red-400'
-                        : msg.includes('connected') || msg.includes('success') || msg.includes('started')
-                        ? 'text-green-400'
-                        : msg.includes('connecting') || msg.includes('starting')
-                        ? 'text-yellow-400'
-                        : 'text-gray-300'
-                    }`}
-                  >
-                    {msg}
-                  </div>
-                ))}
+                {debugMessages.map((msg, index) => {
+                  const getMessageColor = (message: string) => {
+                    if (message.includes('error') || message.includes('fail') || message.includes('Error') || message.includes('Failed')) {
+                      return 'text-red-400'
+                    }
+                    if (message.includes('connected') || message.includes('success') || message.includes('started')) {
+                      return 'text-green-400'
+                    }
+                    if (message.includes('connecting') || message.includes('starting')) {
+                      return 'text-yellow-400'
+                    }
+                    return 'text-gray-300'
+                  }
+                  
+                  return (
+                    <div 
+                      key={index}
+                      className={`text-xs font-mono break-words ${getMessageColor(msg)}`}
+                    >
+                      {msg}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -280,6 +296,7 @@ const StreamingDebugPanel: React.FC<StreamingDebugPanelProps> = ({
                       <button
                         onClick={() => removeNotification(notification.id)}
                         className="text-gray-500 hover:text-gray-300 p-1 rounded hover:bg-gray-800"
+                        title="Rimuovi notifica"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -302,4 +319,4 @@ const StreamingDebugPanel: React.FC<StreamingDebugPanelProps> = ({
   )
 }
 
-export default StreamingDebugPanel
+export default React.memo(StreamingDebugPanel)

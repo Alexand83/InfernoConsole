@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { 
   Play, 
   Pause, 
@@ -65,6 +65,14 @@ const EnhancedDeck: React.FC<EnhancedDeckProps> = ({
   
   // Determina se il deck è ATTIVO (ha una canzone che sta suonando)
   const isActive = !!(currentTrack && isPlaying)
+
+  // ✅ FIX: Genera waveformData una sola volta per traccia
+  const waveformData = useMemo(() => {
+    if (currentTrack?.waveform) {
+      return currentTrack.waveform
+    }
+    return Array.from({ length: 120 }, () => 0.3 + Math.random() * 0.4)
+  }, [currentTrack?.id || 'default'])
   
   // Sincronizza il volume locale con lo stato globale
   useEffect(() => {
@@ -260,7 +268,7 @@ const EnhancedDeck: React.FC<EnhancedDeckProps> = ({
       {currentTrack && (
         <div className="mb-3">
           <DynamicWaveform
-            waveformData={(currentTrack as any)?.waveform || Array.from({ length: 120 }, () => 0.3 + Math.random() * 0.4)}
+            waveformData={waveformData}
             currentTime={currentTime}
             duration={currentTrack.duration || 0}
             isPlaying={isPlaying}

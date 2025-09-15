@@ -3,8 +3,8 @@ import { Activity, Settings, Radio, Headphones, Bell } from 'lucide-react'
 import { useAudio } from '../../contexts/AudioContext'
 import { useSettings } from '../../contexts/SettingsContext'
 import { usePlaylist } from '../../contexts/PlaylistContext'
-import { ContinuousStreamingManager } from '../../audio/ContinuousStreamingManager'
-import { localDatabase } from '../../database/LocalDatabase'
+import { useStreaming } from '../../contexts/StreamingContext'
+// ✅ FIX: Import rimossi - ora gestiti dal StreamingContext
 import EnhancedDeck from './EnhancedDeck'
 import EnhancedMixer from './EnhancedMixer'
 import EnhancedPlaylist from './EnhancedPlaylist'
@@ -19,19 +19,38 @@ const RebuiltDJConsole: React.FC = () => {
     state: audioState,
     playLeftTrack,
     playRightTrack,
-    setLeftLocalVolume,
-    setRightLocalVolume,
     getMixedStream,
     setMasterVolume
   } = useAudio()
   
   const { settings } = useSettings()
   const { state: playlistState } = usePlaylist()
+  const { 
+    state: streamingState, 
+    dispatch: streamingDispatch,
+    updateErrorCount
+  } = useStreaming()
   
-  // Stati locali
+  // Stati locali (solo per il componente, non per streaming)
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null)
   const [leftTrack, setLeftTrack] = useState<any>(null)
   const [rightTrack, setRightTrack] = useState<any>(null)
+  
+  // ✅ NUOVO: Stato per tracciare se i deck sono vuoti (aggiornamento in tempo reale)
+  const [decksEmpty, setDecksEmpty] = useState(true)
+  
+  // ✅ NUOVO: Aggiorna lo stato dei deck vuoti in tempo reale
+  useEffect(() => {
+    const isEmpty = !leftTrack && !rightTrack
+    setDecksEmpty(prev => {
+      // Solo aggiorna se è cambiato
+      if (prev !== isEmpty) {
+        return isEmpty
+      }
+      return prev
+    })
+  }, [leftTrack, rightTrack])
+  
   const [duplicateDialog, setDuplicateDialog] = useState<{
     track: any | null
     activeDeck: 'left' | 'right' | null
@@ -42,48 +61,47 @@ const RebuiltDJConsole: React.FC = () => {
     isVisible: false
   })
   
-  // Stati streaming per il bellissimo pulsante
-  const [isStreaming, setIsStreaming] = useState(false)
-  const [streamStatus, setStreamStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'streaming'>('disconnected')
-  const [streamError, setStreamError] = useState<string | null>(null)
-  const [streamingManager] = useState(() => new ContinuousStreamingManager())
-  const [debugMessages, setDebugMessages] = useState<string[]>([])
-  const [showDebugPanel, setShowDebugPanel] = useState(false)
-  const [pttActive, setPttActive] = useState(false)
-  const [errorCount, setErrorCount] = useState(0)
-  
-  // 🛡️ SICUREZZA: Stati per conferme streaming
-  const [showStartConfirmation, setShowStartConfirmation] = useState(false)
-  const [showStopConfirmation, setShowStopConfirmation] = useState(false)
-  const [pendingStreamingAction, setPendingStreamingAction] = useState<'start' | 'stop' | null>(null)
-  
-  // 🔇 SICUREZZA: Stati per rilevamento silenzio
-  const [showSilenceWarning, setShowSilenceWarning] = useState(false)
-  const [silenceSecondsRemaining, setSilenceSecondsRemaining] = useState(0)
+  // ✅ FIX: Usa stato globale per streaming invece di stati locali
+  const {
+    isStreaming,
+    streamStatus,
+    streamError,
+    streamingManager,
+    debugMessages,
+    showDebugPanel,
+    pttActive,
+    errorCount,
+    showStartConfirmation,
+    showStopConfirmation,
+    showSilenceWarning,
+    silenceSecondsRemaining
+  } = streamingState
   
   // ✅ CRITICAL FIX: Esponi streamingManager globalmente per AudioContext
   useEffect(() => {
-    ;(window as any).streamingManager = streamingManager
-    
-    // ✅ ESPONI METODI DI PAUSA/RIPRESA DEL CONTINUOUS STREAMING MANAGER
-    ;(window as any).pauseStreaming = () => {
-      if (streamingManager && typeof streamingManager.pauseStreaming === 'function') {
-        streamingManager.pauseStreaming()
-        console.log('⏸️ [CONTINUOUS] Pausa streaming richiesta')
+    if (streamingManager) {
+      ;(window as any).streamingManager = streamingManager
+      
+      // ✅ ESPONI METODI DI PAUSA/RIPRESA DEL CONTINUOUS STREAMING MANAGER
+      ;(window as any).pauseStreaming = () => {
+        if (streamingManager && typeof streamingManager.pauseStreaming === 'function') {
+          streamingManager.pauseStreaming()
+          console.log('⏸️ [CONTINUOUS] Pausa streaming richiesta')
+        }
       }
-    }
-    
-    ;(window as any).resumeStreaming = () => {
-      if (streamingManager && typeof streamingManager.resumeStreaming === 'function') {
-        streamingManager.resumeStreaming()
-        console.log('▶️ [CONTINUOUS] Ripresa streaming richiesta')
+      
+      ;(window as any).resumeStreaming = () => {
+        if (streamingManager && typeof streamingManager.resumeStreaming === 'function') {
+          streamingManager.resumeStreaming()
+          console.log('▶️ [CONTINUOUS] Ripresa streaming richiesta')
+        }
       }
+      
+      console.log('📡 [GLOBAL] ContinuousStreamingManager esposto globalmente per AudioContext')
+      
+      // ✅ FIX: Esponi streamingManager globalmente per il sistema di monitoraggio
+      ;(window as any).globalStreamingManager = streamingManager
     }
-    
-    console.log('📡 [GLOBAL] ContinuousStreamingManager esposto globalmente per AudioContext')
-    
-    // ✅ FIX: Esponi streamingManager globalmente per il sistema di monitoraggio
-    ;(window as any).globalStreamingManager = streamingManager
     
     return () => {
       ;(window as any).streamingManager = null
@@ -93,17 +111,10 @@ const RebuiltDJConsole: React.FC = () => {
     }
   }, [streamingManager])
 
-  // ✅ Contatore errori per notifiche
+  // ✅ Contatore errori per notifiche (ora gestito dal context)
   useEffect(() => {
-    const countErrors = () => {
-      const errorMessages = debugMessages.filter(msg => 
-        msg.includes('❌') || msg.includes('ERROR') || msg.includes('Errore')
-      )
-      setErrorCount(errorMessages.length)
-    }
-    
-    countErrors()
-  }, [debugMessages])
+    updateErrorCount()
+  }, [debugMessages, updateErrorCount])
   
   // Refs per evitare loop di caricamento
   const loadInProgressRef = useRef(false)
@@ -159,160 +170,8 @@ const RebuiltDJConsole: React.FC = () => {
     }
   }, [audioState.leftDeck.track, audioState.rightDeck.track])
 
-  // Inizializza StreamingManager con settings e callbacks
-  useEffect(() => {
-    const initializeStreaming = async () => {
-      try {
-        // Carica le settings dal database
-        const { localDatabase } = await import('../../database/LocalDatabase')
-        await localDatabase.waitForInitialization()
-        const s = await localDatabase.getSettings()
-        
-        // Configura URL server
-        const isElectron = !!((window as any).fileStore) || ((typeof navigator !== 'undefined' && (navigator.userAgent || '').includes('Electron')))
-        let defaultWs = `ws://127.0.0.1:8000`
-        if (!isElectron) {
-          defaultWs = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:8000`
-        }
-        const wsUrl = (s.streaming.bridgeUrl && s.streaming.bridgeUrl.length > 0) ? s.streaming.bridgeUrl : defaultWs
-        
-        // ✅ USA SERVER DI DEFAULT SELEZIONATO
-        const defaultServer = await localDatabase.getDefaultIcecastServer()
-        if (defaultServer) {
-          streamingManager.setServerUrl(wsUrl)
-          streamingManager.setCredentials({
-            host: defaultServer.host,
-            port: defaultServer.port,
-            username: defaultServer.username,
-            password: defaultServer.password,
-            mountpoint: defaultServer.mount,
-            useSSL: !!defaultServer.useSSL
-          })
-          
-          // ✅ CRITICAL FIX: Configura anche le impostazioni di streaming
-          streamingManager.setCredentials({
-            format: s.streaming.defaultFormat || 'mp3', // ✅ USA FORMATO DAI SETTINGS
-            bitrate: s.streaming.defaultBitrate || 128,
-            channels: s.streaming.channels || 2,
-            sampleRate: s.audio.sampleRate || 44100
-          })
-          
-          console.log(`📡 StreamingManager configurato con server: ${defaultServer.name} (${defaultServer.host}:${defaultServer.port}${defaultServer.mount})`)
-          console.log(`📡 StreamingManager configurato con formato: ${s.streaming.defaultFormat || 'mp3'}, bitrate: ${s.streaming.defaultBitrate || 128}`)
-        } else {
-          // Fallback ai settings legacy
-          streamingManager.setServerUrl(wsUrl)
-          streamingManager.setCredentials({
-            host: 'localhost',
-            port: 5040,
-            username: 'source',
-            password: '',
-            mountpoint: '/stream',
-            useSSL: false
-          })
-          
-          // ✅ CRITICAL FIX: Configura anche le impostazioni di streaming per fallback
-          streamingManager.setCredentials({
-            format: s.streaming.defaultFormat || 'mp3', // ✅ USA FORMATO DAI SETTINGS
-            bitrate: s.streaming.defaultBitrate || 128,
-            channels: s.streaming.channels || 2,
-            sampleRate: 44100
-          })
-          
-          console.log(`📡 StreamingManager configurato con settings legacy: localhost:5040/stream`)
-          console.log(`📡 StreamingManager configurato con formato: ${s.streaming.defaultFormat || 'mp3'}, bitrate: ${s.streaming.defaultBitrate || 128}`)
-        }
-        
-        // Imposta callbacks per StreamingManager
-        streamingManager.setStatusCallback((status) => {
-          setStreamStatus(status as any)
-          setIsStreaming(status === 'streaming')
-          console.log(`📡 Streaming status: ${status}`)
-        })
-        
-        streamingManager.setDebugCallback((msg) => {
-          setDebugMessages(prev => [
-            `${new Date().toLocaleTimeString()}: ${msg}`,
-            ...prev
-          ].slice(0, 50))
-          
-          // Apri automaticamente il debug panel in caso di errore
-          if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('fail')) {
-            setStreamError(msg)
-            setShowDebugPanel(true)
-          }
-        })
-        
-        // 🔇 SICUREZZA: Callback per avviso silenzio e retry
-        streamingManager.setCallbacks({
-          onStatusChange: (status) => {
-            setStreamStatus(status.isStreaming ? 'streaming' : status.isConnected ? 'connected' : 'disconnected')
-            setIsStreaming(status.isStreaming)
-            console.log(`📡 Streaming status: ${status.isStreaming ? 'streaming' : status.isConnected ? 'connected' : 'disconnected'}`)
-          },
-          onError: (error) => {
-            setStreamError(error)
-            setShowDebugPanel(true)
-          },
-          onDebug: (msg) => {
-            setDebugMessages(prev => [
-              `${new Date().toLocaleTimeString()}: ${msg}`,
-              ...prev
-            ].slice(0, 50))
-            
-            if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('fail')) {
-              setStreamError(msg)
-              setShowDebugPanel(true)
-            }
-          },
-          onSilenceWarning: (secondsRemaining) => {
-            setSilenceSecondsRemaining(secondsRemaining)
-            setShowSilenceWarning(true)
-            console.log(`⚠️ [SILENCE] Avviso: disconnessione in ${secondsRemaining} secondi`)
-          },
-          onSilenceDisconnect: () => {
-            setShowSilenceWarning(false)
-          },
-          onRetryAttempt: (attempt, maxRetries) => {
-            console.log(`🔄 [RETRY] Tentativo ${attempt}/${maxRetries} di riconnessione...`)
-            setDebugMessages(prev => [
-              `${new Date().toLocaleTimeString()}: 🔄 Tentativo ${attempt}/${maxRetries} di riconnessione...`,
-              ...prev
-            ].slice(0, 50))
-          },
-          onRetryFailed: () => {
-            console.log('❌ [RETRY] Riconnessione fallita dopo 5 tentativi')
-            setStreamError('Riconnessione fallita dopo 5 tentativi')
-            setShowDebugPanel(true)
-          },
-          onConnectionLost: (reason) => {
-            console.log(`🚨 [CONNECTION] Connessione persa: ${reason}`)
-            
-            // ✅ FIX: Controlla se l'utente ha richiesto la disconnessione
-            if (streamingManager.isUserRequestedDisconnect) {
-              console.log('🛑 [CONNECTION] Disconnessione richiesta dall\'utente - ignoro perdita connessione')
-              return
-            }
-            
-            setDebugMessages(prev => [
-              `${new Date().toLocaleTimeString()}: 🚨 Connessione persa: ${reason}`,
-              ...prev
-            ].slice(0, 50))
-          }
-        })
-        
-        // setErrorCallback rimosso - gli errori vanno nel pannello notifiche
-        
-        console.log(`📡 StreamingManager inizializzato con server: ${wsUrl}`)
-        
-      } catch (error) {
-        console.error('❌ Errore inizializzazione StreamingManager:', error)
-        setStreamError(`Initialization error: ${error}`)
-      }
-    }
-    
-    initializeStreaming()
-  }, [streamingManager])
+  // ✅ FIX: Inizializzazione StreamingManager ora gestita dal StreamingContext
+  // Il StreamingManager viene inizializzato automaticamente nel StreamingProvider
 
   // Determina se i deck sono attivi (hanno una canzone che sta suonando)
   const leftDeckActive = !!(audioState.leftDeck.track && audioState.leftDeck.isPlaying)
@@ -389,10 +248,7 @@ const RebuiltDJConsole: React.FC = () => {
 
   // Gestisce l'auto-avanzamento
   const handleAutoAdvance = useCallback((deck: 'left' | 'right') => {
-    console.log(`🔄 [REBUILT DJ] Auto-avanzamento richiesto per deck ${deck.toUpperCase()}`)
-    
     // Dispatch evento per AutoAdvanceManager
-    console.log(`🔄 [REBUILT DJ] Emettendo evento djconsole:request-auto-advance per deck ${deck}`)
     window.dispatchEvent(new CustomEvent('djconsole:request-auto-advance', {
       detail: { deck }
     }))
@@ -400,7 +256,6 @@ const RebuiltDJConsole: React.FC = () => {
 
   // Gestisce l'avviso di traccia duplicata
   const handleDuplicateTrackWarning = useCallback((track: any, activeDeck: 'left' | 'right') => {
-    console.log(`⚠️ Traccia duplicata rilevata: ${track.title}`)
     setDuplicateDialog({
       track,
       activeDeck,
@@ -418,7 +273,6 @@ const RebuiltDJConsole: React.FC = () => {
 
   // Annulla caricamento traccia duplicata
   const handleDuplicateCancel = useCallback(() => {
-    console.log('🚫 Caricamento traccia duplicata annullato')
     setDuplicateDialog({ track: null, activeDeck: null, isVisible: false })
   }, [])
 
@@ -438,7 +292,7 @@ const RebuiltDJConsole: React.FC = () => {
   // Gestisce l'attivazione/disattivazione del PTT
   const handlePTTActivate = useCallback((active: boolean) => {
     console.log(`🎤 PTT ${active ? 'attivato' : 'disattivato'}`)
-    setPttActive(active)
+    streamingDispatch({ type: 'SET_PTT_ACTIVE', payload: active })
     
     // ✅ CRITICAL FIX: Aggiorna SOLO i volumi PTT senza ricreare il mixer
     if ((window as any).updatePTTVolumesOnly) {
@@ -453,13 +307,18 @@ const RebuiltDJConsole: React.FC = () => {
 
   // 🛡️ SICUREZZA: Gestisce la disconnessione (sempre permessa)
   const handleDisconnect = useCallback(() => {
+    if (!streamingManager) {
+      console.error('❌ StreamingManager non disponibile')
+      return
+    }
+    
     try {
       // Disconnetti
       console.log('📡 Disconnessione...')
       console.log('🛑 [REBUILT DJ] Chiamata handleDisconnect - flag userRequestedDisconnect sarà impostato a TRUE')
       streamingManager.disconnect()
-      setStreamStatus('disconnected')
-      setIsStreaming(false)
+      streamingDispatch({ type: 'SET_STREAM_STATUS', payload: 'disconnected' })
+      streamingDispatch({ type: 'SET_STREAMING', payload: false })
       
       // ✅ FIX: Ferma monitoraggio server
       if ((window as any).stopServerMonitoring) {
@@ -508,21 +367,57 @@ const RebuiltDJConsole: React.FC = () => {
       console.log('📡 Cache mixed stream pulita')
     } catch (error) {
       console.error('❌ Errore disconnessione:', error)
-      setStreamError(`Disconnect error: ${error}`)
-      setShowDebugPanel(true)
+      streamingDispatch({ type: 'SET_STREAM_ERROR', payload: `Disconnect error: ${error}` })
+      streamingDispatch({ type: 'SET_SHOW_DEBUG_PANEL', payload: true })
     }
   }, [streamingManager, leftTrack, rightTrack])
 
   // 🛡️ SICUREZZA: Gestisce il click del pulsante streaming con conferme
   const handleStreamingButtonClick = useCallback(() => {
+    if (!streamingManager) {
+      console.error('❌ StreamingManager non disponibile')
+      return
+    }
+    
     if (streamStatus === 'disconnected' || (streamStatus === 'connected' && !isStreaming)) {
+      // ✅ NUOVO: Controlla se i deck sono vuoti prima di permettere l'avvio
+      if (decksEmpty) {
+        console.log('🚫 [STREAMING] Tentativo di avvio streaming con deck vuoti - bloccato')
+        
+        // Aggiungi messaggio di debug
+        const debugMessage = '🚫 [STREAMING] Impossibile avviare streaming: devi caricare almeno una canzone in uno dei deck prima di avviare lo streaming'
+        streamingDispatch({ 
+          type: 'ADD_DEBUG_MESSAGE', 
+          payload: debugMessage
+        })
+        
+        // Mostra notifica di avviso
+        if (typeof window !== 'undefined' && (window as any).addStreamingNotification && typeof (window as any).addStreamingNotification === 'function') {
+          try {
+            (window as any).addStreamingNotification(
+              'warning',
+              'Streaming non disponibile',
+              'Devi caricare almeno una canzone in uno dei deck prima di avviare lo streaming',
+              'debug'
+            )
+          } catch (error) {
+            console.warn('⚠️ [NOTIFICATION] Errore nell\'invio notifica:', error)
+          }
+        }
+        
+        // Apri automaticamente il pannello debug per mostrare l'avviso
+        streamingDispatch({ type: 'SET_SHOW_DEBUG_PANEL', payload: true })
+        
+        return // Blocca l'avvio dello streaming
+      }
+      
       // Mostra conferma per avvio streaming
-      setPendingStreamingAction('start')
-      setShowStartConfirmation(true)
+      streamingDispatch({ type: 'SET_PENDING_STREAMING_ACTION', payload: 'start' })
+      streamingDispatch({ type: 'SET_SHOW_START_CONFIRMATION', payload: true })
     } else if (isStreaming) {
       // Mostra conferma per stop streaming
-      setPendingStreamingAction('stop')
-      setShowStopConfirmation(true)
+      streamingDispatch({ type: 'SET_PENDING_STREAMING_ACTION', payload: 'stop' })
+      streamingDispatch({ type: 'SET_SHOW_STOP_CONFIRMATION', payload: true })
     } else {
       // ✅ FIX: Disconnessione immediata con stop completo
       console.log('📡 [DISCONNECT CLICK] Disconnessione immediata richiesta...')
@@ -557,12 +452,17 @@ const RebuiltDJConsole: React.FC = () => {
       // 2. Chiama handleDisconnect per il resto
       handleDisconnect()
     }
-  }, [streamStatus, isStreaming, leftTrack, rightTrack, handleDisconnect])
+  }, [streamStatus, isStreaming, leftTrack, rightTrack, handleDisconnect, decksEmpty, streamingDispatch])
 
   // 🛡️ SICUREZZA: Esegue l'azione di avvio streaming dopo conferma
   const handleStartStreamingConfirmed = useCallback(async () => {
-    setShowStartConfirmation(false)
-    setPendingStreamingAction(null)
+    if (!streamingManager) {
+      console.error('❌ StreamingManager non disponibile')
+      return
+    }
+    
+    streamingDispatch({ type: 'SET_SHOW_START_CONFIRMATION', payload: false })
+    streamingDispatch({ type: 'SET_PENDING_STREAMING_ACTION', payload: null })
     
     try {
       if (streamStatus === 'disconnected') {
@@ -574,13 +474,13 @@ const RebuiltDJConsole: React.FC = () => {
         streamingManager.resetUserDisconnectFlag() // ✅ CRITICAL FIX: Reset flag disconnessione utente solo per nuovo avvio manuale
         console.log('🔄 [REBUILT DJ] Flag userRequestedDisconnect resettato per nuovo avvio manuale')
         
-        setStreamStatus('connecting')
+        streamingDispatch({ type: 'SET_STREAM_STATUS', payload: 'connecting' })
         const connected = await streamingManager.connect()
         
         if (!connected) {
-          setStreamError('Connessione fallita - verifica le impostazioni')
-          setStreamStatus('disconnected')
-          setShowDebugPanel(true)
+          streamingDispatch({ type: 'SET_STREAM_ERROR', payload: 'Connessione fallita - verifica le impostazioni' })
+          streamingDispatch({ type: 'SET_STREAM_STATUS', payload: 'disconnected' })
+          streamingDispatch({ type: 'SET_SHOW_DEBUG_PANEL', payload: true })
         } else {
           // ✅ AUTO-START: Avvia automaticamente lo streaming dopo la connessione
           console.log('📡 Connesso! Avvio automatico streaming...')
@@ -622,8 +522,8 @@ const RebuiltDJConsole: React.FC = () => {
               
               if (!cachedMixedStreamRef.current) {
                 console.error('❌ getMixedStream ha restituito null - impossibile avviare streaming')
-                setStreamError('Errore audio - impossibile creare mixed stream')
-                setStreamStatus('connected')
+                streamingDispatch({ type: 'SET_STREAM_ERROR', payload: 'Errore audio - impossibile creare mixed stream' })
+                streamingDispatch({ type: 'SET_STREAM_STATUS', payload: 'connected' })
                 return
               }
               
@@ -631,8 +531,8 @@ const RebuiltDJConsole: React.FC = () => {
               const { localDatabase } = await import('../../database/LocalDatabase')
               const defaultServer = await localDatabase.getDefaultIcecastServer()
               if (!defaultServer) {
-                setStreamError('Nessun server Icecast configurato per auto-start')
-                setShowDebugPanel(true)
+                streamingDispatch({ type: 'SET_STREAM_ERROR', payload: 'Nessun server Icecast configurato per auto-start' })
+                streamingDispatch({ type: 'SET_SHOW_DEBUG_PANEL', payload: true })
                 return
               }
               
@@ -652,15 +552,15 @@ const RebuiltDJConsole: React.FC = () => {
               const started = await streamingManager.startStreamingWithConfig(streamConfig)
               
               if (!started) {
-                setStreamError('Avvio streaming fallito dopo connessione')
-                setShowDebugPanel(true)
+                streamingDispatch({ type: 'SET_STREAM_ERROR', payload: 'Avvio streaming fallito dopo connessione' })
+                streamingDispatch({ type: 'SET_SHOW_DEBUG_PANEL', payload: true })
               } else {
                 console.log('📡 Streaming avviato con successo')
               }
             } catch (error) {
               console.error('❌ Errore avvio automatico streaming:', error)
-              setStreamError(`Auto-start error: ${error}`)
-              setShowDebugPanel(true)
+              streamingDispatch({ type: 'SET_STREAM_ERROR', payload: `Auto-start error: ${error}` })
+              streamingDispatch({ type: 'SET_SHOW_DEBUG_PANEL', payload: true })
             }
           }, 1000) // Aspetta 1 secondo per stabilizzare la connessione
         }
@@ -672,14 +572,14 @@ const RebuiltDJConsole: React.FC = () => {
         ;(window as any).isCurrentlyStreaming = true
         console.log('📡 Flag isCurrentlyStreaming impostato PRIMA di getMixedStream')
         
-        const mixed = await getMixedStream(undefined, undefined, pttActive)
+        await getMixedStream(undefined, undefined, pttActive)
         
         // ✅ USA CONTINUOUS STREAMING MANAGER
         const { localDatabase } = await import('../../database/LocalDatabase')
         const defaultServer = await localDatabase.getDefaultIcecastServer()
         if (!defaultServer) {
-          setStreamError('Nessun server Icecast configurato')
-          setShowDebugPanel(true)
+          streamingDispatch({ type: 'SET_STREAM_ERROR', payload: 'Nessun server Icecast configurato' })
+          streamingDispatch({ type: 'SET_SHOW_DEBUG_PANEL', payload: true })
           return
         }
         
@@ -700,8 +600,8 @@ const RebuiltDJConsole: React.FC = () => {
         const started = await streamingManager.startStreamingWithConfig(streamConfig)
         
         if (!started) {
-          setStreamError('Avvio streaming fallito')
-          setShowDebugPanel(true)
+          streamingDispatch({ type: 'SET_STREAM_ERROR', payload: 'Avvio streaming fallito' })
+          streamingDispatch({ type: 'SET_SHOW_DEBUG_PANEL', payload: true })
         } else {
           console.log('📡 Streaming avviato con successo')
         }
@@ -711,8 +611,8 @@ const RebuiltDJConsole: React.FC = () => {
         console.log('🛑 [STOP STREAMING] Impostando flag userRequestedDisconnect a TRUE')
         // ✅ CRITICAL FIX: Usa disconnect invece di stopStreaming per impostare il flag
         streamingManager.disconnect()
-        setStreamStatus('disconnected')
-        setIsStreaming(false)
+        streamingDispatch({ type: 'SET_STREAM_STATUS', payload: 'disconnected' })
+        streamingDispatch({ type: 'SET_STREAMING', payload: false })
         // ✅ Rimuovi flag globale streaming
         ;(window as any).isCurrentlyStreaming = false
         
@@ -760,8 +660,8 @@ const RebuiltDJConsole: React.FC = () => {
         // 2. Disconnetti e ferma tutti i retry
         console.log('📡 [DISCONNECT] Disconnessione streaming manager...')
         streamingManager.disconnect()
-        setStreamStatus('disconnected')
-        setIsStreaming(false)
+        streamingDispatch({ type: 'SET_STREAM_STATUS', payload: 'disconnected' })
+        streamingDispatch({ type: 'SET_STREAMING', payload: false })
         
         // 3. Rimuovi flag globale streaming PRIMA del cleanup
         ;(window as any).isCurrentlyStreaming = false
@@ -778,15 +678,20 @@ const RebuiltDJConsole: React.FC = () => {
       }
     } catch (error) {
       console.error('❌ Errore pulsante streaming:', error)
-      setStreamError(`Button error: ${error}`)
-      setShowDebugPanel(true)
+      streamingDispatch({ type: 'SET_STREAM_ERROR', payload: `Button error: ${error}` })
+      streamingDispatch({ type: 'SET_SHOW_DEBUG_PANEL', payload: true })
     }
   }, [streamStatus, isStreaming, streamingManager, getMixedStream, pttActive])
 
   // 🛡️ SICUREZZA: Esegue l'azione di stop streaming dopo conferma
   const handleStopStreamingConfirmed = useCallback(() => {
-    setShowStopConfirmation(false)
-    setPendingStreamingAction(null)
+    if (!streamingManager) {
+      console.error('❌ StreamingManager non disponibile')
+      return
+    }
+    
+    streamingDispatch({ type: 'SET_SHOW_STOP_CONFIRMATION', payload: false })
+    streamingDispatch({ type: 'SET_PENDING_STREAMING_ACTION', payload: null })
     
     try {
       // Ferma streaming
@@ -794,8 +699,8 @@ const RebuiltDJConsole: React.FC = () => {
       console.log('🛑 [STOP STREAMING] Impostando flag userRequestedDisconnect a TRUE')
       // ✅ CRITICAL FIX: Imposta flag disconnessione utente PRIMA di fermare lo streaming
       streamingManager.disconnect() // Usa disconnect invece di stopStreaming per impostare il flag
-      setStreamStatus('disconnected') // Cambia a disconnected invece di connected
-      setIsStreaming(false)
+      streamingDispatch({ type: 'SET_STREAM_STATUS', payload: 'disconnected' }) // Cambia a disconnected invece di connected
+      streamingDispatch({ type: 'SET_STREAMING', payload: false })
       
       // ✅ Rimuovi flag globale streaming PRIMA del cleanup
       ;(window as any).isCurrentlyStreaming = false
@@ -821,8 +726,8 @@ const RebuiltDJConsole: React.FC = () => {
       }
     } catch (error) {
       console.error('❌ Errore stop streaming:', error)
-      setStreamError(`Stop error: ${error}`)
-      setShowDebugPanel(true)
+      streamingDispatch({ type: 'SET_STREAM_ERROR', payload: `Stop error: ${error}` })
+      streamingDispatch({ type: 'SET_SHOW_DEBUG_PANEL', payload: true })
     }
   }, [streamingManager, leftTrack, rightTrack])
 
@@ -832,9 +737,9 @@ const RebuiltDJConsole: React.FC = () => {
     const handleStreamingStatusChange = (event: CustomEvent) => {
       const { status, isStreaming: streaming, error } = event.detail
       console.log(`📡 Streaming status changed: ${status}, streaming: ${streaming}`)
-      setStreamStatus(status)
-      setIsStreaming(streaming)
-      setStreamError(error)
+      streamingDispatch({ type: 'SET_STREAM_STATUS', payload: status })
+      streamingDispatch({ type: 'SET_STREAMING', payload: streaming })
+      streamingDispatch({ type: 'SET_STREAM_ERROR', payload: error })
     }
 
     // Listener per track-ended dal sistema audio per auto-avanzamento
@@ -947,7 +852,7 @@ const RebuiltDJConsole: React.FC = () => {
 
             {/* Pulsante Notifiche */}
             <button
-              onClick={() => setShowDebugPanel(!showDebugPanel)}
+              onClick={() => streamingDispatch({ type: 'SET_SHOW_DEBUG_PANEL', payload: !showDebugPanel })}
               className={`relative p-2 rounded-lg transition-colors ${
                 showDebugPanel 
                   ? 'bg-green-600 text-white' 
@@ -964,28 +869,31 @@ const RebuiltDJConsole: React.FC = () => {
             </button>
             
             {/* BELLISSIMO STREAMING BUTTON - Ripristinato come prima! */}
-            <button
-              onClick={handleStreamingButtonClick}
-              disabled={streamStatus === 'connecting'}
-              className={`p-2 rounded-lg transition-all duration-200 relative ${
-                isStreaming
-                  ? 'bg-blue-500 text-white shadow-lg ring-2 ring-blue-300'
-                  : streamStatus === 'connecting'
-                  ? 'bg-yellow-500 text-white animate-pulse cursor-not-allowed'
-                  : streamStatus === 'connected'
-                  ? 'bg-green-500 text-white shadow-lg'
-                  : streamError
-                  ? 'bg-red-500 text-white shadow-lg'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-              title={
-                streamStatus === 'streaming' ? 'LIVE STREAMING - Click to stop' :
-                streamStatus === 'connecting' ? 'Connecting and starting streaming...' :
-                streamStatus === 'connected' ? 'Connected - Starting stream...' :
-                streamError ? `Stream Error: ${streamError}` :
-                'Click to Start Live Streaming'
-              }
-            >
+        <button
+          onClick={handleStreamingButtonClick}
+          disabled={streamStatus === 'connecting'}
+          className={`p-2 rounded-lg transition-all duration-200 relative ${
+            isStreaming
+              ? 'bg-blue-500 text-white shadow-lg ring-2 ring-blue-300'
+              : streamStatus === 'connecting'
+              ? 'bg-yellow-500 text-white animate-pulse cursor-not-allowed'
+              : streamStatus === 'connected'
+              ? 'bg-green-500 text-white shadow-lg'
+              : streamError
+              ? 'bg-red-500 text-white shadow-lg'
+              : (streamStatus === 'disconnected' && decksEmpty)
+              ? 'bg-orange-600 text-orange-200 hover:bg-orange-500'
+              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+          }`}
+          title={
+            streamStatus === 'streaming' ? 'LIVE STREAMING - Click to stop' :
+            streamStatus === 'connecting' ? 'Connecting and starting streaming...' :
+            streamStatus === 'connected' ? 'Connected - Starting stream...' :
+            streamError ? `Stream Error: ${streamError}` :
+            (streamStatus === 'disconnected' && decksEmpty) ? 'Carica almeno una canzone in uno dei deck per avviare lo streaming' :
+            'Click to Start Live Streaming'
+          }
+        >
               <Radio className="w-5 h-5" />
               {streamStatus === 'connecting' && (
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-300 rounded-full animate-ping"></div>
@@ -1069,7 +977,7 @@ const RebuiltDJConsole: React.FC = () => {
       {/* Piccolo Debug Panel in basso a destra */}
       <StreamingDebugPanel
         isVisible={showDebugPanel}
-        onClose={() => setShowDebugPanel(false)}
+        onClose={useCallback(() => streamingDispatch({ type: 'SET_SHOW_DEBUG_PANEL', payload: false }), [streamingDispatch])}
         streamStatus={streamStatus}
         isStreaming={isStreaming}
         streamError={streamError}
@@ -1107,8 +1015,8 @@ const RebuiltDJConsole: React.FC = () => {
         message={`Rilevato silenzio prolungato! Lo streaming verrà disconnesso automaticamente in ${silenceSecondsRemaining} secondi se non viene rilevato audio.`}
         confirmText="OK"
         cancelText=""
-        onConfirm={() => setShowSilenceWarning(false)}
-        onCancel={() => setShowSilenceWarning(false)}
+        onConfirm={() => streamingDispatch({ type: 'SET_SHOW_SILENCE_WARNING', payload: false })}
+        onCancel={() => streamingDispatch({ type: 'SET_SHOW_SILENCE_WARNING', payload: false })}
         type="warning"
       />
 
@@ -1121,8 +1029,8 @@ const RebuiltDJConsole: React.FC = () => {
         cancelText="Annulla"
         onConfirm={handleStartStreamingConfirmed}
         onCancel={() => {
-          setShowStartConfirmation(false)
-          setPendingStreamingAction(null)
+          streamingDispatch({ type: 'SET_SHOW_START_CONFIRMATION', payload: false })
+          streamingDispatch({ type: 'SET_PENDING_STREAMING_ACTION', payload: null })
         }}
         type="warning"
       />
@@ -1135,8 +1043,8 @@ const RebuiltDJConsole: React.FC = () => {
         cancelText="Annulla"
         onConfirm={handleStopStreamingConfirmed}
         onCancel={() => {
-          setShowStopConfirmation(false)
-          setPendingStreamingAction(null)
+          streamingDispatch({ type: 'SET_SHOW_STOP_CONFIRMATION', payload: false })
+          streamingDispatch({ type: 'SET_PENDING_STREAMING_ACTION', payload: null })
         }}
         type="danger"
       />
