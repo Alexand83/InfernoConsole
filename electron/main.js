@@ -839,6 +839,29 @@ ipcMain.handle('db-save', async (_evt, payload) => {
   }
 })
 
+// IPC handlers per aggiornamenti
+ipcMain.handle('download-update', async () => {
+  try {
+    const { autoUpdater } = require('electron-updater')
+    await autoUpdater.downloadUpdate()
+    return { success: true }
+  } catch (error) {
+    console.error('Errore nel download aggiornamento:', error)
+    throw error
+  }
+})
+
+ipcMain.handle('install-update', async () => {
+  try {
+    const { autoUpdater } = require('electron-updater')
+    autoUpdater.quitAndInstall()
+    return { success: true }
+  } catch (error) {
+    console.error('Errore nell\'installazione aggiornamento:', error)
+    throw error
+  }
+})
+
 // Esporta la funzione per l'updater
 module.exports = { getMainWindow }
 

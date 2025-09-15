@@ -1,7 +1,16 @@
 // Utility per sincronizzare la versione con package.json e GitHub
-import { app, ipcMain } from 'electron';
-import { autoUpdater } from 'electron-updater';
 import packageJson from '../../package.json';
+
+// Dichiarazione per window.electronAPI
+declare global {
+  interface Window {
+    electronAPI?: {
+      invoke: (channel: string, data?: any) => Promise<any>;
+      on: (event: string, callback: (event: any, ...args: any[]) => void) => void;
+      removeListener: (event: string, callback: (event: any, ...args: any[]) => void) => void;
+    };
+  }
+}
 
 export interface VersionInfo {
   version: string;
@@ -43,37 +52,24 @@ function formatItalianDate(date: Date): string {
 }
 
 /**
- * Controlla se ci sono aggiornamenti disponibili usando electron-updater
+ * Controlla se ci sono aggiornamenti disponibili
  */
 async function checkForUpdates(): Promise<{ latestVersion?: string; isUpdateAvailable: boolean }> {
   try {
-    if (app.isPackaged) {
-      // Usa electron-updater per app compilate
-      const result = await autoUpdater.checkForUpdatesAndNotify();
-      if (result && result.updateInfo) {
-        return {
-          latestVersion: result.updateInfo.version,
-          isUpdateAvailable: true
-        };
-      }
-    } else {
-      // Fallback a GitHub API per sviluppo
-      const response = await fetch('https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      const latestVersion = data.tag_name.replace('v', '');
-      const currentVersion = getAppVersion();
-      
-      return {
-        latestVersion,
-        isUpdateAvailable: currentVersion !== latestVersion
-      };
+    // Usa GitHub API per controllare la versione più recente
+    const response = await fetch('https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
     
-    return { isUpdateAvailable: false };
+    const data = await response.json();
+    const latestVersion = data.tag_name.replace('v', '');
+    const currentVersion = getAppVersion();
+    
+    return {
+      latestVersion,
+      isUpdateAvailable: currentVersion !== latestVersion
+    };
   } catch (error) {
     console.error('Errore nel controllo aggiornamenti:', error);
     return { isUpdateAvailable: false };
@@ -85,10 +81,11 @@ async function checkForUpdates(): Promise<{ latestVersion?: string; isUpdateAvai
  */
 export async function downloadUpdate(): Promise<void> {
   try {
-    if (app.isPackaged) {
-      await autoUpdater.downloadUpdate();
+    // Usa IPC per comunicare con il main process
+    if (window.electronAPI) {
+      await window.electronAPI.invoke('download-update');
     } else {
-      throw new Error('Download automatico disponibile solo in versione compilata');
+      throw new Error('Download automatico disponibile solo in versione Electron');
     }
   } catch (error) {
     console.error('Errore nel download aggiornamento:', error);
@@ -101,10 +98,11 @@ export async function downloadUpdate(): Promise<void> {
  */
 export async function installUpdate(): Promise<void> {
   try {
-    if (app.isPackaged) {
-      autoUpdater.quitAndInstall();
+    // Usa IPC per comunicare con il main process
+    if (window.electronAPI) {
+      await window.electronAPI.invoke('install-update');
     } else {
-      throw new Error('Installazione automatica disponibile solo in versione compilata');
+      throw new Error('Installazione automatica disponibile solo in versione Electron');
     }
   } catch (error) {
     console.error('Errore nell\'installazione aggiornamento:', error);
