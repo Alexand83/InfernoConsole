@@ -85,7 +85,13 @@ const Settings = () => {
       alert('Download completato! Clicca "Installa e Riavvia" per applicare l\'aggiornamento.')
     } catch (error) {
       console.error('Errore nel download aggiornamento:', error)
-      alert('Errore nel download dell\'aggiornamento. Riprova più tardi.')
+      const errorMessage = error.message || 'Errore sconosciuto'
+      
+      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        alert('⚠️ Release non ancora disponibile!\n\nLa nuova versione è stata rilevata ma i file non sono ancora pronti per il download.\n\nRiprova tra qualche minuto quando la build sarà completata.')
+      } else {
+        alert(`Errore nel download dell'aggiornamento: ${errorMessage}\n\nRiprova più tardi.`)
+      }
     } finally {
       setIsDownloading(false)
     }
@@ -97,7 +103,13 @@ const Settings = () => {
       await installUpdate()
     } catch (error) {
       console.error('Errore nell\'installazione aggiornamento:', error)
-      alert('Errore nell\'installazione dell\'aggiornamento. Riprova più tardi.')
+      const errorMessage = error.message || 'Errore sconosciuto'
+      
+      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        alert('⚠️ Aggiornamento non disponibile!\n\nIl file di aggiornamento non è ancora pronto.\n\nAssicurati di aver completato il download prima di installare.')
+      } else {
+        alert(`Errore nell'installazione dell'aggiornamento: ${errorMessage}\n\nRiprova più tardi.`)
+      }
     }
   }
 
@@ -1090,21 +1102,29 @@ const Settings = () => {
                     <div className="mt-2 p-2 bg-green-500/20 border border-green-500/30 rounded-lg">
                       <p className="text-green-400 text-sm mb-3">
                         🚀 Aggiornamento disponibile: {versionInfo.latestVersion}
+                        {!versionInfo.isReady && (
+                          <span className="ml-2 text-yellow-400 text-xs">
+                            (Build in corso...)
+                          </span>
+                        )}
                       </p>
                       
                       {/* Pulsanti per download e installazione */}
                       <div className="flex space-x-2">
                         <button
                           onClick={handleDownloadUpdate}
-                          disabled={isDownloading}
+                          disabled={isDownloading || !versionInfo.isReady}
                           className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {isDownloading ? 'Download...' : 'Scarica Aggiornamento'}
+                          {isDownloading ? 'Download...' : 
+                           !versionInfo.isReady ? 'Build in corso...' : 
+                           'Scarica Aggiornamento'}
                         </button>
                         
                         <button
                           onClick={handleInstallUpdate}
-                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
+                          disabled={!versionInfo.isReady}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Installa e Riavvia
                         </button>

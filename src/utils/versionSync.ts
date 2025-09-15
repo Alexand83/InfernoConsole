@@ -54,7 +54,7 @@ function formatItalianDate(date: Date): string {
 /**
  * Controlla se ci sono aggiornamenti disponibili
  */
-async function checkForUpdates(): Promise<{ latestVersion?: string; isUpdateAvailable: boolean }> {
+async function checkForUpdates(): Promise<{ latestVersion?: string; isUpdateAvailable: boolean; isReady?: boolean }> {
   try {
     // Usa GitHub API per controllare la versione più recente
     const response = await fetch('https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest');
@@ -66,9 +66,14 @@ async function checkForUpdates(): Promise<{ latestVersion?: string; isUpdateAvai
     const latestVersion = data.tag_name.replace('v', '');
     const currentVersion = getAppVersion();
     
+    // Controlla se ci sono asset disponibili (file pronti per download)
+    const hasAssets = data.assets && data.assets.length > 0;
+    const isReady = hasAssets && !data.draft; // Non draft e con file disponibili
+    
     return {
       latestVersion,
-      isUpdateAvailable: currentVersion !== latestVersion
+      isUpdateAvailable: currentVersion !== latestVersion,
+      isReady
     };
   } catch (error) {
     console.error('Errore nel controllo aggiornamenti:', error);
