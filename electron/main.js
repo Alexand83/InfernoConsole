@@ -5,6 +5,18 @@ const http = require('http')
 const https = require('https')
 const fs = require('fs')
 
+// Ottimizzazioni per performance e riduzione warning
+app.commandLine.appendSwitch('--disable-gpu-sandbox')
+app.commandLine.appendSwitch('--disable-software-rasterizer')
+app.commandLine.appendSwitch('--disable-background-timer-throttling')
+app.commandLine.appendSwitch('--disable-backgrounding-occluded-windows')
+app.commandLine.appendSwitch('--disable-renderer-backgrounding')
+app.commandLine.appendSwitch('--disable-features', 'TranslateUI')
+app.commandLine.appendSwitch('--disable-ipc-flooding-protection')
+// Riduce i warning di cache
+app.commandLine.appendSwitch('--disable-web-security')
+app.commandLine.appendSwitch('--disable-features', 'VizDisplayCompositor')
+
 // ✅ AUTO-UPDATER: Importa il modulo auto-updater
 const AppUpdater = require('./updater')
 
@@ -121,9 +133,25 @@ function createWindow() {
     height: 800,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      enableRemoteModule: false,
+      // Ottimizzazioni per performance
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      experimentalFeatures: false,
     },
     title: 'DJ Console',
     backgroundColor: '#0b1221',
+    show: false, // Non mostrare finché non è pronto
+    // Ottimizzazioni per avvio più veloce
+    skipTaskbar: false,
+    alwaysOnTop: false,
+    fullscreenable: true,
+    resizable: true,
+    minimizable: true,
+    maximizable: true,
+    closable: true,
   })
 
   // Crash/unresponsive diagnostics
@@ -162,6 +190,12 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     // no-op
+  })
+
+  // Mostra la finestra quando è pronta per migliorare l'esperienza utente
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show()
+    writeLog('info', 'App window ready and shown')
   })
 }
 
@@ -804,19 +838,40 @@ ipcMain.handle('save-audio', async (_evt, { id, name, arrayBuffer }) => {
   }
 })
 
-// Simple JSON DB (Electron only)
+// Simple JSON DB (Electron only) con cache per performance
+let databaseCache = null
+let databaseCacheTime = 0
+const CACHE_DURATION = 5000 // 5 secondi
+
 ipcMain.handle('db-load', async () => {
   try {
+    const now = Date.now()
+    
+    // Usa cache se disponibile e non scaduta
+    if (databaseCache && (now - databaseCacheTime) < CACHE_DURATION) {
+      writeLog('info', 'db-load: using cache')
+      return { ok: true, data: databaseCache }
+    }
+
     const dir = path.join(app.getPath('userData'))
     const filePath = path.join(dir, 'database.json')
     try { fs.mkdirSync(dir, { recursive: true }) } catch {}
+    
     if (fs.existsSync(filePath)) {
       const raw = fs.readFileSync(filePath, 'utf8')
       const data = JSON.parse(raw)
+      
+      // Aggiorna cache
+      databaseCache = data
+      databaseCacheTime = now
+      
       writeLog('info', `db-load ok (${raw.length} bytes)`)
       return { ok: true, data }
     }
+    
     writeLog('info', 'db-load: no existing database.json, returning empty')
+    databaseCache = null
+    databaseCacheTime = now
     return { ok: true, data: null }
   } catch (e) {
     writeLog('error', `db-load error: ${e.message}`)
@@ -831,6 +886,11 @@ ipcMain.handle('db-save', async (_evt, payload) => {
     try { fs.mkdirSync(dir, { recursive: true }) } catch {}
     const json = JSON.stringify(payload || {}, null, 2)
     fs.writeFileSync(filePath, json, 'utf8')
+    
+    // Aggiorna cache dopo il salvataggio
+    databaseCache = payload
+    databaseCacheTime = Date.now()
+    
     writeLog('info', `db-save ok (${json.length} bytes) -> ${filePath}`)
     return { ok: true }
   } catch (e) {

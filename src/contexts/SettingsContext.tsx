@@ -215,23 +215,30 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Carica i settaggi dal database all'avvio
+  // Carica i settaggi dal database all'avvio (ottimizzato)
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        await localDatabase.waitForInitialization()
-        const savedSettings = await localDatabase.getSettings()
+        // Caricamento parallelo per velocità
+        const [savedSettings] = await Promise.all([
+          localDatabase.getSettings(),
+          localDatabase.waitForInitialization()
+        ])
+        
         if (savedSettings) {
           const completeSettings = ensureAllSettings(savedSettings)
           dispatch({ type: 'SET_SETTINGS', payload: completeSettings })
         }
       } catch (error) {
         console.warn('Failed to load settings:', error)
+        // Fallback ai settings di default se il caricamento fallisce
+        dispatch({ type: 'SET_SETTINGS', payload: defaultSettings })
       } finally {
         isInitialized.current = true
       }
     }
     
+    // Caricamento asincrono non bloccante
     loadSettings()
   }, [])
 
