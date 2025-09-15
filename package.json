@@ -109,18 +109,14 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "DJ Console",
-      "differentialPackage": true,
+      "differentialPackage": false,
+      "allowElevation": false,
       "runAfterFinish": false,
       "deleteAppDataOnUninstall": false,
-      "perMachine": false,
-      "installerIcon": null,
-      "uninstallerIcon": null,
-      "installerHeaderIcon": null,
-      "include": null
+      "perMachine": false
     },
     "linux": {
       "target": [
