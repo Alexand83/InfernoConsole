@@ -903,6 +903,14 @@ ipcMain.handle('db-save', async (_evt, payload) => {
 ipcMain.handle('download-update', async () => {
   try {
     const { autoUpdater } = require('electron-updater')
+    
+    // Prima controlla se ci sono aggiornamenti
+    const updateCheckResult = await autoUpdater.checkForUpdates()
+    if (!updateCheckResult || !updateCheckResult.updateInfo) {
+      throw new Error('Nessun aggiornamento disponibile')
+    }
+    
+    // Poi scarica l'aggiornamento
     await autoUpdater.downloadUpdate()
     return { success: true }
   } catch (error) {

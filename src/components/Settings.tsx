@@ -81,6 +81,8 @@ const Settings = () => {
     setIsDownloading(true)
     setDownloadProgress(0)
     try {
+      // Prima controlla aggiornamenti, poi scarica
+      await handleCheckUpdates()
       await downloadUpdate()
       alert('Download completato! Clicca "Installa e Riavvia" per applicare l\'aggiornamento.')
     } catch (error) {
@@ -89,6 +91,8 @@ const Settings = () => {
       
       if (errorMessage.includes('404') || errorMessage.includes('not found')) {
         alert('⚠️ Release non ancora disponibile!\n\nLa nuova versione è stata rilevata ma i file non sono ancora pronti per il download.\n\nRiprova tra qualche minuto quando la build sarà completata.')
+      } else if (errorMessage.includes('Please check update first')) {
+        alert('⚠️ Controllo aggiornamenti richiesto!\n\nPrima di scaricare, devi controllare se ci sono aggiornamenti disponibili.\n\nClicca "Controlla aggiornamenti" e poi riprova.')
       } else {
         alert(`Errore nel download dell'aggiornamento: ${errorMessage}\n\nRiprova più tardi.`)
       }
@@ -1128,6 +1132,13 @@ const Settings = () => {
                         >
                           Installa e Riavvia
                         </button>
+                      </div>
+                      
+                      {/* Istruzioni per l'utente */}
+                      <div className="mt-2 text-xs text-dj-light/60">
+                        <p>📋 <strong>Istruzioni:</strong></p>
+                        <p>1. Clicca "Scarica Aggiornamento" e attendi il completamento</p>
+                        <p>2. Poi clicca "Installa e Riavvia" per applicare l'aggiornamento</p>
                       </div>
                       
                       {isDownloading && (
