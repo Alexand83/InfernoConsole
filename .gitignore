@@ -8,6 +8,13 @@ yarn-error.log*
 dist/
 dist-electron/
 build/
+!build/*.yml
+!build/*.js
+!build/*.nsh
+!build/*.plist
+!build/*.bat
+!build/*.ps1
+!build/*.md
 
 # Electron builds (too large for GitHub)
 *.exe
