@@ -72,7 +72,11 @@
     ],
     "generateUpdatesFilesForAllChannels": true,
     "forceCodeSigning": false,
-    "publish": null,
+    "publish": {
+      "provider": "github",
+      "owner": "Alexand83",
+      "repo": "InfernoConsole"
+    },
     "mac": {
       "target": [
         "dmg",
@@ -93,14 +97,13 @@
         {
           "target": "portable",
           "arch": [
-            "x64",
-            "ia32"
+            "x64"
           ]
         }
       ],
-      "artifactName": "DJ-Console-${version}-win-${arch}.${ext}",
+      "artifactName": "DJ-Console-${version}-win.${ext}",
       "requestedExecutionLevel": "asInvoker",
-      "generateUpdatesFilesForAllChannels": false,
+      "generateUpdatesFilesForAllChannels": true,
       "sign": false,
       "forceCodeSigning": false,
       "verifyUpdateCodeSignature": false,
