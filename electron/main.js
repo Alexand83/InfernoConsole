@@ -128,13 +128,13 @@ function createWindow() {
 
   // Crash/unresponsive diagnostics
   try {
-    win.webContents.on('render-process-gone', (_e, details) => {
+    mainWindow.webContents.on('render-process-gone', (_e, details) => {
       writeLog('error', `renderer gone: reason=${details.reason} exitCode=${details.exitCode}`)
     })
-    win.webContents.on('unresponsive', () => {
+    mainWindow.webContents.on('unresponsive', () => {
       writeLog('warn', 'renderer unresponsive')
     })
-    win.webContents.on('crashed', () => {
+    mainWindow.webContents.on('crashed', () => {
       writeLog('error', 'renderer crashed')
     })
   } catch {}
@@ -145,22 +145,22 @@ function createWindow() {
       .then((url) => {
         if (url) {
           writeLog('info', `Loading dev URL: ${url}`)
-          win.loadURL(url)
+          mainWindow.loadURL(url)
         } else {
           writeLog('warn', 'Dev server not reachable, loading local dist index.html')
-          win.loadFile(path.join(__dirname, '../dist/index.html'))
+          mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
         }
       })
       .catch(() => {
         writeLog('error', 'Failed to resolve dev server, loading local dist index.html')
-        win.loadFile(path.join(__dirname, '../dist/index.html'))
+        mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
       })
   } else {
     writeLog('info', 'Loading local dist index.html')
-    win.loadFile(path.join(__dirname, '../dist/index.html'))
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 
-  win.on('closed', () => {
+  mainWindow.on('closed', () => {
     // no-op
   })
 }
