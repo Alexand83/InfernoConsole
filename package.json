@@ -91,7 +91,7 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "portable",
           "arch": [
             "x64",
             "ia32"
@@ -105,19 +105,6 @@
       "forceCodeSigning": false,
       "verifyUpdateCodeSignature": false,
       "publisherName": "Alessandro(NeverAgain)"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "DJ Console",
-      "differentialPackage": false,
-      "allowElevation": false,
-      "runAfterFinish": false,
-      "deleteAppDataOnUninstall": false,
-      "perMachine": false,
-      "include": "build/installer.nsh"
     },
     "linux": {
       "target": [
