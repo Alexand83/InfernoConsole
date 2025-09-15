@@ -80,7 +80,7 @@ jobs:
           - Licenza MIT
           - Supporto completo per streaming Icecast
         files: dist/*.exe
-        draft: true
+        draft: false
         prerelease: false
         generate_release_notes: true
       env:
@@ -123,7 +123,7 @@ jobs:
           - Licenza MIT
           - Supporto completo per streaming Icecast
         files: dist/*.dmg
-        draft: true
+        draft: false
         prerelease: false
         generate_release_notes: true
       env:
