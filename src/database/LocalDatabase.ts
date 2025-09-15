@@ -170,7 +170,8 @@ class LocalDatabase {
         metadata: {
           stationName: 'DJ Console Pro - Live',
           stationUrl: 'https://dj.onlinewebone.com',
-          genre: 'Electronic/Live DJ'
+          genre: 'Electronic/Live DJ',
+          djName: 'DJ Console Pro'
         }
       }
     }

@@ -1018,6 +1018,16 @@ const Settings = () => {
                         placeholder="Various"
                       />
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-dj-light/60 mb-2">🎤 Nickname DJ</label>
+                      <input
+                        type="text"
+                        value={settings.streaming?.metadata?.djName || ''}
+                        onChange={(e) => handleSettingChange('streaming', 'metadata.djName', e.target.value)}
+                        className="dj-input w-full"
+                        placeholder="Il tuo nickname"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

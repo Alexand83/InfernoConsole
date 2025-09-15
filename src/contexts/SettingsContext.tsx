@@ -49,6 +49,7 @@ export interface AppSettings {
       stationName: string
       stationUrl: string
       genre: string
+      djName: string  // ✅ NICKNAME DEL DJ
     }
   }
 }
@@ -139,7 +140,8 @@ const defaultSettings: AppSettings = {
     metadata: {
       stationName: 'DJ Console Pro - Live',
       stationUrl: 'https://dj.onlinewebone.com',
-      genre: 'Electronic/Live DJ'
+      genre: 'Electronic/Live DJ',
+      djName: 'DJ Console Pro'  // ✅ NICKNAME DEFAULT
     }
   }
 }
