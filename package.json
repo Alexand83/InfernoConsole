@@ -103,6 +103,7 @@
       "generateUpdatesFilesForAllChannels": false,
       "sign": false,
       "forceCodeSigning": false,
+      "verifyUpdateCodeSignature": false,
       "publisherName": "Alessandro(NeverAgain)"
     },
     "nsis": {
@@ -119,7 +120,7 @@
       "installerIcon": null,
       "uninstallerIcon": null,
       "installerHeaderIcon": null,
-      "include": "./build/installer.nsh"
+      "include": null
     },
     "linux": {
       "target": [
