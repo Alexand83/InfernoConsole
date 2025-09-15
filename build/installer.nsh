@@ -2,19 +2,16 @@
 ; Gestisce la chiusura automatica dell'app durante l'installazione
 
 !macro preInit
-  ; Controlla se DJ Console è in esecuzione
-  nsExec::ExecToLog 'tasklist /fi "imagename eq DJ Console.exe"'
+  ; Termina automaticamente tutti i processi DJ Console/Electron
+  nsExec::ExecToLog 'taskkill /f /im "DJ Console.exe"'
   Pop $0
-  StrCmp $0 0 +3
-    MessageBox MB_OK|MB_ICONEXCLAMATION "DJ Console è in esecuzione. Chiudilo prima di continuare."
-    Abort
+  nsExec::ExecToLog 'taskkill /f /im "electron.exe"'
+  Pop $0
+  nsExec::ExecToLog 'taskkill /f /im "node.exe"'
+  Pop $0
   
-  ; Controlla anche processi electron nascosti
-  nsExec::ExecToLog 'tasklist /fi "imagename eq electron.exe"'
-  Pop $0
-  StrCmp $0 0 +3
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Processi Electron attivi rilevati. Chiudili prima di continuare."
-    Abort
+  ; Aspetta un momento per assicurarsi che i processi siano terminati
+  Sleep 2000
 !macroend
 
 !macro customInstall
