@@ -38,10 +38,10 @@ try {
 function writeLog(level, message) {
   try {
     const logDir = app ? app.getPath('userData') : process.cwd()
-    const logFile = path.join(logDir, 'djconsole.log'
+    const logFile = path.join(logDir, 'djconsole.log')
     const line = `[${new Date().toISOString()}] [${String(level).toUpperCase()}] ${message}\n`
     fs.appendFileSync(logFile, line, { encoding: 'utf8' })
-    if (process.env.NODE_ENV === 'development') {o voglc de
+    if (process.env.NODE_ENV === 'development') {
       console.log(line.trim())
     }
   } catch {}
