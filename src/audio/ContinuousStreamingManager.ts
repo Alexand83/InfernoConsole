@@ -77,6 +77,7 @@ export class ContinuousStreamingManager {
   private onRetryAttempt?: (attempt: number, maxRetries: number) => void
   private onRetryFailed?: () => void
   private onConnectionLost?: (reason: string) => void
+  private onMountConflict?: (message: string) => void
 
   constructor() {
     this.onDebug?.('🚀 ContinuousStreamingManager inizializzato')
@@ -94,6 +95,7 @@ export class ContinuousStreamingManager {
     onRetryAttempt?: (attempt: number, maxRetries: number) => void
     onRetryFailed?: () => void
     onConnectionLost?: (reason: string) => void
+    onMountConflict?: (message: string) => void
   }) {
     this.onStatusChange = callbacks.onStatusChange
     this.onError = callbacks.onError
@@ -103,6 +105,7 @@ export class ContinuousStreamingManager {
     this.onRetryAttempt = callbacks.onRetryAttempt
     this.onRetryFailed = callbacks.onRetryFailed
     this.onConnectionLost = callbacks.onConnectionLost
+    this.onMountConflict = callbacks.onMountConflict
   }
 
   // ✅ METODI DI COMPATIBILITÀ per l'interfaccia esistente
@@ -260,6 +263,25 @@ export class ContinuousStreamingManager {
           } else {
             this.onDebug?.(`✅ [CONNECTION TEST] Server raggiungibile (status: ${response.status})`)
           }
+        } else if (response.status === 404) {
+          // ✅ FIX: 404 può indicare mount point occupato o server con playlist attiva
+          if (isRetry) {
+            this.onDebug?.(`⚠️ [RETRY] Server attivo ma mount point occupato per retry ${this.retryCount}/${this.maxRetries} (status: 404)`)
+          } else {
+            this.onDebug?.(`⚠️ [CONNECTION TEST] Server attivo ma mount point occupato (status: 404)`)
+          }
+          
+          // ✅ NUOVO: Prova comunque la connessione - potrebbe essere mount point occupato
+          this.onDebug?.(`🔄 [MOUNT CONFLICT] Tentativo connessione nonostante 404 - mount point potrebbe essere occupato`)
+          
+          // ✅ NUOVO: Suggerisci soluzioni per conflitto mount point
+          this.onDebug?.(`💡 [SUGGERIMENTO] Se il mount point è occupato, prova:`)
+          this.onDebug?.(`   1. Cambiare mount point (es: /live2, /stream2)`)
+          this.onDebug?.(`   2. Fermare la playlist automatica del server`)
+          this.onDebug?.(`   3. Usare un server diverso`)
+          
+          // ✅ NUOVO: Emetti evento per notificare il conflitto mount point
+          this.onMountConflict?.(`Mount point ${config.mountpoint} occupato su ${config.host}:${config.port}`)
         } else {
           throw new Error(`Server risponde con status: ${response.status}`)
         }
@@ -345,7 +367,15 @@ export class ContinuousStreamingManager {
           return true
         } else {
           // ✅ RETRY: Avvia retry automatico in caso di fallimento
-          this.onError?.(result?.error || 'Errore avvio FFmpeg')
+          const errorMsg = result?.error || 'Errore avvio FFmpeg'
+          this.onError?.(errorMsg)
+          
+          // ✅ NUOVO: Controlla se è un errore di mount point occupato
+          if (errorMsg.includes('mount') || errorMsg.includes('occupied') || errorMsg.includes('404')) {
+            this.onDebug?.(`🚨 [MOUNT CONFLICT] Rilevato conflitto mount point: ${errorMsg}`)
+            this.onDebug?.(`💡 [SOLUZIONE] Prova a cambiare il mount point o fermare la playlist automatica del server`)
+          }
+          
           // ✅ FIX: Controlla se l'utente ha richiesto la disconnessione prima di avviare retry
           if (!this.userRequestedDisconnect) {
             this.startRetryProcess()
@@ -366,7 +396,15 @@ export class ContinuousStreamingManager {
       }
       
     } catch (error) {
-      this.onError?.(`Errore avvio streaming: ${error}`)
+      const errorMsg = `Errore avvio streaming: ${error}`
+      this.onError?.(errorMsg)
+      
+      // ✅ NUOVO: Controlla se è un errore di mount point occupato
+      if (errorMsg.includes('mount') || errorMsg.includes('occupied') || errorMsg.includes('404')) {
+        this.onDebug?.(`🚨 [MOUNT CONFLICT] Rilevato conflitto mount point: ${errorMsg}`)
+        this.onDebug?.(`💡 [SOLUZIONE] Prova a cambiare il mount point o fermare la playlist automatica del server`)
+      }
+      
       // ✅ FIX: Controlla se l'utente ha richiesto la disconnessione prima di avviare retry
       if (!this.userRequestedDisconnect) {
         this.startRetryProcess()
