@@ -1,6 +1,6 @@
 {
   "name": "dj-console",
-  "version": "1.0.80",
+  "version": "1.0.81",
   "description": "Professional DJ Console with RadioBoss-style interface",
   "main": "electron/main.js",
   "scripts": {
@@ -47,7 +47,7 @@
     "@vitejs/plugin-react": "^4.0.3",
     "autoprefixer": "^10.4.14",
     "electron": "^28.2.0",
-    "electron-builder": "^25.1.8",
+    "electron-builder": "^26.0.12",
     "eslint": "^8.57.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^4.6.2",

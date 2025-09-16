@@ -13,7 +13,7 @@ win:
   publisherName: DJ Console Team
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
-  # Configurazione per auto-updater
+  # Configurazione per auto-updater (electron-builder 26.x)
   publishAutoUpdate: true
 
 # Configurazione per macOS
@@ -34,7 +34,7 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  # Configurazione per auto-updater
+  # Configurazione per auto-updater (electron-builder 26.x)
   publishAutoUpdate: true
 
 # Linux rimosso - non necessario
@@ -79,7 +79,7 @@ publish:
   repo: InfernoConsole
   releaseType: release
 
-# Configurazione globale per auto-updater
+# Configurazione globale per auto-updater (electron-builder 26.x)
 appUpdater:
   enabled: true
   autoDownload: false
