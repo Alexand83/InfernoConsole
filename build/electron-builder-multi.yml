@@ -17,6 +17,7 @@ win:
   publisherName: DJ Console Team
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
+  icon: build/icon.icns
 
 # Configurazione per macOS
 mac:
@@ -54,6 +55,7 @@ nsis:
   installerLanguages:
     - it_IT
     - en_US
+  differentialPackage: true
 
 # File da includere
 files:
@@ -92,7 +94,3 @@ publish:
   releaseType: release
 
 # Configurazione per download differenziali
-nsis:
-  differentialPackage: true
-mac:
-  differentialPackage: true
