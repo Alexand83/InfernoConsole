@@ -36,11 +36,22 @@ class AppUpdater {
 
     autoUpdater.on('update-available', (info) => {
       console.log('📦 Aggiornamento disponibile:', info.version)
+      console.log('📦 Info aggiornamento:', JSON.stringify(info, null, 2))
       
-      // Calcola la dimensione del file in MB
-      const fileSizeMB = info.files ? 
-        (info.files.reduce((total, file) => total + (file.size || 0), 0) / (1024 * 1024)).toFixed(1) : 
-        'N/A'
+      // ✅ FIX: Calcola la dimensione del delta, non del file completo
+      let fileSizeMB = 'N/A'
+      if (info.files && info.files.length > 0) {
+        // Cerca il file delta (.nupkg) invece del file completo
+        const deltaFile = info.files.find(file => 
+          file.url && (file.url.includes('.nupkg') || file.url.includes('delta'))
+        )
+        if (deltaFile && deltaFile.size) {
+          fileSizeMB = (deltaFile.size / (1024 * 1024)).toFixed(1)
+        } else {
+          // Fallback: usa il primo file se non trova il delta
+          fileSizeMB = (info.files[0].size / (1024 * 1024)).toFixed(1)
+        }
+      }
       
       // Controlla se è già stato scaricato
       if (this.downloadState.isDownloaded) {
@@ -125,22 +136,31 @@ class AppUpdater {
 
     autoUpdater.on('update-downloaded', (info) => {
       console.log('✅ Aggiornamento scaricato:', info.version)
+      console.log('✅ Info download:', JSON.stringify(info, null, 2))
       
       // Aggiorna lo stato
       this.downloadState.isDownloading = false
       this.downloadState.isDownloaded = true
       
+      // ✅ FIX: Verifica se è un delta download
+      const isDeltaDownload = info.files && info.files.some(file => 
+        file.url && (file.url.includes('.nupkg') || file.url.includes('delta'))
+      )
+      
+      const downloadType = isDeltaDownload ? 'delta' : 'completo'
+      console.log(`📦 Tipo download: ${downloadType}`)
+      
       dialog.showMessageBox({
         type: 'info',
         title: 'Aggiornamento Pronto',
-        message: `L'aggiornamento alla versione ${info.version} è stato scaricato.\n\nL'app verrà chiusa e riavviata per applicare l'aggiornamento.`,
+        message: `L'aggiornamento alla versione ${info.version} è stato scaricato.\nTipo: ${downloadType}\n\nL'app verrà chiusa e riavviata per applicare l'aggiornamento.`,
         buttons: ['Installa e Riavvia', 'Installa Dopo']
       }).then((result) => {
         if (result.response === 0) {
           // Installa e riavvia immediatamente
           console.log('🚀 Installazione aggiornamento e riavvio...')
           this.downloadState.isInstalling = true
-          autoUpdater.quitAndInstall(true, true) // force: true, isSilent: true
+          this.installUpdate()
         } else {
           // L'utente può installare dopo
           console.log('⏰ Installazione rinviata dall\'utente')

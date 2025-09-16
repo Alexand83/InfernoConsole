@@ -14,6 +14,8 @@ win:
   signAndEditExecutable: false
   # Configurazione per delta updates su Windows
   generateUpdatesFilesForAllChannels: true
+  # ✅ FIX: Forza la generazione di file .blockmap per delta updates
+  compression: maximum
 
 # Configurazione per macOS
 mac:
@@ -37,6 +39,8 @@ mac:
   electronUpdaterCompatibility: ">=2.16"
   # Configurazione per delta updates su macOS
   generateUpdatesFilesForAllChannels: true
+  # ✅ FIX: Forza la generazione di file .blockmap per delta updates su macOS
+  compression: maximum
 
 # Linux rimosso - non necessario
 
@@ -60,8 +64,7 @@ extraResources:
   - from: node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe
     to: ffmpeg.exe
 
-# Compressione
-compression: maximum
+# Compressione (configurata per target specifici)
 
 # Directory di output
 directories:
