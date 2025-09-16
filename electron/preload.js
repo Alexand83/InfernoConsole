@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   send: (channel, data) => ipcRenderer.send(channel, data),
   startStreaming: (config) => ipcRenderer.invoke('start-streaming', config),
   notifyConnectionLost: (reason) => ipcRenderer.invoke('notify-connection-lost', reason),
+  // ✅ NUOVO: API per statistiche Icecast (bypassa CORS)
+  getIcecastStats: (host, port) => ipcRenderer.invoke('get-icecast-stats', host, port),
   // ✅ FIX: Listener per eventi FFmpeg
   onFFmpegError: (callback) => ipcRenderer.on('ffmpeg-error', callback),
   onFFmpegDisconnected: (callback) => ipcRenderer.on('ffmpeg-disconnected', callback),

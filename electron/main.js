@@ -944,6 +944,54 @@ ipcMain.handle('reset-updater-cache', async () => {
   }
 })
 
+// ✅ NUOVO: Handler per ottenere statistiche Icecast (bypassa CORS)
+ipcMain.handle('get-icecast-stats', async (_evt, host, port) => {
+  try {
+    const url = `http://${host}:${port}/status-json.xsl`
+    console.log(`📊 [MAIN] 🔍 Handler get-icecast-stats chiamato!`)
+    console.log(`📊 [MAIN] 🔍 Parametri: host=${host}, port=${port}`)
+    console.log(`📊 [MAIN] 🔍 URL: ${url}`)
+    
+    return new Promise((resolve, reject) => {
+      const request = http.get(url, (response) => {
+        console.log(`📊 [MAIN] 🔍 Risposta HTTP ricevuta: ${response.statusCode}`)
+        let data = ''
+        
+        response.on('data', (chunk) => {
+          data += chunk
+        })
+        
+        response.on('end', () => {
+          try {
+            console.log(`📊 [MAIN] 🔍 Dati ricevuti (${data.length} bytes):`, data.substring(0, 200) + '...')
+            const stats = JSON.parse(data)
+            console.log(`📊 [MAIN] ✅ Icecast stats parsed successfully:`, JSON.stringify(stats, null, 2))
+            resolve(stats)
+          } catch (parseError) {
+            console.error('📊 [MAIN] ❌ Error parsing Icecast stats:', parseError)
+            console.error('📊 [MAIN] ❌ Raw data:', data)
+            reject(new Error('Failed to parse Icecast stats'))
+          }
+        })
+      })
+      
+      request.on('error', (error) => {
+        console.error('📊 [MAIN] ❌ Error fetching Icecast stats:', error)
+        reject(error)
+      })
+      
+      request.setTimeout(5000, () => {
+        console.error('📊 [MAIN] ❌ Request timeout after 5 seconds')
+        request.destroy()
+        reject(new Error('Request timeout'))
+      })
+    })
+  } catch (error) {
+    console.error('📊 [MAIN] ❌ get-icecast-stats error:', error)
+    throw error
+  }
+})
+
 // Handler per controllo forzato aggiornamenti
 ipcMain.handle('force-check-updates', async () => {
   try {
