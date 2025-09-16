@@ -17,7 +17,7 @@ win:
   publisherName: DJ Console Team
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
-  icon: build/icon.icns
+  # icon: build/icon.ico  # Commented out - using default Electron icon
 
 # Configurazione per macOS
 mac:
@@ -32,7 +32,7 @@ mac:
         - arm64
   artifactName: DJ-Console-${version}-mac-${arch}.${ext}
   category: public.app-category.music
-  icon: build/icon.icns
+  # icon: build/icon.icns  # Commented out - using default Electron icon
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
@@ -48,13 +48,13 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: DJ Console
-  include: build/installer.nsh
+  # include: build/installer.nsh  # Commented out to avoid NSIS errors
   perMachine: false
   deleteAppDataOnUninstall: true
-  displayLanguageSelector: true
-  installerLanguages:
-    - it_IT
-    - en_US
+  displayLanguageSelector: false
+  # installerLanguages:
+  #   - it_IT
+  #   - en_US
   differentialPackage: true
 
 # File da includere
