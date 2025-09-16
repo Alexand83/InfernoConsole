@@ -20,10 +20,8 @@ win:
   cscLink: null
   cscKeyPassword: null
   # Forza disabilitazione signing anche per GitHub Actions
-  azureSignOptions: null
   signtoolOptions: null
   # Disabilita completamente il signing per Windows
-  identity: null
   signExts: []
   # Forza disabilitazione signing (sign non è valido in electron-builder 26.x)
   # FORZA generazione app-update.yml
@@ -94,9 +92,7 @@ icon: null
 forceCodeSigning: false
 cscLink: null
 cscKeyPassword: null
-azureSignOptions: null
 signtoolOptions: null
-identity: null
 signExts: []
 
 # Configurazione per generare app-update.yml anche per portable
