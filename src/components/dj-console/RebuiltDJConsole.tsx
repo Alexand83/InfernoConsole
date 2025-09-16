@@ -548,7 +548,7 @@ const RebuiltDJConsole: React.FC = () => {
                 useSSL: !!defaultServer.useSSL,
                 bitrate: s.streaming.defaultBitrate || 128,
                 format: (s.streaming.defaultFormat || 'mp3') as 'opus' | 'mp3',
-                djName: s.streaming.metadata?.djName || 'DJ Console Pro'  // ✅ NICKNAME DJ PER STREAMING
+                djName: s.streaming.metadata?.djName || 'DJ Console'  // ✅ NICKNAME DJ PER STREAMING
               }
               const started = await streamingManager.startStreamingWithConfig(streamConfig)
               
@@ -596,7 +596,7 @@ const RebuiltDJConsole: React.FC = () => {
           useSSL: !!defaultServer.useSSL,
           bitrate: s.streaming.defaultBitrate || 128,
           format: (s.streaming.defaultFormat || 'mp3') as 'opus' | 'mp3',
-          djName: s.streaming.metadata?.djName || 'DJ Console Pro'  // ✅ NICKNAME DJ PER STREAMING
+          djName: s.streaming.metadata?.djName || 'DJ Console'  // ✅ NICKNAME DJ PER STREAMING
         }
         const started = await streamingManager.startStreamingWithConfig(streamConfig)
         

@@ -46,7 +46,6 @@ export interface AppSettings {
     icecastServers: IcecastServer[]  // ✅ MULTIPLI SERVER
     defaultIcecastServerId?: string  // ✅ SERVER DI DEFAULT
     metadata: {
-      stationName: string
       stationUrl: string
       genre: string
       djName: string  // ✅ NICKNAME DEL DJ
@@ -138,7 +137,6 @@ const defaultSettings: AppSettings = {
     ],
     defaultIcecastServerId: 'default-server',  // ✅ SERVER DI DEFAULT
     metadata: {
-      stationName: 'DJ Console Pro - Live',
       stationUrl: 'https://dj.onlinewebone.com',
       genre: 'Electronic/Live DJ',
       djName: 'DJ Console Pro'  // ✅ NICKNAME DEFAULT

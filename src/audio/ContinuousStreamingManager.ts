@@ -344,8 +344,8 @@ export class ContinuousStreamingManager {
           useSSL: config.useSSL,
           bitrateKbps: config.bitrate,
           format: config.format,
-          stationName: config.djName || 'DJ Console Pro',  // ✅ NICKNAME DJ PER ICECAST
-          stationDescription: `${config.djName || 'DJ Console Pro'} - Live DJ Set`,  // ✅ DESCRIZIONE CON NICKNAME DJ
+          stationName: config.djName || 'DJ Console',  // ✅ NICKNAME DJ PER ICECAST
+          stationDescription: `${config.djName || 'DJ Console'} - Live DJ Set`,  // ✅ DESCRIZIONE CON NICKNAME DJ
           stationGenre: 'Electronic/Live DJ'
         })
         

@@ -2433,7 +2433,7 @@ const NewDJConsole: React.FC = () => {
         }
         
         // Ottieni il nick dalle settings
-        const djNick = streamingSettings?.serverName || settings?.djName || 'DJ Console'
+        const djNick = settings?.streaming?.metadata?.djName || 'DJ Console'
         
         // Crea metadata con nick + traccia
         const metadata = currentTrack ? {
@@ -2736,8 +2736,7 @@ const NewDJConsole: React.FC = () => {
         
         // Ottieni il nick dalle settings
         const currentSettings = await localDatabase.getSettings()
-        const streamingSettings = currentSettings?.streaming?.icecast
-        const djNick = streamingSettings?.serverName || settings?.djName || 'DJ Console'
+        const djNick = currentSettings?.streaming?.metadata?.djName || 'DJ Console'
         
         // Crea metadata con nick + traccia
         const metadata = currentTrack ? {

@@ -168,7 +168,6 @@ class LocalDatabase {
         ],
         defaultIcecastServerId: 'default-server',  // ✅ SERVER DI DEFAULT
         metadata: {
-          stationName: 'DJ Console Pro - Live',
           stationUrl: 'https://dj.onlinewebone.com',
           genre: 'Electronic/Live DJ',
           djName: 'DJ Console Pro'
