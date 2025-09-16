@@ -31,6 +31,8 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # Configurazione per auto-updater su macOS
+  electronUpdaterCompatibility: ">=2.16"
 
 # Linux rimosso - non necessario
 

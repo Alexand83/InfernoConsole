@@ -15,6 +15,13 @@ class AppUpdater {
     autoUpdater.autoDownload = false // Controllo manuale del download
     autoUpdater.autoInstallOnAppQuit = true
     
+    // ✅ NUOVO: Stato del download
+    this.downloadState = {
+      isDownloading: false,
+      isDownloaded: false,
+      isInstalling: false
+    }
+    
     // Configura l'auto-updater
     autoUpdater.checkForUpdatesAndNotify()
     
@@ -25,11 +32,49 @@ class AppUpdater {
 
     autoUpdater.on('update-available', (info) => {
       console.log('📦 Aggiornamento disponibile:', info.version)
+      
+      // Calcola la dimensione del file in MB
+      const fileSizeMB = info.files ? 
+        (info.files.reduce((total, file) => total + (file.size || 0), 0) / (1024 * 1024)).toFixed(1) : 
+        'N/A'
+      
+      // Controlla se è già stato scaricato
+      if (this.downloadState.isDownloaded) {
+        dialog.showMessageBox({
+          type: 'info',
+          title: 'Aggiornamento Già Scaricato',
+          message: `L'aggiornamento alla versione ${info.version} è già stato scaricato.\nDimensione: ${fileSizeMB} MB\n\nVuoi installarlo ora?`,
+          buttons: ['Installa Ora', 'Annulla']
+        }).then((result) => {
+          if (result.response === 0) {
+            this.installUpdate()
+          }
+        })
+        return
+      }
+      
+      // Controlla se è in download
+      if (this.downloadState.isDownloading) {
+        dialog.showMessageBox({
+          type: 'info',
+          title: 'Download in Corso',
+          message: `L'aggiornamento alla versione ${info.version} è già in download.\nDimensione: ${fileSizeMB} MB\n\nAttendi il completamento del download.`,
+          buttons: ['OK']
+        })
+        return
+      }
+      
       dialog.showMessageBox({
         type: 'info',
         title: 'Aggiornamento Disponibile',
-        message: `È disponibile una nuova versione (${info.version}). L'aggiornamento verrà scaricato in background.`,
-        buttons: ['OK']
+        message: `È disponibile una nuova versione (${info.version}).\nDimensione download: ${fileSizeMB} MB\n\nVuoi scaricare l'aggiornamento?`,
+        buttons: ['Scarica', 'Annulla']
+      }).then((result) => {
+        if (result.response === 0) {
+          // Avvia il download
+          this.downloadState.isDownloading = true
+          autoUpdater.downloadUpdate()
+        }
       })
     })
 
@@ -77,17 +122,25 @@ class AppUpdater {
     autoUpdater.on('update-downloaded', (info) => {
       console.log('✅ Aggiornamento scaricato:', info.version)
       
+      // Aggiorna lo stato
+      this.downloadState.isDownloading = false
+      this.downloadState.isDownloaded = true
+      
       dialog.showMessageBox({
         type: 'info',
         title: 'Aggiornamento Pronto',
-        message: `L'aggiornamento alla versione ${info.version} è stato scaricato. L'app verrà riavviata per applicare l'aggiornamento.`,
-        buttons: ['Riavvia Ora', 'Riavvia Dopo']
+        message: `L'aggiornamento alla versione ${info.version} è stato scaricato.\n\nL'app verrà chiusa e riavviata per applicare l'aggiornamento.`,
+        buttons: ['Installa e Riavvia', 'Installa Dopo']
       }).then((result) => {
         if (result.response === 0) {
-          // Riavvia immediatamente
-          autoUpdater.quitAndInstall()
+          // Installa e riavvia immediatamente
+          console.log('🚀 Installazione aggiornamento e riavvio...')
+          this.downloadState.isInstalling = true
+          autoUpdater.quitAndInstall(true, true) // force: true, isSilent: true
+        } else {
+          // L'utente può installare dopo
+          console.log('⏰ Installazione rinviata dall\'utente')
         }
-        // Altrimenti l'utente può riavviare quando vuole
       })
     })
 
@@ -137,6 +190,25 @@ class AppUpdater {
     } catch (error) {
       console.error('❌ Errore durante il controllo forzato:', error)
     }
+  }
+
+  // Metodo per installare l'aggiornamento scaricato
+  installUpdate() {
+    if (this.downloadState.isDownloaded && !this.downloadState.isInstalling) {
+      console.log('🚀 Installazione aggiornamento...')
+      this.downloadState.isInstalling = true
+      autoUpdater.quitAndInstall(true, true)
+    }
+  }
+
+  // Metodo per resettare lo stato del download (utile per test)
+  resetDownloadState() {
+    this.downloadState = {
+      isDownloading: false,
+      isDownloaded: false,
+      isInstalling: false
+    }
+    console.log('🔄 Stato download resettato')
   }
 }
 
