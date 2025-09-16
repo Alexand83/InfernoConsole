@@ -21,8 +21,6 @@ win:
   cscKeyPassword: null
   # Forza disabilitazione signing
   sign: false
-  signAndEditExecutable: false
-  verifyUpdateCodeSignature: false
   # FORZA generazione app-update.yml
   generateUpdatesFilesForAllChannels: true
   # DISABILITA COMPLETAMENTE LE ICONE
