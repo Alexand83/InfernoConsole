@@ -153,7 +153,6 @@ export const it = {
     genre: 'Genere',
 
     // Info
-    systemInfo: 'Informazioni Sistema',
     microphonePermissions: 'Permessi Microfono',
     microphoneAccess: 'Accesso Microfono',
     microphoneAccessDesc: 'Il browser ha accesso al microfono per la funzionalità DJ.',
@@ -168,12 +167,7 @@ export const it = {
     outputDevices: 'Dispositivi di Output',
     devicesFound: 'dispositivi trovati',
     noDevicesFound: 'Nessun dispositivo trovato',
-    refreshDevices: 'Aggiorna Dispositivi',
-    appInfo: 'Informazioni App',
-    version: 'Versione',
-    build: 'Build',
-    license: 'Licenza',
-    author: 'Autore'
+    refreshDevices: 'Aggiorna Dispositivi'
   },
 
   // Temi

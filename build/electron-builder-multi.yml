@@ -72,7 +72,7 @@ asarUnpack:
 
 # Risorse extra
 extraResources:
-  - from: node_modules/@ffmpeg-installer/ffmpeg.exe
+  - from: node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe
     to: ffmpeg.exe
 
 # Compressione
