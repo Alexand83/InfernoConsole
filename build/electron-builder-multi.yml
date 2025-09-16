@@ -2,21 +2,25 @@ appId: com.djconsole.app
 productName: DJ Console
 copyright: Copyright © 2024 DJ Console Team
 
-# Configurazione per Windows - solo portable
+# Configurazione per Windows - portable + nsis per app-update.yml
 win:
   target:
     - target: portable
+      arch:
+        - x64
+    - target: nsis
       arch:
         - x64
   artifactName: DJ-Console-${version}-win.${ext}
   requestedExecutionLevel: asInvoker
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
-  # Configurazione per delta updates su Windows
+  # FORZA generazione app-update.yml
   generateUpdatesFilesForAllChannels: true
-  # Configurazione specifica per portable
-  portable:
-    artifactName: DJ-Console-${version}-win-portable.${ext}
+  # DISABILITA COMPLETAMENTE LE ICONE
+  icon: null
+  # Forza generazione file di update anche per portable
+  electronUpdaterCompatibility: ">=2.16"
 
 # Configurazione per macOS
 mac:
@@ -73,8 +77,19 @@ directories:
 
 # Configurazione per la versione
 generateUpdatesFilesForAllChannels: true
+# DISABILITA COMPLETAMENTE LE ICONE GLOBALMENTE
+icon: null
 
-# Configurazione per generare app-update.yml (solo per portable)
+# Configurazione per generare app-update.yml anche per portable
+# Forza generazione file di update per tutti i target
+forceCodeSigning: false
+# Configurazione NSIS per generare app-update.yml
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: false
+  createStartMenuShortcut: false
+  runAfterFinish: false
 
 # Configurazione auto-updater
 publish:

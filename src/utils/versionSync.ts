@@ -150,9 +150,10 @@ export async function getVersionInfo(): Promise<VersionInfo> {
   
   try {
     const version = getAppVersion();
-    // ✅ FIX: Usa la data di build reale dal package.json o process.env
-    const buildDate = process.env.BUILD_DATE || 
-                     process.env.npm_package_buildDate || 
+    
+    // ✅ FIX: Legge la data di build dal package.json importato
+    const buildDate = packageJson.buildDate ? 
+                     formatItalianDate(new Date(packageJson.buildDate)) : 
                      formatItalianDate(new Date());
     
     const updateInfo = await checkForUpdates();
