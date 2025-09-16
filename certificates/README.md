@@ -26,14 +26,27 @@ Questi certificati permettono di firmare l'applicazione Inferno Console senza pr
 
 ## Installazione Certificato macOS
 
+### Su macOS (quando hai accesso a un Mac):
+
 1. **Installa il certificato:**
    ```bash
-   security import inferno-console-macos.p12 -k ~/Library/Keychains/login.keychain -P inferno123
+   security import inferno-console-macos.pfx -k ~/Library/Keychains/login.keychain -P inferno123
    ```
 
 2. **Imposta come certificato di fiducia:**
    ```bash
-   security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain inferno-console-macos.pem
+   security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain inferno-console-macos.cer
+   ```
+
+### Su Windows (per distribuire su macOS):
+
+Il certificato è già configurato in `build/electron-builder-multi.yml` e verrà usato automaticamente durante il build. Gli utenti macOS dovranno:
+
+1. **Aprire le Preferenze di Sistema > Sicurezza e Privacy**
+2. **Cliccare su "Apri comunque" quando appare l'avviso di sicurezza**
+3. **Oppure installare manualmente il certificato:**
+   ```bash
+   security import inferno-console-macos.pfx -k ~/Library/Keychains/login.keychain -P inferno123
    ```
 
 ## Configurazione Electron-Builder
@@ -48,6 +61,10 @@ win:
 
 mac:
   identity: "Inferno Console"
+  cscLink: certificates/inferno-console-macos.pfx
+  cscKeyPassword: inferno123
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
 ```
 
 ## Note di Sicurezza
