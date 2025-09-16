@@ -15,6 +15,11 @@ win:
   requestedExecutionLevel: asInvoker
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
+  # Disabilita code signing per GitHub Actions
+  forceCodeSigning: false
+  # Disabilita signing automatico
+  cscLink: null
+  cscKeyPassword: null
   # FORZA generazione app-update.yml
   generateUpdatesFilesForAllChannels: true
   # DISABILITA COMPLETAMENTE LE ICONE
