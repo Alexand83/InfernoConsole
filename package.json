@@ -1,6 +1,6 @@
 {
   "name": "dj-console",
-  "version": "1.0.43",
+  "version": "1.0.44",
   "description": "Professional DJ Console with RadioBoss-style interface",
   "main": "electron/main.js",
   "scripts": {

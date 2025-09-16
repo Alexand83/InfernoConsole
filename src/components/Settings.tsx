@@ -990,16 +990,6 @@ const Settings = () => {
                   <h3 className="text-lg font-medium text-white mb-3">Metadati Predefiniti</h3>
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-dj-light/60 mb-2">{t('streaming.stationName')} (Nick)</label>
-                      <input
-                        type="text"
-                        value={settings.streaming?.metadata?.stationName || ''}
-                        onChange={(e) => handleSettingChange('streaming', 'metadata.stationName', e.target.value)}
-                        className="dj-input w-full"
-                        placeholder="My Radio"
-                      />
-                    </div>
-                    <div>
                       <label className="block text-sm font-medium text-dj-light/60 mb-2">{t('streaming.stationUrl')}</label>
                       <input
                         type="text"
