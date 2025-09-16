@@ -4,18 +4,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Certificates (security)
-*.p12
-*.pfx
-*.cer
-*.crt
-
 # Production builds
 dist/
 dist-electron/
 build/
 !build/*.yml
-!build/electron-builder-multi.yml
 !build/*.js
 !build/*.nsh
 !build/*.plist

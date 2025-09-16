@@ -1,12 +1,12 @@
 {
   "name": "dj-console",
-  "version": "1.0.90",
-  "buildDate": "2024-12-16T12:51:00.000Z",
+  "version": "1.0.84",
+  "buildDate": "2024-12-16T11:00:00.000Z",
   "description": "Professional DJ Console with RadioBoss-style interface",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/update-build-date.js && cross-env BUILD_DATE=\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\" vite build",
+    "build": "cross-env BUILD_DATE=\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\" vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext js,jsx,ts,tsx",
     "lint:fix": "eslint . --ext js,jsx,ts,tsx --fix",

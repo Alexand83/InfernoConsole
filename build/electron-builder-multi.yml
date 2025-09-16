@@ -2,27 +2,21 @@ appId: com.djconsole.app
 productName: DJ Console
 copyright: Copyright © 2024 DJ Console Team
 
-# Configurazione per Windows - portable + nsis per app-update.yml
+# Configurazione per Windows - solo portable
 win:
   target:
     - target: portable
       arch:
         - x64
-    - target: nsis
-      arch:
-        - x64
   artifactName: DJ-Console-${version}-win.${ext}
   requestedExecutionLevel: asInvoker
-  # DISABILITA COMPLETAMENTE IL SIGNING
-  forceCodeSigning: false
-  cscLink: null
-  cscKeyPassword: null
-  # FORZA generazione app-update.yml
+  verifyUpdateCodeSignature: false
+  signAndEditExecutable: false
+  # Configurazione per delta updates su Windows
   generateUpdatesFilesForAllChannels: true
-  # DISABILITA COMPLETAMENTE LE ICONE
-  icon: null
-  # Forza generazione file di update anche per portable
-  electronUpdaterCompatibility: ">=2.16"
+  # Configurazione specifica per portable
+  portable:
+    artifactName: DJ-Console-${version}-win-portable.${ext}
 
 # Configurazione per macOS
 mac:
@@ -46,6 +40,10 @@ mac:
   electronUpdaterCompatibility: ">=2.16"
   # Configurazione per delta updates su macOS
   generateUpdatesFilesForAllChannels: true
+
+# Linux rimosso - non necessario
+
+# NSIS rimosso - usiamo solo portable
 
 # File da includere
 files:
@@ -75,20 +73,8 @@ directories:
 
 # Configurazione per la versione
 generateUpdatesFilesForAllChannels: true
-# DISABILITA COMPLETAMENTE LE ICONE GLOBALMENTE
-icon: null
-# DISABILITA COMPLETAMENTE IL SIGNING GLOBALMENTE
-forceCodeSigning: false
-cscLink: null
-cscKeyPassword: null
 
-# Configurazione NSIS per generare app-update.yml
-nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
-  createDesktopShortcut: false
-  createStartMenuShortcut: false
-  runAfterFinish: false
+# Configurazione per generare app-update.yml (solo per portable)
 
 # Configurazione auto-updater
 publish:
@@ -96,3 +82,6 @@ publish:
   owner: Alexand83
   repo: InfernoConsole
   releaseType: release
+
+
+# Configurazione per download differenziali
