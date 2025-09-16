@@ -78,49 +78,19 @@ export class SoundEffectsManager {
     if (!this.audioContext) return
 
     try {
-      // Prova a caricare file audio reali, fallback su sintetici
-      await this.loadRealSoundEffects()
+      // Genera effetti sonori sintetici
+      await this.generateApplause()
+      await this.generateHorn()
+      await this.generateSwoosh()
+      await this.generateWhoosh()
+      await this.generateBeep()
+      await this.generateDrop()
+      await this.generateRise()
+      await this.generateSqueak()
       
       this.onDebug?.(`🎵 [SOUND EFFECTS] ${this.soundEffects.size} effetti caricati`)
     } catch (error) {
       this.onError?.(`Errore caricamento effetti: ${error}`)
-    }
-  }
-
-  // Carica suoni reali da file audio
-  private async loadRealSoundEffects(): Promise<void> {
-    if (!this.audioContext) return
-
-    const soundFiles = [
-      { id: 'applause', url: '/sounds/applause.mp3', fallback: () => this.generateApplause() },
-      { id: 'horn', url: '/sounds/horn.mp3', fallback: () => this.generateHorn() },
-      { id: 'swoosh', url: '/sounds/swoosh.mp3', fallback: () => this.generateSwoosh() },
-      { id: 'whoosh', url: '/sounds/whoosh.mp3', fallback: () => this.generateWhoosh() },
-      { id: 'beep', url: '/sounds/beep.mp3', fallback: () => this.generateBeep() },
-      { id: 'drop', url: '/sounds/drop.mp3', fallback: () => this.generateDrop() },
-      { id: 'rise', url: '/sounds/rise.mp3', fallback: () => this.generateRise() },
-      { id: 'squeak', url: '/sounds/squeak.mp3', fallback: () => this.generateSqueak() }
-    ]
-
-    for (const sound of soundFiles) {
-      try {
-        // Prova a caricare il file audio reale
-        const response = await fetch(sound.url)
-        if (response.ok) {
-          const arrayBuffer = await response.arrayBuffer()
-          const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer)
-          this.soundEffects.set(sound.id, audioBuffer)
-          this.onDebug?.(`🎵 [SOUND EFFECTS] Caricato file reale: ${sound.id}`)
-        } else {
-          // Fallback su generazione sintetica
-          this.onDebug?.(`🎵 [SOUND EFFECTS] File non trovato, uso sintetico: ${sound.id}`)
-          await sound.fallback()
-        }
-      } catch (error) {
-        // Fallback su generazione sintetica
-        this.onDebug?.(`🎵 [SOUND EFFECTS] Errore caricamento file, uso sintetico: ${sound.id}`)
-        await sound.fallback()
-      }
     }
   }
 
