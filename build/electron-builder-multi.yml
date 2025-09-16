@@ -1,0 +1,98 @@
+appId: com.djconsole.app
+productName: DJ Console
+copyright: Copyright © 2024 DJ Console Team
+
+# Configurazione per Windows
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - ia32
+    - target: portable
+      arch:
+        - x64
+  artifactName: DJ-Console-${version}-win-${arch}.${ext}
+  requestedExecutionLevel: asInvoker
+  publisherName: DJ Console Team
+  verifyUpdateCodeSignature: false
+  signAndEditExecutable: false
+
+# Configurazione per macOS
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  artifactName: DJ-Console-${version}-mac-${arch}.${ext}
+  category: public.app-category.music
+  icon: build/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+
+# Linux rimosso - non necessario
+
+# Configurazione NSIS
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: DJ Console
+  include: build/installer.nsh
+  perMachine: false
+  deleteAppDataOnUninstall: true
+  displayLanguageSelector: true
+  installerLanguages:
+    - it_IT
+    - en_US
+
+# File da includere
+files:
+  - dist/**
+  - electron/**
+  - package.json
+  - node_modules/@ffmpeg-installer/**
+
+# Configurazione ASAR
+asar: true
+asarUnpack:
+  - node_modules/@ffmpeg-installer/**
+  - node_modules/ffmpeg-static/**
+
+# Risorse extra
+extraResources:
+  - from: node_modules/@ffmpeg-installer/ffmpeg.exe
+    to: ffmpeg.exe
+
+# Compressione
+compression: maximum
+
+# Directory di output
+directories:
+  output: dist-electron
+  buildResources: build
+
+# Configurazione per la versione
+generateUpdatesFilesForAllChannels: false
+
+# Configurazione auto-updater
+publish:
+  provider: github
+  owner: Alexand83
+  repo: InfernoConsole
+  releaseType: release
+
+# Configurazione per download differenziali
+nsis:
+  differentialPackage: true
+mac:
+  differentialPackage: true
