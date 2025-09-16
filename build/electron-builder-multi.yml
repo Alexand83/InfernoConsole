@@ -13,6 +13,8 @@ win:
   publisherName: DJ Console Team
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
+  # Configurazione per auto-updater
+  publishAutoUpdate: true
 
 # Configurazione per macOS
 mac:
@@ -32,6 +34,8 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # Configurazione per auto-updater
+  publishAutoUpdate: true
 
 # Linux rimosso - non necessario
 
@@ -66,11 +70,22 @@ directories:
 # Configurazione per la versione
 generateUpdatesFilesForAllChannels: true
 
+# Configurazione per generare app-update.yml
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
 # Configurazione auto-updater
 publish:
   provider: github
   owner: Alexand83
   repo: InfernoConsole
   releaseType: release
+
+# Configurazione globale per auto-updater
+appUpdater:
+  enabled: true
+  autoDownload: false
+  autoInstallOnAppQuit: true
 
 # Configurazione per download differenziali

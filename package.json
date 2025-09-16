@@ -101,7 +101,6 @@
           ]
         }
       ],
-      "artifactName": "DJ-Console-${version}-win.${ext}",
       "requestedExecutionLevel": "asInvoker",
       "generateUpdatesFilesForAllChannels": true,
       "sign": false,
