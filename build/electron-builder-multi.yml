@@ -84,14 +84,10 @@ directories:
 # Configurazione per la versione
 generateUpdatesFilesForAllChannels: true
 # DISABILITA COMPLETAMENTE LE ICONE GLOBALMENTE
-icon: null
 # DISABILITA COMPLETAMENTE IL SIGNING GLOBALMENTE
-forceCodeSigning: false
-sign: false
 
 # Configurazione per generare app-update.yml anche per portable
 # Forza generazione file di update per tutti i target
-forceCodeSigning: false
 # Configurazione NSIS per generare app-update.yml
 nsis:
   oneClick: false
