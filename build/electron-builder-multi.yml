@@ -70,10 +70,7 @@ directories:
 # Configurazione per la versione
 generateUpdatesFilesForAllChannels: true
 
-# Configurazione per generare app-update.yml
-nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+# Configurazione per generare app-update.yml (solo per portable)
 
 # Configurazione auto-updater
 publish:
