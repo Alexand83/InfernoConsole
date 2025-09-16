@@ -1,6 +1,6 @@
 appId: com.djconsole.app
-productName: DJ Console
-copyright: Copyright © 2024 DJ Console Team
+productName: Inferno Console
+copyright: Copyright © 2024 Inferno Console Team
 
 # Configurazione per Windows - solo portable
 win:
@@ -8,7 +8,7 @@ win:
     - target: portable
       arch:
         - x64
-  artifactName: DJ-Console-${version}-win.${ext}
+  artifactName: Inferno-Console-${version}-win.${ext}
   requestedExecutionLevel: asInvoker
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
@@ -28,7 +28,7 @@ mac:
       arch:
         - x64
         - arm64
-  artifactName: DJ-Console-${version}-mac-${arch}.${ext}
+  artifactName: Inferno-Console-${version}-mac-${arch}.${ext}
   category: public.app-category.music
   # icon: build/icon.icns  # Commented out - using default Electron icon
   hardenedRuntime: true
