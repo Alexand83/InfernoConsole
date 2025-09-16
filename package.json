@@ -105,8 +105,8 @@
       "requestedExecutionLevel": "asInvoker",
       "generateUpdatesFilesForAllChannels": true,
       "forceCodeSigning": false,
-      "cscLink": null,
-      "cscKeyPassword": null,
+      "cscLink": "dj-console-cert.p12",
+      "cscKeyPassword": "djconsole123",
       "publisherName": "Alessandro(NeverAgain)"
     },
     "linux": {
