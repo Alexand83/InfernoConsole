@@ -16,13 +16,11 @@ win:
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
   # DISABILITA COMPLETAMENTE IL SIGNING
+  sign: false
   forceCodeSigning: false
   cscLink: null
   cscKeyPassword: null
   # Forza disabilitazione signing anche per GitHub Actions
-  signtoolOptions: null
-  # Disabilita completamente il signing per Windows
-  signExts: []
   # Forza disabilitazione signing (sign non è valido in electron-builder 26.x)
   # FORZA generazione app-update.yml
   generateUpdatesFilesForAllChannels: true
@@ -44,6 +42,8 @@ mac:
         - arm64
   artifactName: DJ-Console-${version}-mac-${arch}.${ext}
   category: public.app-category.music
+  # DISABILITA COMPLETAMENTE IL SIGNING PER MACOS
+  identity: null
   # icon: build/icon.icns  # Commented out - using default Electron icon
   hardenedRuntime: true
   gatekeeperAssess: false
