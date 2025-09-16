@@ -104,9 +104,9 @@
       ],
       "requestedExecutionLevel": "asInvoker",
       "generateUpdatesFilesForAllChannels": true,
-      "sign": false,
       "forceCodeSigning": false,
-      "verifyUpdateCodeSignature": false,
+      "cscLink": null,
+      "cscKeyPassword": null,
       "publisherName": "Alessandro(NeverAgain)"
     },
     "linux": {
