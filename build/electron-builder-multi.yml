@@ -14,7 +14,9 @@ win:
   artifactName: DJ-Console-${version}-win.${ext}
   requestedExecutionLevel: asInvoker
   # DISABILITA COMPLETAMENTE IL SIGNING
-  sign: false
+  forceCodeSigning: false
+  cscLink: null
+  cscKeyPassword: null
   # Forza disabilitazione signing (sign non è valido in electron-builder 26.x)
   # FORZA generazione app-update.yml
   generateUpdatesFilesForAllChannels: true
