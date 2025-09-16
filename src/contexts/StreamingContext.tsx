@@ -16,6 +16,7 @@ export interface StreamingState {
   showSilenceWarning: boolean
   silenceSecondsRemaining: number
   streamingManager: ContinuousStreamingManager | null
+  listenerCount: number // ✅ NUOVO: Contatore ascoltatori
 }
 
 type StreamingAction =
@@ -33,6 +34,7 @@ type StreamingAction =
   | { type: 'SET_SHOW_SILENCE_WARNING'; payload: boolean }
   | { type: 'SET_SILENCE_SECONDS_REMAINING'; payload: number }
   | { type: 'SET_STREAMING_MANAGER'; payload: ContinuousStreamingManager | null }
+  | { type: 'SET_LISTENER_COUNT'; payload: number } // ✅ NUOVO: Azione per contatore ascoltatori
   | { type: 'RESTORE_STATE_FROM_MANAGER' }
 
 // ===== STATO INIZIALE =====
@@ -49,7 +51,8 @@ const initialState: StreamingState = {
   pendingStreamingAction: null,
   showSilenceWarning: false,
   silenceSecondsRemaining: 0,
-  streamingManager: null
+  streamingManager: null,
+  listenerCount: 0 // ✅ NUOVO: Contatore ascoltatori iniziale
 }
 
 // ===== REDUCER =====
@@ -100,6 +103,9 @@ function streamingReducer(state: StreamingState, action: StreamingAction): Strea
     
     case 'SET_STREAMING_MANAGER':
       return { ...state, streamingManager: action.payload }
+    
+    case 'SET_LISTENER_COUNT':
+      return { ...state, listenerCount: action.payload }
     
     case 'RESTORE_STATE_FROM_MANAGER':
       if (state.streamingManager) {

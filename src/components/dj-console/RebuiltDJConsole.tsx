@@ -74,7 +74,8 @@ const RebuiltDJConsole: React.FC = () => {
     showStartConfirmation,
     showStopConfirmation,
     showSilenceWarning,
-    silenceSecondsRemaining
+    silenceSecondsRemaining,
+    listenerCount
   } = streamingState
   
   // ✅ CRITICAL FIX: Esponi streamingManager globalmente per AudioContext
@@ -110,6 +111,26 @@ const RebuiltDJConsole: React.FC = () => {
       ;(window as any).resumeStreaming = null
     }
   }, [streamingManager])
+
+  // ✅ NUOVO: Aggiorna contatore ascoltatori quando in streaming
+  useEffect(() => {
+    if (isStreaming && streamingManager) {
+      const updateListenerCount = () => {
+        // Simula aggiornamento contatore ascoltatori (da implementare con API Icecast)
+        const mockListenerCount = Math.floor(Math.random() * 10) + 1 // 1-10 ascoltatori
+        streamingDispatch({ type: 'SET_LISTENER_COUNT', payload: mockListenerCount })
+      }
+
+      // Aggiorna ogni 30 secondi
+      const interval = setInterval(updateListenerCount, 30000)
+      updateListenerCount() // Aggiorna immediatamente
+
+      return () => clearInterval(interval)
+    } else {
+      // Reset contatore quando non in streaming
+      streamingDispatch({ type: 'SET_LISTENER_COUNT', payload: 0 })
+    }
+  }, [isStreaming, streamingManager, streamingDispatch])
 
   // ✅ Contatore errori per notifiche (ora gestito dal context)
   useEffect(() => {
@@ -909,6 +930,16 @@ const RebuiltDJConsole: React.FC = () => {
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-300 rounded-full animate-bounce"></div>
               )}
             </button>
+
+            {/* ✅ NUOVO: Contatore Ascoltatori */}
+            {isStreaming && (
+              <div className="flex items-center space-x-2 bg-dj-secondary/50 rounded-lg px-3 py-2">
+                <Headphones className="w-4 h-4 text-dj-accent" />
+                <span className="text-sm text-dj-light">
+                  <span className="text-dj-accent font-bold">{listenerCount}</span> ascoltatori
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </header>
