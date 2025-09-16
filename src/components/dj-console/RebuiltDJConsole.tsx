@@ -988,7 +988,7 @@ const RebuiltDJConsole: React.FC = () => {
           <div className="flex items-center space-x-4">
             <h1 className="text-2xl font-dj font-bold text-white flex items-center space-x-3">
               <Activity className="w-8 h-8 text-dj-highlight" />
-              <span>DJ Console Pro</span>
+              <span>Inferno Console</span>
             </h1>
             
             {/* Indicatori stato deck */}

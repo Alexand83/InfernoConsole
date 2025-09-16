@@ -41,8 +41,8 @@ const Sidebar = () => {
             <Radio className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-dj font-bold text-white">DJ Console Pro</h1>
-            <p className="text-xs text-dj-light/60">RadioBoss Style</p>
+            <h1 className="text-xl font-dj font-bold text-white">Inferno Console</h1>
+            <p className="text-xs text-dj-light/60">Professional DJ Console</p>
           </div>
         </div>
       </div>

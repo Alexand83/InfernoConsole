@@ -1,0 +1,42 @@
+# Esempi di Suoni per Inferno Console
+
+## Link Diretti per Download
+
+### Applausi Realistici
+- https://pixabay.com/it/sound-effects/search/applausi/
+- https://sounddino.com/it/effects/applause/
+- https://freesound.org/search/?q=applause+crowd
+
+### Trombetta DJ
+- https://www.myinstants.com/it/instant/dj-airhorn/
+- https://freesound.org/search/?q=airhorn+horn
+- https://sounddino.com/it/effects/horn/
+
+### Effetti di Transizione
+- https://pixabay.com/it/sound-effects/search/swoosh/
+- https://freesound.org/search/?q=swoosh+whoosh
+
+## Suggerimenti per la Qualità
+
+1. **Applausi**: Cerca "crowd applause", "audience clapping", "standing ovation"
+2. **Trombetta**: Cerca "airhorn", "dj horn", "party horn", "vuvuzela"
+3. **Formato**: Preferisci WAV o MP3 ad alta qualità (320kbps)
+4. **Durata**: 1-4 secondi per la maggior parte degli effetti
+
+## File da Creare
+
+Metti questi file nella cartella `public/sounds/`:
+
+- applause.mp3 (o .wav)
+- horn.mp3 (o .wav)
+- swoosh.mp3 (o .wav)
+- whoosh.mp3 (o .wav)
+- beep.mp3 (o .wav)
+- drop.mp3 (o .wav)
+- rise.mp3 (o .wav)
+- squeak.mp3 (o .wav)
+
+## Test
+
+Dopo aver aggiunto i file, riavvia Inferno Console e testa gli effetti sonori. 
+I suoni reali sostituiranno automaticamente quelli sintetici.

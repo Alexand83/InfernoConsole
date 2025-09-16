@@ -139,7 +139,7 @@ const defaultSettings: AppSettings = {
     metadata: {
       stationUrl: 'https://dj.onlinewebone.com',
       genre: 'Electronic/Live DJ',
-      djName: 'DJ Console Pro'  // ✅ NICKNAME DEFAULT
+      djName: 'Inferno Console'  // ✅ NICKNAME DEFAULT
     }
   }
 }

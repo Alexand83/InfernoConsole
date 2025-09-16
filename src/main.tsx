@@ -37,7 +37,7 @@ const LoadingScreen = () => (
       animation: 'spin 1s linear infinite',
       marginBottom: '20px'
     }}></div>
-    <h2 style={{ margin: '0 0 10px 0', fontSize: '24px', fontWeight: 'bold' }}>DJ Console Pro</h2>
+    <h2 style={{ margin: '0 0 10px 0', fontSize: '24px', fontWeight: 'bold' }}>Inferno Console</h2>
     <p style={{ margin: 0, opacity: 0.7, fontSize: '14px' }}>Caricamento in corso...</p>
     <style>{`
       @keyframes spin {

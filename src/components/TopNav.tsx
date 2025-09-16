@@ -15,7 +15,7 @@ const TopNav = () => {
     <header className="w-full bg-dj-primary border-b border-dj-accent/30">
       <div className="max-w-screen-2xl mx-auto px-4">
         <div className="h-14 flex items-center justify-between">
-          <div className="text-white font-dj font-bold">DJ Console Pro</div>
+          <div className="text-white font-dj font-bold">Inferno Console</div>
           <nav className="flex items-center space-x-1">
             {items.map(item => (
               <NavLink

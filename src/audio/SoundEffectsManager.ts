@@ -78,15 +78,8 @@ export class SoundEffectsManager {
     if (!this.audioContext) return
 
     try {
-      // Genera effetti sonori sintetici
-      await this.generateApplause()
-      await this.generateHorn()
-      await this.generateSwoosh()
-      await this.generateWhoosh()
-      await this.generateBeep()
-      await this.generateDrop()
-      await this.generateRise()
-      await this.generateSqueak()
+      // Prova a caricare file audio reali, fallback su sintetici
+      await this.loadRealSoundEffects()
       
       this.onDebug?.(`🎵 [SOUND EFFECTS] ${this.soundEffects.size} effetti caricati`)
     } catch (error) {
@@ -94,92 +87,143 @@ export class SoundEffectsManager {
     }
   }
 
-  // Genera applausi sintetici
+  // Carica suoni reali da file audio
+  private async loadRealSoundEffects(): Promise<void> {
+    if (!this.audioContext) return
+
+    const soundFiles = [
+      { id: 'applause', url: '/sounds/applause.mp3', fallback: () => this.generateApplause() },
+      { id: 'horn', url: '/sounds/horn.mp3', fallback: () => this.generateHorn() },
+      { id: 'swoosh', url: '/sounds/swoosh.mp3', fallback: () => this.generateSwoosh() },
+      { id: 'whoosh', url: '/sounds/whoosh.mp3', fallback: () => this.generateWhoosh() },
+      { id: 'beep', url: '/sounds/beep.mp3', fallback: () => this.generateBeep() },
+      { id: 'drop', url: '/sounds/drop.mp3', fallback: () => this.generateDrop() },
+      { id: 'rise', url: '/sounds/rise.mp3', fallback: () => this.generateRise() },
+      { id: 'squeak', url: '/sounds/squeak.mp3', fallback: () => this.generateSqueak() }
+    ]
+
+    for (const sound of soundFiles) {
+      try {
+        // Prova a caricare il file audio reale
+        const response = await fetch(sound.url)
+        if (response.ok) {
+          const arrayBuffer = await response.arrayBuffer()
+          const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer)
+          this.soundEffects.set(sound.id, audioBuffer)
+          this.onDebug?.(`🎵 [SOUND EFFECTS] Caricato file reale: ${sound.id}`)
+        } else {
+          // Fallback su generazione sintetica
+          this.onDebug?.(`🎵 [SOUND EFFECTS] File non trovato, uso sintetico: ${sound.id}`)
+          await sound.fallback()
+        }
+      } catch (error) {
+        // Fallback su generazione sintetica
+        this.onDebug?.(`🎵 [SOUND EFFECTS] Errore caricamento file, uso sintetico: ${sound.id}`)
+        await sound.fallback()
+      }
+    }
+  }
+
+  // Genera applausi realistici migliorati
   private async generateApplause(): Promise<void> {
     if (!this.audioContext) return
 
-    const duration = 2.0 // 2 secondi
+    const duration = 3.0 // 3 secondi per applausi più lunghi
     const sampleRate = this.audioContext.sampleRate
     const buffer = this.audioContext.createBuffer(2, duration * sampleRate, sampleRate)
     
     const leftChannel = buffer.getChannelData(0)
     const rightChannel = buffer.getChannelData(1)
 
-    // Genera applausi realistici con pattern di battiti
+    // Genera applausi più realistici con pattern complessi
     for (let i = 0; i < buffer.length; i++) {
       const time = i / sampleRate
       
-      // Envelope principale con decadimento
-      let envelope = Math.exp(-time * 1.5)
+      // Envelope principale con attacco più graduale
+      let envelope = 1.0
+      if (time < 0.1) {
+        envelope = time / 0.1 // Attacco graduale
+      } else if (time > 1.5) {
+        envelope = Math.exp(-(time - 1.5) * 1.2) // Decadimento più lento
+      }
       
-      // Aggiungi picchi casuali per simulare battiti di mani
-      const clapPattern = Math.sin(time * 8) * 0.3 + Math.sin(time * 12) * 0.2
-      const randomClaps = (Math.random() * 2 - 1) * 0.4 * Math.exp(-time * 2)
+      // Pattern di applausi più complessi
+      const clapPattern1 = Math.sin(time * 6) * 0.4 + Math.sin(time * 9) * 0.3
+      const clapPattern2 = Math.sin(time * 15) * 0.2 + Math.sin(time * 22) * 0.15
+      const randomClaps = (Math.random() * 2 - 1) * 0.3 * Math.exp(-time * 1.5)
       
-      // Modula l'envelope con i picchi
-      envelope *= (1 + clapPattern + randomClaps)
+      // Modula l'envelope con i pattern
+      envelope *= (1 + clapPattern1 + clapPattern2 + randomClaps)
       envelope = Math.max(0, Math.min(1, envelope))
       
-      // Genera rumore bianco con filtro passa-alto per simulare battiti di mani
-      const noise = (Math.random() * 2 - 1) * envelope * 0.4
+      // Rumore bianco con filtro passa-alto più realistico
+      const noise = (Math.random() * 2 - 1) * envelope * 0.5
       
-      // Aggiungi un po' di frequenze medie per realismo
-      const midFreq = Math.sin(2 * Math.PI * 200 * time) * envelope * 0.1
+      // Frequenze medie e alte per realismo
+      const midFreq = Math.sin(2 * Math.PI * 180 * time) * envelope * 0.15
+      const highFreq = Math.sin(2 * Math.PI * 400 * time) * envelope * 0.1
       
-      leftChannel[i] = (noise + midFreq) * 0.8
-      rightChannel[i] = (noise + midFreq) * 0.7 // Leggero stereo
+      // Aggiungi un po' di riverbero sintetico
+      const reverb = Math.sin(2 * Math.PI * 120 * time) * envelope * 0.08
+      
+      leftChannel[i] = (noise + midFreq + highFreq + reverb) * 0.9
+      rightChannel[i] = (noise + midFreq + highFreq + reverb) * 0.8 // Leggero stereo
     }
 
     this.soundEffects.set('applause', buffer)
   }
 
-  // Genera trombetta realistica
+  // Genera trombetta realistica migliorata
   private async generateHorn(): Promise<void> {
     if (!this.audioContext) return
 
-    const duration = 2.0
+    const duration = 2.5 // Più lunga per effetto più drammatico
     const sampleRate = this.audioContext.sampleRate
     const buffer = this.audioContext.createBuffer(2, duration * sampleRate, sampleRate)
     
     const leftChannel = buffer.getChannelData(0)
     const rightChannel = buffer.getChannelData(1)
 
-    // Trombetta con armoniche multiple, vibrato e modulazione
+    // Trombetta con armoniche multiple, vibrato e modulazione migliorati
     for (let i = 0; i < buffer.length; i++) {
       const time = i / sampleRate
       
-      // Frequenza base con vibrato più pronunciato
-      const vibrato = 1 + 0.15 * Math.sin(2 * Math.PI * 5.5 * time) // 5.5Hz vibrato
-      const baseFreq = 233 * vibrato // Bb3 con vibrato (più tipico per trombetta)
+      // Frequenza base con vibrato più realistico
+      const vibrato = 1 + 0.2 * Math.sin(2 * Math.PI * 6 * time) // 6Hz vibrato più pronunciato
+      const baseFreq = 220 * vibrato // A3 con vibrato (più potente)
       
       // Armoniche della trombetta con rapporti più realistici
       const fundamental = Math.sin(2 * Math.PI * baseFreq * time)
-      const harmonic2 = Math.sin(2 * Math.PI * baseFreq * 2 * time) * 0.6
-      const harmonic3 = Math.sin(2 * Math.PI * baseFreq * 3 * time) * 0.4
-      const harmonic4 = Math.sin(2 * Math.PI * baseFreq * 4 * time) * 0.25
-      const harmonic5 = Math.sin(2 * Math.PI * baseFreq * 5 * time) * 0.15
+      const harmonic2 = Math.sin(2 * Math.PI * baseFreq * 2 * time) * 0.7
+      const harmonic3 = Math.sin(2 * Math.PI * baseFreq * 3 * time) * 0.5
+      const harmonic4 = Math.sin(2 * Math.PI * baseFreq * 4 * time) * 0.3
+      const harmonic5 = Math.sin(2 * Math.PI * baseFreq * 5 * time) * 0.2
+      const harmonic6 = Math.sin(2 * Math.PI * baseFreq * 6 * time) * 0.1
       
-      // Envelope con attacco più graduale e sustain
+      // Envelope con attacco più graduale e sustain più lungo
       let envelope
-      if (time < 0.05) {
-        envelope = time / 0.05 // Attacco molto rapido
-      } else if (time < 0.3) {
-        envelope = 1.0 // Sustain
+      if (time < 0.1) {
+        envelope = time / 0.1 // Attacco graduale
+      } else if (time < 0.8) {
+        envelope = 1.0 // Sustain lungo
       } else {
-        envelope = Math.exp(-(time - 0.3) * 1.5) // Decadimento
+        envelope = Math.exp(-(time - 0.8) * 1.2) // Decadimento più lento
       }
       
-      // Aggiungi modulazione di ampiezza per realismo
-      const tremolo = 1 + 0.1 * Math.sin(2 * Math.PI * 4 * time)
+      // Modulazione di ampiezza più pronunciata
+      const tremolo = 1 + 0.15 * Math.sin(2 * Math.PI * 5 * time)
       
-      // Aggiungi rumore per texture
-      const noise = (Math.random() * 2 - 1) * 0.03 * envelope
+      // Rumore per texture più realistico
+      const noise = (Math.random() * 2 - 1) * 0.05 * envelope
       
-      // Mix finale con tremolo
-      const wave = (fundamental + harmonic2 + harmonic3 + harmonic4 + harmonic5) * envelope * tremolo * 0.7 + noise
+      // Aggiungi un po' di distorsione per realismo
+      const distortion = Math.tanh((fundamental + harmonic2 + harmonic3 + harmonic4 + harmonic5 + harmonic6) * 1.2) * 0.3
+      
+      // Mix finale con tremolo e distorsione
+      const wave = (fundamental + harmonic2 + harmonic3 + harmonic4 + harmonic5 + harmonic6) * envelope * tremolo * 0.8 + noise + distortion
       
       leftChannel[i] = wave
-      rightChannel[i] = wave * 0.98 // Leggero stereo
+      rightChannel[i] = wave * 0.95 // Leggero stereo
     }
 
     this.soundEffects.set('horn', buffer)
@@ -392,8 +436,8 @@ export class SoundEffectsManager {
   // Ottiene lista degli effetti disponibili
   getAvailableEffects(): SoundEffect[] {
     return [
-      { id: 'applause', name: 'Applausi', description: 'Applausi del pubblico', duration: 2000, volume: 0.8, category: 'applause' },
-      { id: 'horn', name: 'Trombetta', description: 'Suono di trombetta', duration: 1500, volume: 0.7, category: 'horn' },
+      { id: 'applause', name: 'Applausi', description: 'Applausi realistici del pubblico', duration: 3000, volume: 0.8, category: 'applause' },
+      { id: 'horn', name: 'Trombetta', description: 'Trombetta realistica con vibrato', duration: 2500, volume: 0.7, category: 'horn' },
       { id: 'swoosh', name: 'Swoosh', description: 'Effetto di transizione', duration: 1000, volume: 0.6, category: 'transition' },
       { id: 'whoosh', name: 'Whoosh', description: 'Effetto di movimento', duration: 800, volume: 0.6, category: 'transition' },
       { id: 'beep', name: 'Beep', description: 'Suono di notifica', duration: 300, volume: 0.5, category: 'comedy' },
