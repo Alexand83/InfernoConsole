@@ -674,7 +674,7 @@ ipcMain.handle('start-streaming', async (_evt, config) => {
       format: config.format || 'mp3',  // ✅ USA FORMATO DALLE IMPOSTAZIONI
       channels: config.channels || 2,
       sampleRate: config.sampleRate || 44100,
-      stationName: config.stationName || 'DJ Console Pro',
+      stationName: config.stationName || 'Inferno Console',
       stationDescription: config.stationDescription || 'Live Stream',
       stationGenre: 'Various'
     }

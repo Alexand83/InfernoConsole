@@ -223,13 +223,13 @@ export function getChangelog(): string[] {
       '🎵 Sistema streaming migliorato'
     ],
     '1.0.1': [
-      '🎵 Prime funzionalità DJ Console',
+      '🎵 Prime funzionalità Inferno Console',
       '🎛️ Mixer audio integrato',
       '📻 Streaming Icecast supportato'
     ],
     '1.0.0': [
       '🎉 Prima release di InfernoConsole',
-      '🎵 Sistema DJ Console completo',
+      '🎵 Sistema Inferno Console completo',
       '🎛️ Mixer professionale',
       '📻 Streaming live supportato'
     ]

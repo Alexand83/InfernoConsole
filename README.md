@@ -1,6 +1,6 @@
-# 🎧 DJ Console Pro - Professional RadioBoss Style Interface
+# 🔥 Inferno Console - Console DJ Professionale
 
-Una console DJ professionale completa con **streaming live** e **automazione playlist** 24/7, ispirata a RadioBoss ma implementata come applicazione web moderna.
+Una console DJ professionale completa con **streaming live** e **automazione playlist** 24/7, implementata come applicazione web moderna con mixaggio audio avanzato e effetti in tempo reale.
 
 ## 🚀 **Funzionalità Principali**
 
@@ -70,7 +70,7 @@ Il server sarà disponibile su:
 - **Icecast**: http://localhost:8000/icecast
 - **Stream**: http://localhost:8000/stream
 
-### **4. Avvio Frontend DJ Console**
+### **4. Avvio Frontend Inferno Console**
 ```bash
 npm run dev
 ```
@@ -215,4 +215,4 @@ Contributi benvenuti! Vedi [CONTRIBUTING.md](CONTRIBUTING.md) per linee guida.
 
 ---
 
-**🎧 DJ Console Pro** - Trasforma il tuo browser in una console DJ professionale! 🚀
+**🔥 Inferno Console** - Trasforma il tuo browser in una console DJ professionale! 🚀

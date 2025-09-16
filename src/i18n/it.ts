@@ -56,7 +56,7 @@ export const it = {
   // Impostazioni
   settings: {
     title: 'Impostazioni',
-    description: 'Configura le preferenze del DJ Console',
+    description: 'Configura le preferenze di Inferno Console',
     reset: 'Reset',
     save: 'Salva',
     

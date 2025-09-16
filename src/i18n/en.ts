@@ -9,7 +9,7 @@ export const en: TranslationKeys = {
     streaming: 'Streaming'
   },
 
-  // DJ Console
+  // Inferno Console
   console: {
     deckA: 'Deck A',
     deckB: 'Deck B',
@@ -58,7 +58,7 @@ export const en: TranslationKeys = {
   // Settings
   settings: {
     title: 'Settings',
-    description: 'Configure your DJ Console preferences',
+    description: 'Configure your Inferno Console preferences',
     reset: 'Reset',
     save: 'Save',
     
