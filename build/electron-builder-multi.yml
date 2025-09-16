@@ -10,7 +10,6 @@ win:
         - x64
   artifactName: DJ-Console-${version}-win.${ext}
   requestedExecutionLevel: asInvoker
-  publisherName: DJ Console Team
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
 
