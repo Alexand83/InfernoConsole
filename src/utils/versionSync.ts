@@ -52,6 +52,24 @@ function formatItalianDate(date: Date): string {
 }
 
 /**
+ * Confronta due versioni semantiche (es. "1.2.3" vs "1.2.4")
+ */
+function compareVersions(version1: string, version2: string): number {
+  const v1Parts = version1.split('.').map(Number);
+  const v2Parts = version2.split('.').map(Number);
+  
+  for (let i = 0; i < Math.max(v1Parts.length, v2Parts.length); i++) {
+    const v1Part = v1Parts[i] || 0;
+    const v2Part = v2Parts[i] || 0;
+    
+    if (v1Part > v2Part) return 1;
+    if (v1Part < v2Part) return -1;
+  }
+  
+  return 0;
+}
+
+/**
  * Controlla se ci sono aggiornamenti disponibili
  */
 async function checkForUpdates(): Promise<{ latestVersion?: string; isUpdateAvailable: boolean; isReady?: boolean }> {
@@ -66,13 +84,19 @@ async function checkForUpdates(): Promise<{ latestVersion?: string; isUpdateAvai
     const latestVersion = data.tag_name.replace('v', '');
     const currentVersion = getAppVersion();
     
+    // ✅ FIX: Confronto corretto delle versioni per evitare downgrade
+    const versionComparison = compareVersions(latestVersion, currentVersion);
+    const isUpdateAvailable = versionComparison > 0; // Solo se la versione disponibile è maggiore
+    
     // Controlla se ci sono asset disponibili (file pronti per download)
     const hasAssets = data.assets && data.assets.length > 0;
     const isReady = hasAssets && !data.draft; // Non draft e con file disponibili
     
+    console.log(`🔍 [VERSION CHECK] Current: ${currentVersion}, Latest: ${latestVersion}, Comparison: ${versionComparison}, Update Available: ${isUpdateAvailable}`);
+    
     return {
       latestVersion,
-      isUpdateAvailable: currentVersion !== latestVersion,
+      isUpdateAvailable,
       isReady
     };
   } catch (error) {
@@ -154,6 +178,10 @@ export async function getVersionInfo(): Promise<VersionInfo> {
 export function formatVersion(versionInfo: VersionInfo): string {
   if (versionInfo.isUpdateAvailable && versionInfo.latestVersion) {
     return `${versionInfo.version} → ${versionInfo.latestVersion} (Aggiornamento disponibile)`;
+  }
+  // ✅ FIX: Mostra quando l'app è già aggiornata all'ultima versione
+  if (versionInfo.latestVersion && !versionInfo.isUpdateAvailable) {
+    return `${versionInfo.version} (Aggiornato all'ultima versione)`;
   }
   return `${versionInfo.version} (${versionInfo.buildDate})`;
 }

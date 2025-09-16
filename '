@@ -296,8 +296,3 @@
  TAB ...................................... Complete filename & cycle.
  SHIFT-TAB ...................... ESC-TAB   Complete filename & reverse cycle.
  ctrl-L ................................... Complete filename, list all.
-[33m89629ac[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;33mtag: [m[1;33mv1.0.33[m[33m, [m[1;31morigin/master[m[33m)[m  Bump version to 1.0.33
-[33m8031d7d[m  Feature: Nickname personalizzato per streaming
-[33mc40b3b4[m[33m ([m[1;33mtag: [m[1;33mv1.0.32[m[33m)[m  Release v1.0.32 - Critical fixes for JavaScript crash and waveform optimization
-[33m0ed57fe[m  Fix: Risolto crash JavaScript e ottimizzato waveform
-[33m39ea3eb[m fix: Gestione intelligente errori 404 per conflitti mount point

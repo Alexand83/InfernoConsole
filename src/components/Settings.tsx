@@ -117,6 +117,7 @@ const Settings = () => {
     }
   }
 
+
   const handleSettingChange = (category: string, key: string, value: any) => {
     updateSetting(category as keyof AppSettings, key, value)
   }
@@ -1104,13 +1105,33 @@ const Settings = () => {
                 
                 {/* Pulsante per controllare aggiornamenti */}
                 <div className="mt-4 pt-4 border-t border-dj-accent/20">
-                  <button
-                    onClick={handleCheckUpdates}
-                    disabled={isCheckingUpdates}
-                    className="bg-dj-accent hover:bg-dj-accent/80 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isCheckingUpdates ? 'Controllo aggiornamenti...' : 'Controlla aggiornamenti'}
-                  </button>
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      onClick={handleCheckUpdates}
+                      disabled={isCheckingUpdates}
+                      className="bg-dj-accent hover:bg-dj-accent/80 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isCheckingUpdates ? 'Controllo aggiornamenti...' : 'Controlla aggiornamenti'}
+                    </button>
+                    
+                    {/* ✅ NUOVO: Pulsante per forzare refresh */}
+                    <button
+                      onClick={() => {
+                        refreshVersionInfo()
+                        handleCheckUpdates()
+                      }}
+                      disabled={isCheckingUpdates}
+                      className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Forza il refresh delle informazioni di versione (ignora cache)"
+                    >
+                      🔄 Refresh
+                    </button>
+                  </div>
+                  
+                  {/* Messaggio di aiuto */}
+                  <div className="text-xs text-dj-light/60 bg-dj-secondary/50 p-2 rounded">
+                    <p><strong>💡 Suggerimento:</strong> Se vedi versioni errate, usa "Refresh" per forzare il controllo</p>
+                  </div>
                   
                   {versionInfo?.isUpdateAvailable && (
                     <div className="mt-2 p-2 bg-green-500/20 border border-green-500/30 rounded-lg">
