@@ -12,6 +12,8 @@ win:
   requestedExecutionLevel: asInvoker
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
+  # Configurazione per delta updates su Windows
+  generateUpdatesFilesForAllChannels: true
 
 # Configurazione per macOS
 mac:
@@ -33,6 +35,8 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
   # Configurazione per auto-updater su macOS
   electronUpdaterCompatibility: ">=2.16"
+  # Configurazione per delta updates su macOS
+  generateUpdatesFilesForAllChannels: true
 
 # Linux rimosso - non necessario
 

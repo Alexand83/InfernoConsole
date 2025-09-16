@@ -150,7 +150,11 @@ export async function getVersionInfo(): Promise<VersionInfo> {
   
   try {
     const version = getAppVersion();
-    const buildDate = formatItalianDate(new Date());
+    // ✅ FIX: Usa la data di build reale dal package.json o process.env
+    const buildDate = process.env.BUILD_DATE || 
+                     process.env.npm_package_buildDate || 
+                     formatItalianDate(new Date());
+    
     const updateInfo = await checkForUpdates();
     
     cachedVersionInfo = {
@@ -159,7 +163,7 @@ export async function getVersionInfo(): Promise<VersionInfo> {
       isUpdateAvailable: updateInfo.isUpdateAvailable,
       latestVersion: updateInfo.latestVersion,
       updateDate: updateInfo.isUpdateAvailable ? formatItalianDate(new Date()) : undefined,
-      isReady: updateInfo.isReady // ✅ FIX: Aggiunto campo isReady mancante
+      isReady: updateInfo.isReady
     };
     
     return cachedVersionInfo;
@@ -169,7 +173,7 @@ export async function getVersionInfo(): Promise<VersionInfo> {
       version: 'Unknown',
       buildDate: 'N/A',
       isUpdateAvailable: false,
-      isReady: false // ✅ FIX: Aggiunto campo isReady anche nel fallback
+      isReady: false
     };
     return cachedVersionInfo;
   }
