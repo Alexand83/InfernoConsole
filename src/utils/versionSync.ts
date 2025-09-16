@@ -93,6 +93,7 @@ async function checkForUpdates(): Promise<{ latestVersion?: string; isUpdateAvai
     const isReady = hasAssets && !data.draft; // Non draft e con file disponibili
     
     console.log(`🔍 [VERSION CHECK] Current: ${currentVersion}, Latest: ${latestVersion}, Comparison: ${versionComparison}, Update Available: ${isUpdateAvailable}`);
+    console.log(`🔍 [ASSETS CHECK] Has Assets: ${hasAssets}, Count: ${data.assets?.length || 0}, Draft: ${data.draft}, Is Ready: ${isReady}`);
     
     return {
       latestVersion,
@@ -157,7 +158,8 @@ export async function getVersionInfo(): Promise<VersionInfo> {
       buildDate,
       isUpdateAvailable: updateInfo.isUpdateAvailable,
       latestVersion: updateInfo.latestVersion,
-      updateDate: updateInfo.isUpdateAvailable ? formatItalianDate(new Date()) : undefined
+      updateDate: updateInfo.isUpdateAvailable ? formatItalianDate(new Date()) : undefined,
+      isReady: updateInfo.isReady // ✅ FIX: Aggiunto campo isReady mancante
     };
     
     return cachedVersionInfo;
@@ -166,7 +168,8 @@ export async function getVersionInfo(): Promise<VersionInfo> {
     cachedVersionInfo = {
       version: 'Unknown',
       buildDate: 'N/A',
-      isUpdateAvailable: false
+      isUpdateAvailable: false,
+      isReady: false // ✅ FIX: Aggiunto campo isReady anche nel fallback
     };
     return cachedVersionInfo;
   }
