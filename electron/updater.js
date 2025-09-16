@@ -15,6 +15,10 @@ class AppUpdater {
     autoUpdater.autoDownload = false // Controllo manuale del download
     autoUpdater.autoInstallOnAppQuit = true
     
+    // ✅ NUOVO: Configurazione per delta updates
+    autoUpdater.disableDifferentialDownload = false // Abilita delta updates
+    autoUpdater.disableWebInstaller = true // Usa solo delta, non web installer
+    
     // ✅ NUOVO: Stato del download
     this.downloadState = {
       isDownloading: false,
@@ -197,7 +201,15 @@ class AppUpdater {
     if (this.downloadState.isDownloaded && !this.downloadState.isInstalling) {
       console.log('🚀 Installazione aggiornamento...')
       this.downloadState.isInstalling = true
-      autoUpdater.quitAndInstall(true, true)
+      
+      // ✅ FIX: Parametri corretti per macOS e Windows
+      if (process.platform === 'darwin') {
+        // macOS: force=true, isSilent=false per mostrare il progresso
+        autoUpdater.quitAndInstall(true, false)
+      } else {
+        // Windows: force=true, isSilent=true per installazione silenziosa
+        autoUpdater.quitAndInstall(true, true)
+      }
     }
   }
 

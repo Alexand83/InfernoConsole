@@ -923,7 +923,16 @@ ipcMain.handle('download-update', async () => {
 ipcMain.handle('install-update', async () => {
   try {
     const { autoUpdater } = require('electron-updater')
-    autoUpdater.quitAndInstall()
+    
+    // ✅ FIX: Parametri corretti per macOS e Windows
+    if (process.platform === 'darwin') {
+      // macOS: force=true, isSilent=false per mostrare il progresso
+      autoUpdater.quitAndInstall(true, false)
+    } else {
+      // Windows: force=true, isSilent=true per installazione silenziosa
+      autoUpdater.quitAndInstall(true, true)
+    }
+    
     return { success: true }
   } catch (error) {
     console.error('Errore nell\'installazione aggiornamento:', error)
