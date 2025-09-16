@@ -931,6 +931,36 @@ ipcMain.handle('install-update', async () => {
   }
 })
 
+// Handler per resettare la cache dell'auto-updater
+ipcMain.handle('reset-updater-cache', async () => {
+  try {
+    const { autoUpdater } = require('electron-updater')
+    autoUpdater.clearCache()
+    console.log('✅ Cache auto-updater pulita')
+    return { success: true }
+  } catch (error) {
+    console.error('Errore nel reset cache auto-updater:', error)
+    throw error
+  }
+})
+
+// Handler per controllo forzato aggiornamenti
+ipcMain.handle('force-check-updates', async () => {
+  try {
+    const { autoUpdater } = require('electron-updater')
+    
+    // Pulisce la cache prima del controllo
+    autoUpdater.clearCache()
+    
+    // Controlla aggiornamenti
+    const updateCheckResult = await autoUpdater.checkForUpdates()
+    return { success: true, result: updateCheckResult }
+  } catch (error) {
+    console.error('Errore nel controllo forzato aggiornamenti:', error)
+    throw error
+  }
+})
+
 // Esporta la funzione per l'updater
 module.exports = { getMainWindow }
 

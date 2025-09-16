@@ -35,6 +35,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
 // Expose minimal APIs if needed in future (IPC, fs, etc.)
 // For now we keep it empty to use the web app as-is.
 
+// Auto-updater API
+contextBridge.exposeInMainWorld('autoUpdater', {
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  resetCache: () => ipcRenderer.invoke('reset-updater-cache'),
+  forceCheckUpdates: () => ipcRenderer.invoke('force-check-updates'),
+  onDownloadProgress: (callback) => ipcRenderer.on('download-progress', callback),
+  removeDownloadProgressListener: (callback) => ipcRenderer.removeListener('download-progress', callback)
+})
+
 // Simple logger bridge
 contextBridge.exposeInMainWorld('log', {
   info: (msg) => ipcRenderer.send('log', { level: 'info', msg }),

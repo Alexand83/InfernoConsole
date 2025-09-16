@@ -62,4 +62,10 @@ directories:
 
 # Configurazione per la versione
 generateUpdatesFilesForAllChannels: false
-publish: null
+
+# Configurazione auto-updater
+publish:
+  provider: github
+  owner: Alexand83
+  repo: InfernoConsole
+  releaseType: release

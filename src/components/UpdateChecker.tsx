@@ -95,6 +95,46 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({
     }
   }
 
+  // ✅ NUOVO: Reset cache auto-updater
+  const resetUpdaterCache = async () => {
+    try {
+      if (window.autoUpdater) {
+        await window.autoUpdater.resetCache()
+        console.log('✅ Cache auto-updater pulita')
+        setError('')
+      } else {
+        setError('Auto-updater non disponibile')
+      }
+    } catch (err) {
+      console.error('❌ Errore nel reset cache:', err)
+      setError('Errore nel reset cache auto-updater')
+    }
+  }
+
+  // ✅ NUOVO: Controllo forzato aggiornamenti
+  const forceCheckUpdates = async () => {
+    setIsChecking(true)
+    setError('')
+    
+    try {
+      if (window.autoUpdater) {
+        await window.autoUpdater.forceCheckUpdates()
+        console.log('✅ Controllo forzato completato')
+        // Ricarica la pagina dopo il controllo forzato
+        setTimeout(() => {
+          window.location.reload()
+        }, 2000)
+      } else {
+        setError('Auto-updater non disponibile')
+      }
+    } catch (err) {
+      console.error('❌ Errore nel controllo forzato:', err)
+      setError('Errore nel controllo forzato aggiornamenti')
+    } finally {
+      setIsChecking(false)
+    }
+  }
+
   // Funzione per confrontare le versioni (es. "1.2.3" vs "1.2.4")
   const compareVersions = (version1: string, version2: string): number => {
     const v1Parts = version1.split('.').map(Number)
@@ -155,6 +195,26 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({
             >
               <Settings className="w-4 h-4" />
               <span>Configura</span>
+            </button>
+            
+            {/* ✅ NUOVO: Pulsanti per risolvere "build in corso" */}
+            <button
+              onClick={resetUpdaterCache}
+              className="flex items-center space-x-2 px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+              title="Pulisce la cache dell'auto-updater per risolvere problemi di 'build in corso'"
+            >
+              <Settings className="w-4 h-4" />
+              <span>Reset Cache</span>
+            </button>
+            
+            <button
+              onClick={forceCheckUpdates}
+              disabled={isChecking}
+              className="flex items-center space-x-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Forza il controllo aggiornamenti ignorando la cache"
+            >
+              <AlertCircle className="w-4 h-4" />
+              <span>Forza Controllo</span>
             </button>
             
             {lastChecked && (

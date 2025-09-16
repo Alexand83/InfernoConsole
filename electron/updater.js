@@ -33,6 +33,14 @@ class AppUpdater {
 
     autoUpdater.on('error', (err) => {
       console.error('❌ Errore durante il controllo aggiornamenti:', err)
+      
+      // Se l'errore è "build in corso", prova a controllare di nuovo dopo un po'
+      if (err.message && err.message.includes('build')) {
+        console.log('🔄 Build in corso rilevato, riprovo tra 30 secondi...')
+        setTimeout(() => {
+          this.checkForUpdates()
+        }, 30000)
+      }
     })
 
     autoUpdater.on('download-progress', (progressObj) => {
@@ -91,6 +99,31 @@ class AppUpdater {
         reject(error)
       })
     })
+  }
+
+  // Metodo per resettare la cache dell'auto-updater
+  resetUpdaterCache() {
+    try {
+      console.log('🧹 Reset cache auto-updater...')
+      // Pulisce la cache dell'auto-updater
+      autoUpdater.clearCache()
+      console.log('✅ Cache auto-updater pulita')
+    } catch (error) {
+      console.error('❌ Errore durante il reset cache:', error)
+    }
+  }
+
+  // Metodo per forzare il controllo aggiornamenti (ignora cache)
+  forceCheckForUpdates() {
+    try {
+      console.log('🔄 Controllo forzato aggiornamenti...')
+      this.resetUpdaterCache()
+      setTimeout(() => {
+        this.checkForUpdates()
+      }, 1000)
+    } catch (error) {
+      console.error('❌ Errore durante il controllo forzato:', error)
+    }
   }
 }
 
