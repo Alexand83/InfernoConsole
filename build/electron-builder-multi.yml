@@ -92,8 +92,6 @@ icon: null
 forceCodeSigning: false
 cscLink: null
 cscKeyPassword: null
-signtoolOptions: null
-signExts: []
 
 # Configurazione per generare app-update.yml anche per portable
 # Forza generazione file di update per tutti i target
