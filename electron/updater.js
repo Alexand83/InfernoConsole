@@ -15,9 +15,16 @@ class AppUpdater {
     autoUpdater.autoDownload = false // Controllo manuale del download
     autoUpdater.autoInstallOnAppQuit = true
     
-    // ✅ NUOVO: Configurazione per file completo (no delta)
-    autoUpdater.disableDifferentialDownload = true // Disabilita delta updates
-    autoUpdater.disableWebInstaller = true // Usa file completo
+    // ✅ NUOVO: Configurazione per auto-updater
+    if (process.platform === 'win32') {
+      // Windows: usa file completo portable
+      autoUpdater.disableDifferentialDownload = true // Disabilita delta updates
+      autoUpdater.disableWebInstaller = true // Usa file completo
+    } else {
+      // macOS: usa delta updates
+      autoUpdater.disableDifferentialDownload = false // Abilita delta updates
+      autoUpdater.disableWebInstaller = true // Usa solo delta, non web installer
+    }
     
     // ✅ NUOVO: Stato del download
     this.downloadState = {
@@ -38,18 +45,29 @@ class AppUpdater {
       console.log('📦 Aggiornamento disponibile:', info.version)
       console.log('📦 Info aggiornamento:', JSON.stringify(info, null, 2))
       
-      // ✅ FIX: Calcola la dimensione del file completo (no delta)
+      // ✅ FIX: Calcola la dimensione del file in base alla piattaforma
       let fileSizeMB = 'N/A'
       if (info.files && info.files.length > 0) {
-        // Usa sempre il file completo (portable)
-        const fullFile = info.files.find(file => 
-          file.url && (file.url.includes('.exe') || file.url.includes('portable'))
-        )
-        if (fullFile && fullFile.size) {
-          fileSizeMB = (fullFile.size / (1024 * 1024)).toFixed(1)
+        if (process.platform === 'win32') {
+          // Windows: usa il file completo portable
+          const portableFile = info.files.find(file => 
+            file.url && file.url.includes('.exe')
+          )
+          if (portableFile && portableFile.size) {
+            fileSizeMB = (portableFile.size / (1024 * 1024)).toFixed(1)
+          } else {
+            fileSizeMB = (info.files[0].size / (1024 * 1024)).toFixed(1)
+          }
         } else {
-          // Fallback: usa il primo file
-          fileSizeMB = (info.files[0].size / (1024 * 1024)).toFixed(1)
+          // macOS: cerca il file delta (.nupkg)
+          const deltaFile = info.files.find(file => 
+            file.url && (file.url.includes('.nupkg') || file.url.includes('delta'))
+          )
+          if (deltaFile && deltaFile.size) {
+            fileSizeMB = (deltaFile.size / (1024 * 1024)).toFixed(1)
+          } else {
+            fileSizeMB = (info.files[0].size / (1024 * 1024)).toFixed(1)
+          }
         }
       }
       
@@ -142,9 +160,19 @@ class AppUpdater {
       this.downloadState.isDownloading = false
       this.downloadState.isDownloaded = true
       
-      // ✅ FIX: Sempre file completo (no delta)
-      const downloadType = 'completo'
-      console.log(`📦 Tipo download: ${downloadType} (portable)`)
+      // ✅ FIX: Verifica il tipo di download in base alla piattaforma
+      let downloadType = 'completo'
+      if (process.platform === 'darwin') {
+        // macOS: verifica se è un delta download
+        const isDeltaDownload = info.files && info.files.some(file => 
+          file.url && (file.url.includes('.nupkg') || file.url.includes('delta'))
+        )
+        downloadType = isDeltaDownload ? 'delta' : 'completo'
+      } else {
+        // Windows: sempre file completo portable
+        downloadType = 'completo'
+      }
+      console.log(`📦 Tipo download: ${downloadType}`)
       
       dialog.showMessageBox({
         type: 'info',

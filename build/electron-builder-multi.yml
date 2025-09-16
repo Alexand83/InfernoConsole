@@ -2,7 +2,7 @@ appId: com.djconsole.app
 productName: Inferno Console
 copyright: Copyright © 2024 Inferno Console Team
 
-# Configurazione per Windows - solo portable
+# Configurazione per Windows - solo portable con auto-updater file completo
 win:
   target:
     - target: portable
@@ -12,7 +12,7 @@ win:
   requestedExecutionLevel: asInvoker
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
-  # Configurazione per auto-updater con file completo
+  # Configurazione per auto-updater con file completo (no delta)
   generateUpdatesFilesForAllChannels: false
   # ✅ FIX: Disabilita delta updates per usare file completo
   compression: maximum
