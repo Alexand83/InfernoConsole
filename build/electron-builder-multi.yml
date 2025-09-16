@@ -2,31 +2,20 @@ appId: com.djconsole.app
 productName: Inferno Console
 copyright: Copyright © 2024 Inferno Console Team
 
-# Configurazione per Windows - portable e NSIS
+# Configurazione per Windows - solo portable
 win:
   target:
     - target: portable
-      arch:
-        - x64
-    - target: nsis
       arch:
         - x64
   artifactName: Inferno-Console-${version}-win.${ext}
   requestedExecutionLevel: asInvoker
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
-  # Configurazione per delta updates su Windows
-  generateUpdatesFilesForAllChannels: true
-  # ✅ FIX: Forza la generazione di file .blockmap per delta updates
+  # Configurazione per auto-updater con file completo
+  generateUpdatesFilesForAllChannels: false
+  # ✅ FIX: Disabilita delta updates per usare file completo
   compression: maximum
-  
-  # Configurazione NSIS
-  nsis:
-    oneClick: false
-    allowToChangeInstallationDirectory: true
-    createDesktopShortcut: true
-    createStartMenuShortcut: true
-    shortcutName: Inferno Console
 
 # Configurazione per macOS
 mac:

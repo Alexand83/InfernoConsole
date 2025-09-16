@@ -15,9 +15,9 @@ class AppUpdater {
     autoUpdater.autoDownload = false // Controllo manuale del download
     autoUpdater.autoInstallOnAppQuit = true
     
-    // ✅ NUOVO: Configurazione per delta updates
-    autoUpdater.disableDifferentialDownload = false // Abilita delta updates
-    autoUpdater.disableWebInstaller = true // Usa solo delta, non web installer
+    // ✅ NUOVO: Configurazione per file completo (no delta)
+    autoUpdater.disableDifferentialDownload = true // Disabilita delta updates
+    autoUpdater.disableWebInstaller = true // Usa file completo
     
     // ✅ NUOVO: Stato del download
     this.downloadState = {
@@ -38,17 +38,17 @@ class AppUpdater {
       console.log('📦 Aggiornamento disponibile:', info.version)
       console.log('📦 Info aggiornamento:', JSON.stringify(info, null, 2))
       
-      // ✅ FIX: Calcola la dimensione del delta, non del file completo
+      // ✅ FIX: Calcola la dimensione del file completo (no delta)
       let fileSizeMB = 'N/A'
       if (info.files && info.files.length > 0) {
-        // Cerca il file delta (.nupkg) invece del file completo
-        const deltaFile = info.files.find(file => 
-          file.url && (file.url.includes('.nupkg') || file.url.includes('delta'))
+        // Usa sempre il file completo (portable)
+        const fullFile = info.files.find(file => 
+          file.url && (file.url.includes('.exe') || file.url.includes('portable'))
         )
-        if (deltaFile && deltaFile.size) {
-          fileSizeMB = (deltaFile.size / (1024 * 1024)).toFixed(1)
+        if (fullFile && fullFile.size) {
+          fileSizeMB = (fullFile.size / (1024 * 1024)).toFixed(1)
         } else {
-          // Fallback: usa il primo file se non trova il delta
+          // Fallback: usa il primo file
           fileSizeMB = (info.files[0].size / (1024 * 1024)).toFixed(1)
         }
       }
@@ -142,13 +142,9 @@ class AppUpdater {
       this.downloadState.isDownloading = false
       this.downloadState.isDownloaded = true
       
-      // ✅ FIX: Verifica se è un delta download
-      const isDeltaDownload = info.files && info.files.some(file => 
-        file.url && (file.url.includes('.nupkg') || file.url.includes('delta'))
-      )
-      
-      const downloadType = isDeltaDownload ? 'delta' : 'completo'
-      console.log(`📦 Tipo download: ${downloadType}`)
+      // ✅ FIX: Sempre file completo (no delta)
+      const downloadType = 'completo'
+      console.log(`📦 Tipo download: ${downloadType} (portable)`)
       
       dialog.showMessageBox({
         type: 'info',
