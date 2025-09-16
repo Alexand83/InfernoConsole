@@ -1,0 +1,29 @@
+[33mcommit 0ed57fee3ab52ce3c4dbe258d653d329afc536ef[m
+Author: DJ Inferno <dj-inferno@example.com>
+Date:   Mon Sep 15 22:14:47 2025 +0200
+
+     Fix: Risolto crash JavaScript e ottimizzato waveform
+    
+    -  Corretto errore useMemo nel JSX che causava crash
+    -  Ripristinato movimento fluido delle onde del waveform
+    -  Bilanciato ottimizzazioni per evitare loop infiniti
+    -  Ridotto frequenza aggiornamenti per stabilità
+    -  Mantenuto fluidità senza sovraccarico performance
+    -  Corretto ordine dichiarazioni in AudioDeck.tsx
+    -  Aggiunto controlli sicurezza per waveformData
+    
+    Fixes: Crash JavaScript, onde statiche, loop infiniti
+
+electron/main.js
+src/App.tsx
+src/components/AudioDeck.tsx
+src/components/DJConsole.tsx
+src/components/DeckPlayer.tsx
+src/components/DynamicWaveform.tsx
+src/components/NewDJConsole.tsx
+src/components/dj-console/AutoAdvanceManager.tsx
+src/components/dj-console/EnhancedDeck.tsx
+src/components/dj-console/RebuiltDJConsole.tsx
+src/components/dj-console/StreamingDebugPanel.tsx
+src/contexts/AudioContext.tsx
+src/contexts/StreamingContext.tsx
