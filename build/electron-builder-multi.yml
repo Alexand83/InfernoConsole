@@ -15,11 +15,14 @@ win:
   requestedExecutionLevel: asInvoker
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
-  # Disabilita code signing per GitHub Actions
+  # DISABILITA COMPLETAMENTE IL SIGNING
   forceCodeSigning: false
-  # Disabilita signing automatico
   cscLink: null
   cscKeyPassword: null
+  # Forza disabilitazione signing
+  sign: false
+  signAndEditExecutable: false
+  verifyUpdateCodeSignature: false
   # FORZA generazione app-update.yml
   generateUpdatesFilesForAllChannels: true
   # DISABILITA COMPLETAMENTE LE ICONE
@@ -84,6 +87,9 @@ directories:
 generateUpdatesFilesForAllChannels: true
 # DISABILITA COMPLETAMENTE LE ICONE GLOBALMENTE
 icon: null
+# DISABILITA COMPLETAMENTE IL SIGNING GLOBALMENTE
+forceCodeSigning: false
+sign: false
 
 # Configurazione per generare app-update.yml anche per portable
 # Forza generazione file di update per tutti i target
