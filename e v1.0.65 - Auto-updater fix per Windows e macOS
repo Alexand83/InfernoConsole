@@ -1,0 +1,3 @@
+[33mb3acdcb[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m)[m v1.0.65 - FIX: Rimossa configurazione Linux, solo Windows e macOS per auto-updater
+[33m1e4cdab[m v1.0.64 - FIX: Aggiunta configurazione multi-piattaforma per auto-updater con download differenziali
+[33m7554fe3[m v1.0.63 - FIX: Logica intelligente per identificare la sorgente DJ usando mount point invece di confronto ascoltatori
