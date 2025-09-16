@@ -13,6 +13,10 @@ win:
         - x64
   artifactName: DJ-Console-${version}-win.${ext}
   requestedExecutionLevel: asInvoker
+  # DISABILITA COMPLETAMENTE IL SIGNING
+  forceCodeSigning: false
+  cscLink: null
+  cscKeyPassword: null
   # FORZA generazione app-update.yml
   generateUpdatesFilesForAllChannels: true
   # DISABILITA COMPLETAMENTE LE ICONE
@@ -73,6 +77,10 @@ directories:
 generateUpdatesFilesForAllChannels: true
 # DISABILITA COMPLETAMENTE LE ICONE GLOBALMENTE
 icon: null
+# DISABILITA COMPLETAMENTE IL SIGNING GLOBALMENTE
+forceCodeSigning: false
+cscLink: null
+cscKeyPassword: null
 
 # Configurazione NSIS per generare app-update.yml
 nsis:

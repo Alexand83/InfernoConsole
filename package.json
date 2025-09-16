@@ -13,7 +13,7 @@
     "electron": "electron .",
     "dist": "npm run build && electron-builder --mac --config build/electron-builder-multi.yml",
     "dist:win": "npm run build && electron-builder --win --config build/electron-builder-multi.yml",
-    "dist:win:portable": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false CSC_LINK= CSC_KEY_PASSWORD= npm run build && electron-builder --win --config build/electron-builder-multi.yml",
+    "dist:win:portable": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false CSC_LINK= CSC_KEY_PASSWORD= WIN_CSC_LINK= WIN_CSC_KEY_PASSWORD= npm run build && electron-builder --win --config build/electron-builder-multi.yml",
     "dist:all": "npm run build && electron-builder -mw --config build/electron-builder-multi.yml",
     "build:win": "npm run build && electron-builder --win --config build/electron-builder-multi.yml",
     "build:win:clean": "npm run clean && npm run build:win",
@@ -105,8 +105,8 @@
       "requestedExecutionLevel": "asInvoker",
       "generateUpdatesFilesForAllChannels": true,
       "forceCodeSigning": false,
-      "cscLink": "dj-console-cert.p12",
-      "cscKeyPassword": "djconsole123",
+      "cscLink": null,
+      "cscKeyPassword": null,
       "publisherName": "Alessandro(NeverAgain)"
     },
     "linux": {
