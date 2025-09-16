@@ -1,6 +1,6 @@
 {
   "name": "dj-console",
-  "version": "1.0.40",
+  "version": "1.0.41",
   "description": "Professional DJ Console with RadioBoss-style interface",
   "main": "electron/main.js",
   "scripts": {
@@ -77,10 +77,6 @@
       "owner": "Alexand83",
       "repo": "InfernoConsole"
     },
-    "updates": {
-      "differentialPackage": true,
-      "blockmap": true
-    },
     "mac": {
       "target": [
         "dmg",
@@ -92,8 +88,6 @@
       "hardenedRuntime": true,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "differentialPackage": true,
-      "blockmap": true,
       "extendInfo": {
         "NSMicrophoneUsageDescription": "DJ Console richiede l'accesso al microfono per la trasmissione live e il mix con la musica."
       }
@@ -113,9 +107,7 @@
       "sign": false,
       "forceCodeSigning": false,
       "verifyUpdateCodeSignature": false,
-      "publisherName": "Alessandro(NeverAgain)",
-      "differentialPackage": true,
-      "blockmap": true
+      "publisherName": "Alessandro(NeverAgain)"
     },
     "linux": {
       "target": [

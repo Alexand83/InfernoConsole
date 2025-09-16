@@ -33,8 +33,6 @@ nsis:
   installerLanguages:
     - it_IT
     - en_US
-  # ✅ NUOVO: Abilita update differenziali per ridurre dimensioni download
-  differentialPackage: true
 
 # File da includere
 files:
@@ -65,12 +63,6 @@ directories:
 # Configurazione per la versione
 generateUpdatesFilesForAllChannels: false
 
-# ✅ NUOVO: Configurazione per update differenziali
-updates:
-  # Abilita la generazione di file di update differenziali
-  differentialPackage: true
-  # Genera file .blockmap per update incrementali
-  blockmap: true
 
 # Configurazione auto-updater
 publish:
