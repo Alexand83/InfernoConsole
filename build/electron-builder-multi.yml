@@ -64,7 +64,7 @@ directories:
   buildResources: build
 
 # Configurazione per la versione
-generateUpdatesFilesForAllChannels: false
+generateUpdatesFilesForAllChannels: true
 
 # Configurazione auto-updater
 publish:
