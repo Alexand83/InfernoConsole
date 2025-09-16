@@ -11,9 +11,7 @@ win:
   artifactName: Inferno-Console-${version}-win.${ext}
   requestedExecutionLevel: asInvoker
   verifyUpdateCodeSignature: false
-  signAndEditExecutable: true
-  cscLink: certificates/inferno-console.pfx
-  cscKeyPassword: inferno123
+  signAndEditExecutable: false
   # Configurazione per auto-updater con file completo (no delta)
   generateUpdatesFilesForAllChannels: false
   # ✅ FIX: Disabilita delta updates per usare file completo
@@ -43,12 +41,6 @@ mac:
   generateUpdatesFilesForAllChannels: true
   # ✅ FIX: Forza la generazione di file .blockmap per delta updates su macOS
   compression: maximum
-  # Configurazione certificato per macOS
-  identity: "Inferno Console"
-  cscLink: certificates/inferno-console-macos.pfx
-  cscKeyPassword: inferno123
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
 
 # Linux rimosso - non necessario
 
