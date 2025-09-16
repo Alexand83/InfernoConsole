@@ -2,22 +2,17 @@ appId: com.djconsole.app
 productName: DJ Console
 copyright: Copyright © 2024 DJ Console Team
 
-# Configurazione per Windows
+# Configurazione per Windows - solo portable
 win:
   target:
-    - target: nsis
-      arch:
-        - x64
-        - ia32
     - target: portable
       arch:
         - x64
-  artifactName: DJ-Console-${version}-win-${arch}.${ext}
+  artifactName: DJ-Console-${version}-win.${ext}
   requestedExecutionLevel: asInvoker
   publisherName: DJ Console Team
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
-  # icon: build/icon.ico  # Commented out - using default Electron icon
 
 # Configurazione per macOS
 mac:
@@ -40,22 +35,7 @@ mac:
 
 # Linux rimosso - non necessario
 
-# Configurazione NSIS
-nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
-  allowElevation: true
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
-  shortcutName: DJ Console
-  # include: build/installer.nsh  # Commented out to avoid NSIS errors
-  perMachine: false
-  deleteAppDataOnUninstall: true
-  displayLanguageSelector: false
-  # installerLanguages:
-  #   - it_IT
-  #   - en_US
-  differentialPackage: true
+# NSIS rimosso - usiamo solo portable
 
 # File da includere
 files:

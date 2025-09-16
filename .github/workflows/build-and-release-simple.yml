@@ -33,7 +33,7 @@ jobs:
 
     - name: Build Electron app (Windows)
       if: matrix.os == 'windows-latest'
-      run: npm run dist:win:nsis
+      run: npm run dist:win:portable
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
@@ -79,7 +79,7 @@ jobs:
           - Versione sviluppata da Alessandro(NeverAgain)
           - Licenza MIT
           - Supporto completo per streaming Icecast
-        files: dist/*.exe
+        files: dist-electron/*.exe
         draft: false
         prerelease: false
         generate_release_notes: true
