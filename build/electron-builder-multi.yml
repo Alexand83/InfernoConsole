@@ -13,11 +13,6 @@ win:
         - x64
   artifactName: DJ-Console-${version}-win.${ext}
   requestedExecutionLevel: asInvoker
-  # DISABILITA COMPLETAMENTE IL SIGNING
-  forceCodeSigning: false
-  cscLink: null
-  cscKeyPassword: null
-  # Forza disabilitazione signing (sign non è valido in electron-builder 26.x)
   # FORZA generazione app-update.yml
   generateUpdatesFilesForAllChannels: true
   # DISABILITA COMPLETAMENTE LE ICONE
@@ -38,8 +33,6 @@ mac:
         - arm64
   artifactName: DJ-Console-${version}-mac-${arch}.${ext}
   category: public.app-category.music
-  # DISABILITA COMPLETAMENTE IL SIGNING PER MACOS
-  identity: null
   # icon: build/icon.icns  # Commented out - using default Electron icon
   hardenedRuntime: true
   gatekeeperAssess: false
@@ -49,10 +42,6 @@ mac:
   electronUpdaterCompatibility: ">=2.16"
   # Configurazione per delta updates su macOS
   generateUpdatesFilesForAllChannels: true
-
-# Linux rimosso - non necessario
-
-# NSIS rimosso - usiamo solo portable
 
 # File da includere
 files:
@@ -84,10 +73,7 @@ directories:
 generateUpdatesFilesForAllChannels: true
 # DISABILITA COMPLETAMENTE LE ICONE GLOBALMENTE
 icon: null
-# DISABILITA COMPLETAMENTE IL SIGNING GLOBALMENTE
 
-# Configurazione per generare app-update.yml anche per portable
-# Forza generazione file di update per tutti i target
 # Configurazione NSIS per generare app-update.yml
 nsis:
   oneClick: false
@@ -102,6 +88,3 @@ publish:
   owner: Alexand83
   repo: InfernoConsole
   releaseType: release
-
-
-# Configurazione per download differenziali
