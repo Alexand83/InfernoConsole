@@ -53,72 +53,108 @@ const DynamicWaveform: React.FC<DynamicWaveformProps> = ({
     const barWidth = width / waveformData.length
     const maxBarHeight = height * 0.8
 
-    // Disegna le barre del waveform
+    // ✅ NUOVO: Effetto console DJ professionale
+    const now = Date.now()
+    const timeOffset = now * 0.002 // Velocità più lenta e professionale
+
+    // Disegna le barre del waveform con stile console DJ
     waveformData.forEach((amplitude, index) => {
       const x = index * barWidth
-      const barHeight = amplitude * maxBarHeight
+      let barHeight = amplitude * maxBarHeight
       const y = (height - barHeight) / 2
 
-      // Colore base
-      let color = '#6366f1' // dj-accent
+      // ✅ NUOVO: Effetto console DJ - pulsazione sottile e professionale
+      if (isPlaying) {
+        // Pulsazione molto sottile, come nelle console reali
+        const barPulse = 0.95 + Math.sin(timeOffset + index * 0.1) * 0.05
+        barHeight *= barPulse
+      }
 
-      // Evidenzia la posizione corrente
+      // Colori professionali console DJ
+      let color = '#4a5568' // Grigio scuro per barre non riprodotte
+      let highlightColor = '#2d3748' // Grigio più scuro per ombra
+
+      // Evidenzia la posizione corrente con stile professionale
       if (index <= currentPosition) {
-        color = '#f59e0b' // dj-highlight
+        // ✅ NUOVO: Colore verde professionale per barre riprodotte
+        color = '#38a169' // Verde console DJ
+        highlightColor = '#2f855a' // Verde più scuro per ombra
+        
+        // ✅ NUOVO: Effetto di "illuminazione" sottile quando in play
+        if (isPlaying) {
+          const glowIntensity = 0.8 + Math.sin(timeOffset * 0.5 + index * 0.05) * 0.2
+          const r = Math.floor(56 + glowIntensity * 20)   // 56-76
+          const g = Math.floor(161 + glowIntensity * 30)  // 161-191
+          const b = Math.floor(105 + glowIntensity * 15)  // 105-120
+          color = `rgb(${r}, ${g}, ${b})`
+        }
       }
 
       // Evidenzia la barra hoverata
       if (index === hoveredIndex) {
-        color = '#ef4444' // rosso per hover
+        color = '#e53e3e' // Rosso per hover
+        highlightColor = '#c53030'
       }
 
-      // Disegna la barra
+      // ✅ NUOVO: Disegna la barra con ombra professionale (come console DJ)
+      // Ombra
+      ctx.fillStyle = highlightColor
+      ctx.fillRect(x + 1, y + 1, barWidth - 2, barHeight)
+      
+      // Barra principale
       ctx.fillStyle = color
-      ctx.fillRect(x, y, barWidth - 1, barHeight)
+      ctx.fillRect(x, y, barWidth - 2, barHeight)
 
-           // Aggiungi effetto di brillantezza se la traccia è in riproduzione (bilanciato per fluidità)
-           if (isPlaying && index <= currentPosition && index % 2 === 0) {
-             ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
-             ctx.fillRect(x, y, barWidth - 1, barHeight)
-           }
+      // ✅ NUOVO: Bordo superiore luminoso (effetto console DJ)
+      if (index <= currentPosition) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
+        ctx.fillRect(x, y, barWidth - 2, 1)
+      }
+
+      // ✅ NUOVO: Effetto di "scan" quando in play (come oscilloscopio)
+      if (isPlaying && index <= currentPosition) {
+        const scanEffect = Math.sin(timeOffset * 2 + index * 0.1) * 0.1 + 0.1
+        ctx.fillStyle = `rgba(255, 255, 255, ${scanEffect})`
+        ctx.fillRect(x, y, barWidth - 2, barHeight * 0.1)
+      }
     })
 
-    // Disegna la LINEA ROSSA PRINCIPALE per la posizione corrente
+    // ✅ NUOVO: Linea di posizione stile console DJ professionale
     if (duration > 0 && currentTime >= 0) {
       const lineX = (currentTime / duration) * width
       
-      // Linea principale più spessa e visibile
-      ctx.strokeStyle = '#ef4444' // Rosso brillante
-      ctx.lineWidth = 4
-      ctx.shadowColor = '#ef4444'
-      ctx.shadowBlur = 8
+      // Linea principale professionale
+      ctx.strokeStyle = '#e53e3e' // Rosso console DJ
+      ctx.lineWidth = 2
+      ctx.shadowColor = '#e53e3e'
+      ctx.shadowBlur = 4
       ctx.beginPath()
       ctx.moveTo(lineX, 0)
       ctx.lineTo(lineX, height)
       ctx.stroke()
       
-      // Reset shadow per altri elementi
+      // Reset shadow
       ctx.shadowColor = 'transparent'
       ctx.shadowBlur = 0
       
-      // Cerchio rosso più grande e visibile sulla linea
-      ctx.fillStyle = '#ef4444'
+      // Cerchio di posizione professionale
+      ctx.fillStyle = '#e53e3e'
       ctx.beginPath()
-      ctx.arc(lineX, height / 2, 8, 0, 2 * Math.PI)
+      ctx.arc(lineX, height / 2, 6, 0, 2 * Math.PI)
       ctx.fill()
       
-      // Cerchio bianco interno per contrasto
+      // Cerchio interno bianco
       ctx.fillStyle = '#ffffff'
       ctx.beginPath()
-      ctx.arc(lineX, height / 2, 4, 0, 2 * Math.PI)
+      ctx.arc(lineX, height / 2, 3, 0, 2 * Math.PI)
       ctx.fill()
       
-      // Effetto pulsante se sta suonando (bilanciato per fluidità)
+      // ✅ NUOVO: Effetto pulsante sottile quando in play
       if (isPlaying) {
-        const pulse = 0.9 + Math.sin(Date.now() * 0.005) * 0.1
-        ctx.fillStyle = `rgba(239, 68, 68, ${pulse})`
+        const pulse = 0.8 + Math.sin(Date.now() * 0.003) * 0.2
+        ctx.fillStyle = `rgba(229, 62, 62, ${pulse})`
         ctx.beginPath()
-        ctx.arc(lineX, height / 2, 10, 0, 2 * Math.PI)
+        ctx.arc(lineX, height / 2, 8, 0, 2 * Math.PI)
         ctx.fill()
       }
     }
@@ -170,36 +206,138 @@ const DynamicWaveform: React.FC<DynamicWaveformProps> = ({
     setHoveredIndex(null)
   }
 
-  // Animazione ottimizzata per ridurre il lag
+  // ✅ NUOVO: Animazione fluida per le barre del waveform
   useEffect(() => {
     if (isPlaying && settings.interface.animations) {
-      // Riduci la frequenza di aggiornamento per migliorare le performance
-      const interval = setInterval(() => {
-        // Solo aggiorna il canvas quando necessario
+      // ✅ NUOVO: Usa requestAnimationFrame per animazioni fluide
+      const animate = () => {
+        // Forza il re-render del canvas per animare le barre
         if (canvasRef.current) {
           const canvas = canvasRef.current
           const ctx = canvas.getContext('2d')
           if (ctx) {
-            // Effetto di pulsazione bilanciato per fluidità
-            const pulse = 0.9 + Math.sin(Date.now() * 0.005) * 0.1
-            ctx.globalAlpha = pulse
+            // Ridisegna il canvas per aggiornare le animazioni
+            const { width, height } = canvas
+            ctx.clearRect(0, 0, width, height)
+
+            // Calcola dimensioni delle barre
+            const barWidth = width / waveformData.length
+            const maxBarHeight = height * 0.8
+
+            // Calcola il tempo per animazioni fluide
+            const now = Date.now()
+            const timeOffset = now * 0.003
+
+            // Ridisegna le barre con stile console DJ professionale
+            waveformData.forEach((amplitude, index) => {
+              const x = index * barWidth
+              let barHeight = amplitude * maxBarHeight
+              const y = (height - barHeight) / 2
+
+              // ✅ NUOVO: Pulsazione sottile e professionale
+              if (isPlaying) {
+                const barPulse = 0.95 + Math.sin(timeOffset + index * 0.1) * 0.05
+                barHeight *= barPulse
+              }
+
+              // Colori professionali console DJ
+              let color = '#4a5568' // Grigio scuro per barre non riprodotte
+              let highlightColor = '#2d3748' // Grigio più scuro per ombra
+
+              // Evidenzia la posizione corrente con stile professionale
+              if (index <= currentPosition) {
+                color = '#38a169' // Verde console DJ
+                highlightColor = '#2f855a' // Verde più scuro per ombra
+                
+                // Effetto di "illuminazione" sottile quando in play
+                if (isPlaying) {
+                  const glowIntensity = 0.8 + Math.sin(timeOffset * 0.5 + index * 0.05) * 0.2
+                  const r = Math.floor(56 + glowIntensity * 20)
+                  const g = Math.floor(161 + glowIntensity * 30)
+                  const b = Math.floor(105 + glowIntensity * 15)
+                  color = `rgb(${r}, ${g}, ${b})`
+                }
+              }
+
+              if (index === hoveredIndex) {
+                color = '#e53e3e' // Rosso per hover
+                highlightColor = '#c53030'
+              }
+
+              // Disegna la barra con ombra professionale
+              // Ombra
+              ctx.fillStyle = highlightColor
+              ctx.fillRect(x + 1, y + 1, barWidth - 2, barHeight)
+              
+              // Barra principale
+              ctx.fillStyle = color
+              ctx.fillRect(x, y, barWidth - 2, barHeight)
+
+              // Bordo superiore luminoso
+              if (index <= currentPosition) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
+                ctx.fillRect(x, y, barWidth - 2, 1)
+              }
+
+              // Effetto di "scan" quando in play
+              if (isPlaying && index <= currentPosition) {
+                const scanEffect = Math.sin(timeOffset * 2 + index * 0.1) * 0.1 + 0.1
+                ctx.fillStyle = `rgba(255, 255, 255, ${scanEffect})`
+                ctx.fillRect(x, y, barWidth - 2, barHeight * 0.1)
+              }
+            })
+
+            // Ridisegna la linea di posizione professionale
+            if (duration > 0 && currentTime >= 0) {
+              const lineX = (currentTime / duration) * width
+              
+              ctx.strokeStyle = '#e53e3e'
+              ctx.lineWidth = 2
+              ctx.shadowColor = '#e53e3e'
+              ctx.shadowBlur = 4
+              ctx.beginPath()
+              ctx.moveTo(lineX, 0)
+              ctx.lineTo(lineX, height)
+              ctx.stroke()
+              
+              ctx.shadowColor = 'transparent'
+              ctx.shadowBlur = 0
+              
+              ctx.fillStyle = '#e53e3e'
+              ctx.beginPath()
+              ctx.arc(lineX, height / 2, 6, 0, 2 * Math.PI)
+              ctx.fill()
+              
+              ctx.fillStyle = '#ffffff'
+              ctx.beginPath()
+              ctx.arc(lineX, height / 2, 3, 0, 2 * Math.PI)
+              ctx.fill()
+              
+              const pulse = 0.8 + Math.sin(now * 0.003) * 0.2
+              ctx.fillStyle = `rgba(229, 62, 62, ${pulse})`
+              ctx.beginPath()
+              ctx.arc(lineX, height / 2, 8, 0, 2 * Math.PI)
+              ctx.fill()
+            }
           }
         }
-      }, 200) // Aggiorna ogni 200ms per bilanciare fluidità e stabilità
+        
+        animationRef.current = requestAnimationFrame(animate)
+      }
       
-      return () => clearInterval(interval)
+      animationRef.current = requestAnimationFrame(animate)
+      
+      return () => {
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current)
+        }
+      }
     } else {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current)
       }
     }
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
-      }
-    }
-  }, [isPlaying, settings.interface.animations])
+  }, [isPlaying, settings.interface.animations, waveformData, currentPosition, currentTime, duration, hoveredIndex])
 
   return (
     <div className={`dynamic-waveform ${className}`}>

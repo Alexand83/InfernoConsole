@@ -1975,7 +1975,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const clampedTime = Math.max(0, Math.min(duration, time))
       leftAudioRef.current.currentTime = clampedTime
       // ✅ OPTIMIZATION: Arrotonda il tempo per ridurre re-render
-      const roundedTime = Math.floor(clampedTime * 10) / 10
+      const roundedTime = Math.floor(clampedTime * 20) / 20
       dispatch({ type: 'SET_LEFT_DECK_TIME', payload: roundedTime })
       console.log(`⏩ [LEFT DECK] Seek to ${roundedTime.toFixed(2)}s`)
       
@@ -2008,7 +2008,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const clampedTime = Math.max(0, Math.min(duration, time))
       rightAudioRef.current.currentTime = clampedTime
       // ✅ OPTIMIZATION: Arrotonda il tempo per ridurre re-render
-      const roundedTime = Math.floor(clampedTime * 10) / 10
+      const roundedTime = Math.floor(clampedTime * 20) / 20
       dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: roundedTime })
       console.log(`⏩ [RIGHT DECK] Seek to ${roundedTime.toFixed(2)}s`)
       
@@ -2863,8 +2863,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             
             // ✅ FIX: Evita di mostrare tempo maggiore della durata
             if (currentTime <= duration && currentTime >= 0) {
-              // ✅ OPTIMIZATION: Aggiorna ogni 0.1 secondi per bilanciare fluidità e stabilità
-              const roundedTime = Math.floor(currentTime * 10) / 10
+              // ✅ OPTIMIZATION: Aggiorna ogni 0.05 secondi per massima fluidità del waveform
+              const roundedTime = Math.floor(currentTime * 20) / 20
               dispatch({ type: 'SET_LEFT_DECK_TIME', payload: roundedTime })
             }
           }
@@ -2908,8 +2908,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             
             // ✅ FIX: Evita di mostrare tempo maggiore della durata
             if (currentTime <= duration && currentTime >= 0) {
-              // ✅ OPTIMIZATION: Aggiorna ogni 0.1 secondi per bilanciare fluidità e stabilità
-              const roundedTime = Math.floor(currentTime * 10) / 10
+              // ✅ OPTIMIZATION: Aggiorna ogni 0.05 secondi per massima fluidità del waveform
+              const roundedTime = Math.floor(currentTime * 20) / 20
               dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: roundedTime })
             }
           }
