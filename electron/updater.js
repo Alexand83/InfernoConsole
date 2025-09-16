@@ -9,6 +9,12 @@ class AppUpdater {
       autoUpdater.updateConfigPath = path.join(__dirname, 'dev-app-update.yml')
     }
     
+    // ✅ NUOVO: Configurazione per delta updates
+    autoUpdater.allowDowngrade = false
+    autoUpdater.allowPrerelease = false
+    autoUpdater.autoDownload = false // Controllo manuale del download
+    autoUpdater.autoInstallOnAppQuit = true
+    
     // Configura l'auto-updater
     autoUpdater.checkForUpdatesAndNotify()
     
@@ -47,6 +53,13 @@ class AppUpdater {
       let log_message = "Velocità download: " + progressObj.bytesPerSecond
       log_message = log_message + ' - Downloaded ' + progressObj.percent + '%'
       log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')'
+      
+      // ✅ NUOVO: Log per verificare se sono delta updates
+      const isDeltaUpdate = progressObj.total < 100 * 1024 * 1024 // Meno di 100MB = probabile delta
+      if (isDeltaUpdate) {
+        log_message += ' [DELTA UPDATE]'
+      }
+      
       console.log('📥 Download aggiornamento:', log_message)
       
       // Invia il progresso al renderer process
