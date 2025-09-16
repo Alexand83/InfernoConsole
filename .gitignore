@@ -9,6 +9,7 @@ dist/
 dist-electron/
 build/
 !build/*.yml
+!build/electron-builder-multi.yml
 !build/*.js
 !build/*.nsh
 !build/*.plist
