@@ -13,14 +13,8 @@ win:
         - x64
   artifactName: DJ-Console-${version}-win.${ext}
   requestedExecutionLevel: asInvoker
-  verifyUpdateCodeSignature: false
-  signAndEditExecutable: false
   # DISABILITA COMPLETAMENTE IL SIGNING
   sign: false
-  forceCodeSigning: false
-  cscLink: null
-  cscKeyPassword: null
-  # Forza disabilitazione signing anche per GitHub Actions
   # Forza disabilitazione signing (sign non è valido in electron-builder 26.x)
   # FORZA generazione app-update.yml
   generateUpdatesFilesForAllChannels: true
@@ -89,9 +83,6 @@ generateUpdatesFilesForAllChannels: true
 # DISABILITA COMPLETAMENTE LE ICONE GLOBALMENTE
 icon: null
 # DISABILITA COMPLETAMENTE IL SIGNING GLOBALMENTE
-forceCodeSigning: false
-cscLink: null
-cscKeyPassword: null
 
 # Configurazione per generare app-update.yml anche per portable
 # Forza generazione file di update per tutti i target
