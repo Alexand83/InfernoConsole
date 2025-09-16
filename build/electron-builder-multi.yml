@@ -19,6 +19,9 @@ win:
   forceCodeSigning: false
   cscLink: null
   cscKeyPassword: null
+  # Forza disabilitazione signing anche per GitHub Actions
+  azureSignOptions: null
+  signtoolOptions: null
   # Forza disabilitazione signing (sign non è valido in electron-builder 26.x)
   # FORZA generazione app-update.yml
   generateUpdatesFilesForAllChannels: true
@@ -83,7 +86,13 @@ directories:
 # Configurazione per la versione
 generateUpdatesFilesForAllChannels: true
 # DISABILITA COMPLETAMENTE LE ICONE GLOBALMENTE
+icon: null
 # DISABILITA COMPLETAMENTE IL SIGNING GLOBALMENTE
+forceCodeSigning: false
+cscLink: null
+cscKeyPassword: null
+azureSignOptions: null
+signtoolOptions: null
 
 # Configurazione per generare app-update.yml anche per portable
 # Forza generazione file di update per tutti i target
