@@ -236,6 +236,44 @@
   @apply text-yellow-400;
 }
 
+/* ===== COLLABORATIVE AUDIO MIXING ===== */
+.streaming-status {
+  @apply mb-4 p-3 bg-gray-700/30 rounded-md;
+}
+
+.streaming-info {
+  @apply mt-2 text-sm text-green-400;
+}
+
+.mixing-controls {
+  @apply mb-4;
+}
+
+.start-mixing-button,
+.stop-mixing-button {
+  @apply flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors;
+}
+
+.start-mixing-button {
+  @apply bg-green-600 hover:bg-green-700 text-white;
+}
+
+.start-mixing-button:disabled {
+  @apply bg-gray-600 cursor-not-allowed opacity-50;
+}
+
+.stop-mixing-button {
+  @apply bg-red-600 hover:bg-red-700 text-white;
+}
+
+.mixing-instructions {
+  @apply mt-4 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg;
+}
+
+.mixing-instructions h6 {
+  @apply text-sm font-semibold text-blue-400 mb-2;
+}
+
 /* ===== HOST MODE ===== */
 .ip-info {
   @apply flex items-center justify-between p-2 bg-gray-700/30 rounded-md;

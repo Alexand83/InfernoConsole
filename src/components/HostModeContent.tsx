@@ -4,12 +4,16 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { Server, Users, Mic, MicOff, Play, Square, Copy, Share2, Wifi, WifiOff, CheckCircle, AlertCircle } from 'lucide-react'
+import { Server, Users, Mic, MicOff, Play, Square, Copy, Share2, Wifi, WifiOff, CheckCircle, AlertCircle, Volume2 } from 'lucide-react'
 import { useCollaborativeMode } from '../contexts/CollaborativeModeContext'
+import { useStreaming } from '../contexts/StreamingContext'
+import { useCollaborativeAudio } from '../hooks/useCollaborativeAudio'
 import { testSTUNConnectivity, detectBestConnectionType } from '../config/webrtc.config'
 
 const HostModeContent: React.FC = () => {
   const { state, actions } = useCollaborativeMode()
+  const { state: streamingState } = useStreaming()
+  const { state: audioState, actions: audioActions } = useCollaborativeAudio()
   const [localMicVolume, setLocalMicVolume] = useState(80)
   const [remoteVoicesVolume, setRemoteVoicesVolume] = useState(80)
   const [stunStatus, setStunStatus] = useState<'checking' | 'connected' | 'failed' | 'offline'>('checking')
@@ -328,44 +332,154 @@ const HostModeContent: React.FC = () => {
         )}
       </div>
 
-      {/* Audio Controls */}
+      {/* Collaborative Audio Mixing */}
       <div className="audio-controls-section">
         <div className="controls-header">
-          <h5>🎛️ Controlli Audio</h5>
+          <Volume2 className="w-5 h-5 text-green-400" />
+          <h5>🎛️ Mixing Audio Collaborativo</h5>
         </div>
         
-        <div className="volume-controls">
-          <div className="volume-control">
-            <label>
-              <Mic className="w-4 h-4" />
-              Microfono Locale (TU)
-            </label>
-            <div className="volume-slider">
-              <input 
-                type="range" 
-                min="0" 
-                max="100" 
-                value={localMicVolume}
-                onChange={(e) => setLocalMicVolume(parseInt(e.target.value))}
-              />
-              <span>{localMicVolume}%</span>
-            </div>
+        {/* Streaming Status */}
+        <div className="streaming-status">
+          <div className={`status-indicator ${streamingState.isStreaming ? 'active' : 'inactive'}`}>
+            <div className="status-dot"></div>
+            <span>
+              {streamingState.isStreaming ? '📡 Live Streaming Attivo' : '📡 Live Streaming Inattivo'}
+            </span>
           </div>
-          
-          <div className="volume-control">
-            <label>
-              <Users className="w-4 h-4" />
-              Voci Remote (DJ 2)
-            </label>
-            <div className="volume-slider">
-              <input 
-                type="range" 
-                min="0" 
-                max="100" 
-                value={remoteVoicesVolume}
-                onChange={(e) => setRemoteVoicesVolume(parseInt(e.target.value))}
-              />
-              <span>{remoteVoicesVolume}%</span>
+          {streamingState.isStreaming && (
+            <div className="streaming-info">
+              <span>🎵 Musica + Microfoni Mixati → Live Stream</span>
+            </div>
+          )}
+        </div>
+
+        {/* Mixing Controls */}
+        <div className="mixing-controls">
+          {!audioState.isMixing ? (
+            <button 
+              onClick={audioActions.startMixing}
+              className="start-mixing-button"
+              disabled={!state.localMicrophone || state.connectedDJs.length === 0}
+            >
+              <Volume2 className="w-4 h-4" />
+              Avvia Mixing Audio
+            </button>
+          ) : (
+            <button 
+              onClick={audioActions.stopMixing}
+              className="stop-mixing-button"
+            >
+              <Square className="w-4 h-4" />
+              Ferma Mixing Audio
+            </button>
+          )}
+        </div>
+
+        {/* Volume Controls */}
+        {audioState.isMixing && (
+          <div className="volume-controls">
+            <div className="volume-control">
+              <label>
+                <Mic className="w-4 h-4" />
+                Microfono Locale (TU)
+              </label>
+              <div className="volume-slider">
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="100" 
+                  value={audioState.localMicVolume}
+                  onChange={(e) => audioActions.setLocalMicVolume(parseInt(e.target.value))}
+                  title="Volume microfono locale"
+                />
+                <span>{audioState.localMicVolume}%</span>
+              </div>
+            </div>
+            
+            <div className="volume-control">
+              <label>
+                <Volume2 className="w-4 h-4" />
+                Volume Master
+              </label>
+              <div className="volume-slider">
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="100" 
+                  value={audioState.masterVolume}
+                  onChange={(e) => audioActions.setMasterVolume(parseInt(e.target.value))}
+                  title="Volume master"
+                />
+                <span>{audioState.masterVolume}%</span>
+              </div>
+            </div>
+
+            {/* Remote DJ Volumes */}
+            {state.connectedDJs.map(dj => (
+              <div key={dj.id} className="volume-control">
+                <label>
+                  <Users className="w-4 h-4" />
+                  {dj.name} (DJ Remoto)
+                </label>
+                <div className="volume-slider">
+                  <input 
+                    type="range" 
+                    min="0" 
+                    max="100" 
+                    value={audioState.remoteMicVolumes.get(dj.id) || 80}
+                    onChange={(e) => audioActions.setRemoteMicVolume(dj.id, parseInt(e.target.value))}
+                    disabled={!dj.microphone}
+                    title={`Volume microfono ${dj.name}`}
+                  />
+                  <span>{audioState.remoteMicVolumes.get(dj.id) || 80}%</span>
+                </div>
+                <button 
+                  className={`mute-button ${dj.microphone ? 'active' : 'inactive'}`}
+                  disabled={!dj.microphone}
+                >
+                  {dj.microphone ? '🎤' : '🔇'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Error Display */}
+        {audioState.error && (
+          <div className="error-message" onClick={audioActions.clearError}>
+            <AlertCircle className="w-4 h-4" />
+            {audioState.error}
+          </div>
+        )}
+
+        {/* Instructions */}
+        <div className="mixing-instructions">
+          <h6>📋 Come funziona:</h6>
+          <div className="instruction-list">
+            <div className="instruction-item">
+              <span className="step-number">1</span>
+              <span>Assicurati di essere in Live Streaming</span>
+            </div>
+            <div className="instruction-item">
+              <span className="step-number">2</span>
+              <span>Attiva il tuo microfono</span>
+            </div>
+            <div className="instruction-item">
+              <span className="step-number">3</span>
+              <span>Fai connettere il DJ collaboratore</span>
+            </div>
+            <div className="instruction-item">
+              <span className="step-number">4</span>
+              <span>Clicca "Avvia Mixing Audio"</span>
+            </div>
+            <div className="instruction-item">
+              <span className="step-number">5</span>
+              <span>Regola i volumi individuali</span>
+            </div>
+            <div className="instruction-item">
+              <span className="step-number">6</span>
+              <span>Il mix va automaticamente in Live Stream!</span>
             </div>
           </div>
         </div>
