@@ -11,7 +11,6 @@ import { testSTUNConnectivity } from '../config/webrtc.config'
 const ClientModeContent: React.FC = () => {
   const { state, actions } = useCollaborativeMode()
   const [sessionCode, setSessionCode] = useState('')
-  const [connectionMode, setConnectionMode] = useState<'simple' | 'advanced'>('simple')
   const [stunStatus, setStunStatus] = useState<'checking' | 'connected' | 'failed' | 'offline'>('checking')
 
   // Testa connettività STUN all'avvio
@@ -37,10 +36,8 @@ const ClientModeContent: React.FC = () => {
     }
 
     try {
-      // Per ora usiamo un URL di default, in futuro potremmo implementare
-      // un sistema di discovery automatico basato sul codice sessione
-      const defaultServerUrl = 'ws://192.168.1.100:8080' // IP di esempio
-      await actions.connectToServer(defaultServerUrl, sessionCode)
+      // Auto-discovery del server basato sul codice sessione
+      await actions.connectToServer(sessionCode)
     } catch (error) {
       console.error('Errore connessione:', error)
     }
@@ -114,75 +111,26 @@ const ClientModeContent: React.FC = () => {
           <h4>🔗 Connessione al Server</h4>
         </div>
         
-        {/* Mode Selector */}
-        <div className="connection-mode-selector">
-          <button 
-            className={`mode-button ${connectionMode === 'simple' ? 'active' : ''}`}
-            onClick={() => setConnectionMode('simple')}
-          >
-            🚀 Connessione Semplice
-          </button>
-          <button 
-            className={`mode-button ${connectionMode === 'advanced' ? 'active' : ''}`}
-            onClick={() => setConnectionMode('advanced')}
-          >
-            ⚙️ Connessione Avanzata
-          </button>
-        </div>
-        
         <div className="connection-form">
-          {connectionMode === 'simple' ? (
-            <div className="simple-connection">
-              <div className="connection-info">
-                <h5>🎯 Connessione Semplice</h5>
-                <p>Inserisci solo il codice sessione che ti ha fornito il DJ Titolare</p>
-              </div>
-              
-              <div className="input-group">
-                <label htmlFor="session-code-simple">Codice Sessione:</label>
-                <input 
-                  id="session-code-simple"
-                  type="text" 
-                  value={sessionCode}
-                  onChange={(e) => setSessionCode(e.target.value.toUpperCase())}
-                  placeholder="Es: ABC123"
-                  disabled={state.serverStatus === 'connecting' || state.serverStatus === 'running'}
-                  maxLength={6}
-                />
-              </div>
+          <div className="simple-connection">
+            <div className="connection-info">
+              <h5>🎯 Connessione Semplice</h5>
+              <p>Inserisci solo il codice sessione che ti ha fornito il DJ Titolare</p>
             </div>
-          ) : (
-            <div className="advanced-connection">
-              <div className="connection-info">
-                <h5>⚙️ Connessione Avanzata</h5>
-                <p>Inserisci manualmente URL server e codice sessione</p>
-              </div>
-              
-              <div className="input-group">
-                <label htmlFor="server-url-advanced">URL Server:</label>
-                <input 
-                  id="server-url-advanced"
-                  type="text" 
-                  value="ws://192.168.1.100:8080"
-                  placeholder="ws://192.168.1.100:8080"
-                  disabled={true}
-                />
-              </div>
-              
-              <div className="input-group">
-                <label htmlFor="session-code-advanced">Codice Sessione:</label>
-                <input 
-                  id="session-code-advanced"
-                  type="text" 
-                  value={sessionCode}
-                  onChange={(e) => setSessionCode(e.target.value.toUpperCase())}
-                  placeholder="Es: ABC123"
-                  disabled={state.serverStatus === 'connecting' || state.serverStatus === 'running'}
-                  maxLength={6}
-                />
-              </div>
+            
+            <div className="input-group">
+              <label htmlFor="session-code">Codice Sessione:</label>
+              <input 
+                id="session-code"
+                type="text" 
+                value={sessionCode}
+                onChange={(e) => setSessionCode(e.target.value.toUpperCase())}
+                placeholder="Es: ABC123"
+                disabled={state.serverStatus === 'connecting' || state.serverStatus === 'running'}
+                maxLength={6}
+              />
             </div>
-          )}
+          </div>
           
           <div className="connection-actions">
             {state.serverStatus === 'stopped' ? (

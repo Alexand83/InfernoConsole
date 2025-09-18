@@ -382,7 +382,7 @@ export const StreamingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Avvia il timer se non è già attivo - OTTIMIZZATO: 5 secondi invece di 1
       interval = setInterval(() => {
         updateBroadcastDuration()
-      }, 5000) // ✅ PERFORMANCE: Ridotto da 1000ms a 5000ms
+      }, 1000) // ⚡ AGGIORNATO: Ripristinato a 1 secondo per precisione
     } else if (!state.isStreaming) {
       // Ferma il timer quando lo streaming si ferma
       stopBroadcastTimer()

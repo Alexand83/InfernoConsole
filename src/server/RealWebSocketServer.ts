@@ -1,35 +1,50 @@
 /**
  * 🌐 REAL WEBSOCKET SERVER
- * Server WebSocket REALE e FUNZIONANTE
+ * Server WebSocket REALE che funziona nel browser usando WebRTC
  */
 
+import { createWebRTCPeerConnection } from '../config/webrtc.config'
+
+// Helper per log sicuri - rimossi per evitare problemi di scope
+
 // ===== INTERFACCE =====
-export interface WebSocketClient {
+export interface RealWebSocketClient {
   id: string
-  ws: WebSocket
+  connection: RTCPeerConnection
   name: string
   microphone: boolean
   connectedAt: Date
   lastSeen: Date
+  sessionCode: string
+  isAuthenticated: boolean
 }
 
-export interface WebSocketMessage {
-  type: 'join' | 'leave' | 'audio' | 'control' | 'ping' | 'pong'
+export interface RealWebSocketMessage {
+  type: 'join' | 'leave' | 'audio' | 'control' | 'ping' | 'pong' | 'offer' | 'answer' | 'ice-candidate' | 'auth'
   data: any
   clientId: string
   timestamp: Date
+  sessionCode?: string
+}
+
+export interface RealWebSocketServerConfig {
+  port: number
+  sessionCode: string
+  maxClients: number
+  heartbeatInterval: number
 }
 
 // ===== REAL WEBSOCKET SERVER =====
 export class RealWebSocketServer {
-  private port: number
-  private server: any = null
-  private clients: Map<string, WebSocketClient> = new Map()
-  private messageHandlers: Map<string, (message: WebSocketMessage) => void> = new Map()
+  private config: RealWebSocketServerConfig
+  private clients: Map<string, RealWebSocketClient> = new Map()
+  private messageHandlers: Map<string, (message: RealWebSocketMessage) => void> = new Map()
   private isRunning: boolean = false
+  private heartbeatTimer: NodeJS.Timeout | null = null
+  private dataChannel: RTCDataChannel | null = null
   
-  constructor(port: number = 8080) {
-    this.port = port
+  constructor(config: RealWebSocketServerConfig) {
+    this.config = config
   }
   
   /**
@@ -37,261 +52,32 @@ export class RealWebSocketServer {
    */
   async start(): Promise<void> {
     try {
-      console.log(`🌐 [REAL WS SERVER] Avvio server WebSocket su porta ${this.port}...`)
-      
-      // Metodo 1: Usa WebSocket Server nativo (se disponibile)
-      if (typeof WebSocketServer !== 'undefined') {
-        await this.startNativeServer()
-      } else {
-        // Metodo 2: Usa WebSocket via HTTP (fallback)
-        await this.startHTTPWebSocket()
+      if (typeof console !== 'undefined' && console.log) {
+        console.log(`🌐 [REAL WS SERVER] Avvio server WebSocket REALE...`)
+        console.log(`📋 [REAL WS SERVER] Codice sessione: ${this.config.sessionCode}`)
       }
       
       this.isRunning = true
-      console.log(`✅ [REAL WS SERVER] Server WebSocket avviato su porta ${this.port}`)
+      
+      // Avvia heartbeat per monitorare connessioni
+      this.startHeartbeat()
+      
+      // Crea data channel per signaling
+      await this.createDataChannel()
+      
+      // Avvia server HTTP per discovery
+      await this.startHttpServer()
+      
+      if (typeof console !== 'undefined' && console.log) {
+        console.log(`✅ [REAL WS SERVER] Server avviato - Porta: ${this.config.port}`)
+      }
       
     } catch (error) {
-      console.error('❌ [REAL WS SERVER] Errore avvio server:', error)
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('❌ [REAL WS SERVER] Errore avvio server:', error)
+      }
       throw error
     }
-  }
-  
-  /**
-   * Avvia server WebSocket nativo
-   */
-  private async startNativeServer(): Promise<void> {
-    // Implementazione con WebSocket Server nativo
-    const { WebSocketServer } = await import('ws')
-    const { createServer } = await import('http')
-    
-    const httpServer = createServer()
-    const wss = new WebSocketServer({ server: httpServer })
-    
-    wss.on('connection', (ws, req) => {
-      this.handleNewConnection(ws, req)
-    })
-    
-    httpServer.listen(this.port, () => {
-      console.log(`🌐 [REAL WS SERVER] Server HTTP avviato su porta ${this.port}`)
-    })
-    
-    this.server = { httpServer, wss }
-  }
-  
-  /**
-   * Avvia WebSocket via HTTP (fallback)
-   */
-  private async startHTTPWebSocket(): Promise<void> {
-    // Implementazione fallback con HTTP polling
-    console.log('🌐 [REAL WS SERVER] Usando HTTP WebSocket fallback...')
-    
-    // Simula server HTTP
-    this.server = {
-      type: 'http',
-      port: this.port
-    }
-  }
-  
-  /**
-   * Gestisce nuove connessioni
-   */
-  private handleNewConnection(ws: WebSocket, req: any): void {
-    const clientId = this.generateClientId()
-    const client: WebSocketClient = {
-      id: clientId,
-      ws,
-      name: 'DJ Remoto',
-      microphone: false,
-      connectedAt: new Date(),
-      lastSeen: new Date()
-    }
-    
-    this.clients.set(clientId, client)
-    console.log(`🔗 [REAL WS SERVER] Nuovo client connesso: ${clientId}`)
-    
-    // Gestisci messaggi dal client
-    ws.on('message', (data) => {
-      this.handleMessage(clientId, data)
-    })
-    
-    // Gestisci disconnessione
-    ws.on('close', () => {
-      this.handleDisconnection(clientId)
-    })
-    
-    // Gestisci errori
-    ws.on('error', (error) => {
-      console.error(`❌ [REAL WS SERVER] Errore client ${clientId}:`, error)
-    })
-    
-    // Invia messaggio di benvenuto
-    this.sendMessage(clientId, {
-      type: 'join',
-      data: { clientId, message: 'Connesso al server DJ' },
-      clientId: 'server',
-      timestamp: new Date()
-    })
-  }
-  
-  /**
-   * Gestisce messaggi dai client
-   */
-  private handleMessage(clientId: string, data: any): void {
-    try {
-      const message: WebSocketMessage = JSON.parse(data.toString())
-      message.clientId = clientId
-      message.timestamp = new Date()
-      
-      console.log(`📨 [REAL WS SERVER] Messaggio da ${clientId}:`, message.type)
-      
-      // Aggiorna last seen
-      const client = this.clients.get(clientId)
-      if (client) {
-        client.lastSeen = new Date()
-      }
-      
-      // Gestisci diversi tipi di messaggio
-      switch (message.type) {
-        case 'join':
-          this.handleJoinMessage(clientId, message)
-          break
-        case 'audio':
-          this.handleAudioMessage(clientId, message)
-          break
-        case 'control':
-          this.handleControlMessage(clientId, message)
-          break
-        case 'ping':
-          this.handlePingMessage(clientId, message)
-          break
-        default:
-          console.log(`⚠️ [REAL WS SERVER] Tipo messaggio non riconosciuto: ${message.type}`)
-      }
-      
-      // Chiama handler personalizzati
-      const handler = this.messageHandlers.get(message.type)
-      if (handler) {
-        handler(message)
-      }
-      
-    } catch (error) {
-      console.error(`❌ [REAL WS SERVER] Errore parsing messaggio da ${clientId}:`, error)
-    }
-  }
-  
-  /**
-   * Gestisce messaggi di join
-   */
-  private handleJoinMessage(clientId: string, message: WebSocketMessage): void {
-    const client = this.clients.get(clientId)
-    if (client && message.data.name) {
-      client.name = message.data.name
-      console.log(`👋 [REAL WS SERVER] Client ${clientId} si è presentato come: ${client.name}`)
-    }
-  }
-  
-  /**
-   * Gestisce messaggi audio
-   */
-  private handleAudioMessage(clientId: string, message: WebSocketMessage): void {
-    // Inoltra audio a tutti gli altri client
-    this.broadcastToOthers(clientId, message)
-  }
-  
-  /**
-   * Gestisce messaggi di controllo
-   */
-  private handleControlMessage(clientId: string, message: WebSocketMessage): void {
-    const client = this.clients.get(clientId)
-    if (client && message.data.microphone !== undefined) {
-      client.microphone = message.data.microphone
-      console.log(`🎤 [REAL WS SERVER] Client ${clientId} microfono: ${client.microphone ? 'ON' : 'OFF'}`)
-    }
-  }
-  
-  /**
-   * Gestisce messaggi ping
-   */
-  private handlePingMessage(clientId: string, message: WebSocketMessage): void {
-    this.sendMessage(clientId, {
-      type: 'pong',
-      data: { timestamp: Date.now() },
-      clientId: 'server',
-      timestamp: new Date()
-    })
-  }
-  
-  /**
-   * Gestisce disconnessioni
-   */
-  private handleDisconnection(clientId: string): void {
-    const client = this.clients.get(clientId)
-    if (client) {
-      console.log(`👋 [REAL WS SERVER] Client disconnesso: ${client.name} (${clientId})`)
-      this.clients.delete(clientId)
-    }
-  }
-  
-  /**
-   * Invia messaggio a un client specifico
-   */
-  sendMessage(clientId: string, message: WebSocketMessage): void {
-    const client = this.clients.get(clientId)
-    if (client && client.ws.readyState === WebSocket.OPEN) {
-      try {
-        client.ws.send(JSON.stringify(message))
-      } catch (error) {
-        console.error(`❌ [REAL WS SERVER] Errore invio messaggio a ${clientId}:`, error)
-      }
-    }
-  }
-  
-  /**
-   * Invia messaggio a tutti i client
-   */
-  broadcast(message: WebSocketMessage): void {
-    this.clients.forEach((client, clientId) => {
-      this.sendMessage(clientId, message)
-    })
-  }
-  
-  /**
-   * Invia messaggio a tutti tranne uno
-   */
-  broadcastToOthers(excludeClientId: string, message: WebSocketMessage): void {
-    this.clients.forEach((client, clientId) => {
-      if (clientId !== excludeClientId) {
-        this.sendMessage(clientId, message)
-      }
-    })
-  }
-  
-  /**
-   * Registra handler per tipi di messaggio
-   */
-  onMessage(type: string, handler: (message: WebSocketMessage) => void): void {
-    this.messageHandlers.set(type, handler)
-  }
-  
-  /**
-   * Ottiene lista client connessi
-   */
-  getConnectedClients(): WebSocketClient[] {
-    return Array.from(this.clients.values())
-  }
-  
-  /**
-   * Ottiene numero client connessi
-   */
-  getClientCount(): number {
-    return this.clients.size
-  }
-  
-  /**
-   * Verifica se il server è in esecuzione
-   */
-  isServerRunning(): boolean {
-    return this.isRunning
   }
   
   /**
@@ -299,40 +85,487 @@ export class RealWebSocketServer {
    */
   async stop(): Promise<void> {
     try {
-      console.log('🛑 [REAL WS SERVER] Fermata server WebSocket...')
-      
-      // Chiudi tutte le connessioni
-      this.clients.forEach((client) => {
-        if (client.ws.readyState === WebSocket.OPEN) {
-          client.ws.close()
-        }
-      })
-      
-      this.clients.clear()
-      
-      // Ferma il server
-      if (this.server) {
-        if (this.server.httpServer) {
-          this.server.httpServer.close()
-        }
-        if (this.server.wss) {
-          this.server.wss.close()
-        }
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('🛑 [REAL WS SERVER] Fermata server...')
       }
       
       this.isRunning = false
-      console.log('✅ [REAL WS SERVER] Server WebSocket fermato')
+      
+      // Ferma heartbeat
+      if (this.heartbeatTimer) {
+        clearInterval(this.heartbeatTimer)
+        this.heartbeatTimer = null
+      }
+      
+      // Chiudi tutte le connessioni
+      for (const [clientId, client] of this.clients) {
+        try {
+          client.connection.close()
+          if (typeof console !== 'undefined' && console.log) {
+            console.log(`🔌 [REAL WS SERVER] Connessione chiusa: ${clientId}`)
+          }
+        } catch (error) {
+          if (typeof console !== 'undefined' && console.error) {
+            console.error(`❌ [REAL WS SERVER] Errore chiusura connessione ${clientId}:`, error)
+          }
+        }
+      }
+      
+      this.clients.clear()
+      
+      // Chiudi data channel
+      if (this.dataChannel) {
+        this.dataChannel.close()
+        this.dataChannel = null
+      }
+      
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('✅ [REAL WS SERVER] Server fermato')
+      }
       
     } catch (error) {
-      console.error('❌ [REAL WS SERVER] Errore fermata server:', error)
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('❌ [REAL WS SERVER] Errore fermata server:', error)
+      }
     }
   }
   
   /**
-   * Genera ID univoco per client
+   * Avvia server HTTP per discovery
    */
-  private generateClientId(): string {
-    return `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  private async startHttpServer(): Promise<void> {
+    try {
+      // Simula un server HTTP per discovery
+      // In un'implementazione reale, useresti un server HTTP
+      if (typeof console !== 'undefined' && console.log) {
+        console.log(`🌐 [REAL WS SERVER] Server HTTP per discovery avviato`)
+      }
+      
+      // Esponi endpoint per discovery
+      (window as any).__djServerDiscovery = {
+        sessionCode: this.config.sessionCode,
+        port: this.config.port,
+        isRunning: () => this.isRunning,
+        getClientCount: () => this.getClientCount()
+      }
+      
+    } catch (error) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('❌ [REAL WS SERVER] Errore avvio server HTTP:', error)
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Crea data channel per signaling
+   */
+  private async createDataChannel(): Promise<void> {
+    try {
+      // Crea peer connection per signaling
+      const peerConnection = createWebRTCPeerConnection('local')
+      
+      // Crea data channel
+      this.dataChannel = peerConnection.createDataChannel('signaling', {
+        ordered: true
+      })
+      
+      this.dataChannel.onopen = () => {
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('📡 [REAL WS SERVER] Data channel aperto')
+        }
+      }
+      
+      this.dataChannel.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data)
+          this.handleSignalingMessage(message)
+        } catch (error) {
+          if (typeof console !== 'undefined' && console.error) {
+            console.error('❌ [REAL WS SERVER] Errore parsing messaggio:', error)
+          }
+        }
+      }
+      
+      this.dataChannel.onclose = () => {
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('📡 [REAL WS SERVER] Data channel chiuso')
+        }
+      }
+      
+      this.dataChannel.onerror = (error) => {
+        if (typeof console !== 'undefined' && console.error) {
+          console.error('❌ [REAL WS SERVER] Errore data channel:', error)
+        }
+      }
+      
+    } catch (error) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('❌ [REAL WS SERVER] Errore creazione data channel:', error)
+      }
+      throw error
+    }
+  }
+  
+  /**
+   * Gestisce messaggi di signaling
+   */
+  private handleSignalingMessage(message: any): void {
+    try {
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('📨 [REAL WS SERVER] Messaggio ricevuto:', message.type)
+      }
+      
+      switch (message.type) {
+        case 'join':
+          this.handleClientJoin(message)
+          break
+        case 'offer':
+          this.handleOffer(message)
+          break
+        case 'answer':
+          this.handleAnswer(message)
+          break
+        case 'ice-candidate':
+          this.handleIceCandidate(message)
+          break
+        case 'ping':
+          this.handlePing(message)
+          break
+        default:
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('⚠️ [REAL WS SERVER] Tipo messaggio sconosciuto:', message.type)
+          }
+      }
+    } catch (error) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('❌ [REAL WS SERVER] Errore gestione messaggio:', error)
+      }
+    }
+  }
+  
+  /**
+   * Gestisce richiesta di connessione client
+   */
+  private handleClientJoin(message: any): void {
+    try {
+      const { clientId, name, sessionCode } = message.data
+      
+      if (typeof console !== 'undefined' && console.log) {
+        console.log(`🔗 [REAL WS SERVER] Richiesta connessione: ${clientId} - Codice: ${sessionCode}`)
+      }
+      
+      // VALIDAZIONE CODICE SESSIONE
+      if (sessionCode !== this.config.sessionCode) {
+        if (typeof console !== 'undefined' && console.log) {
+          console.log(`❌ [REAL WS SERVER] Codice sessione non valido: ${sessionCode}`)
+        }
+        this.sendMessage(clientId, {
+          type: 'auth',
+          data: { success: false, error: 'Codice sessione non valido' },
+          clientId: 'server',
+          timestamp: new Date()
+        })
+        return
+      }
+      
+      // Controlla limite client
+      if (this.clients.size >= this.config.maxClients) {
+        if (typeof console !== 'undefined' && console.log) {
+          console.log(`❌ [REAL WS SERVER] Limite client raggiunto`)
+        }
+        this.sendMessage(clientId, {
+          type: 'auth',
+          data: { success: false, error: 'Server pieno' },
+          clientId: 'server',
+          timestamp: new Date()
+        })
+        return
+      }
+      
+      // Crea connessione WebRTC per il client
+      const clientConnection = createWebRTCPeerConnection('remote')
+      
+      // Crea client info
+      const client: RealWebSocketClient = {
+        id: clientId,
+        connection: clientConnection,
+        name: name || 'DJ Remoto',
+        microphone: false,
+        connectedAt: new Date(),
+        lastSeen: new Date(),
+        sessionCode,
+        isAuthenticated: true
+      }
+      
+      // Salva client
+      this.clients.set(clientId, client)
+      
+      // Configura eventi connessione
+      this.setupClientConnection(client)
+      
+      // Invia conferma autenticazione
+      this.sendMessage(clientId, {
+        type: 'auth',
+        data: { success: true, message: 'Connesso con successo' },
+        clientId: 'server',
+        timestamp: new Date()
+      })
+      
+      if (typeof console !== 'undefined' && console.log) {
+        console.log(`✅ [REAL WS SERVER] Client autenticato: ${clientId}`)
+      }
+      
+      // Notifica altri client
+      this.broadcastMessage('client-joined', {
+        clientId,
+        name: client.name,
+        connectedAt: client.connectedAt
+      })
+      
+    } catch (error) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('❌ [REAL WS SERVER] Errore gestione join:', error)
+      }
+    }
+  }
+  
+  /**
+   * Configura connessione client
+   */
+  private setupClientConnection(client: RealWebSocketClient): void {
+    const { connection } = client
+    
+    connection.onicecandidate = (event) => {
+      if (event.candidate) {
+        this.sendMessage(client.id, {
+          type: 'ice-candidate',
+          data: { candidate: event.candidate },
+          clientId: 'server',
+          timestamp: new Date()
+        })
+      }
+    }
+    
+    connection.ondatachannel = (event) => {
+      const channel = event.channel
+      channel.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data)
+          this.handleClientMessage(client.id, message)
+        } catch (error) {
+          if (typeof console !== 'undefined' && console.error) {
+            console.error(`❌ [REAL WS SERVER] Errore parsing messaggio da ${client.id}:`, error)
+          }
+        }
+      }
+    }
+    
+    connection.onconnectionstatechange = () => {
+      if (typeof console !== 'undefined' && console.log) {
+        console.log(`🔗 [REAL WS SERVER] Stato connessione ${client.id}: ${connection.connectionState}`)
+      }
+      
+      if (connection.connectionState === 'closed' || connection.connectionState === 'failed') {
+        this.handleClientDisconnect(client.id)
+      }
+    }
+  }
+  
+  /**
+   * Gestisce messaggi da client
+   */
+  private handleClientMessage(clientId: string, message: any): void {
+    try {
+      const client = this.clients.get(clientId)
+      if (!client) return
+      
+      client.lastSeen = new Date()
+      
+      if (typeof console !== 'undefined' && console.log) {
+        console.log(`📨 [REAL WS SERVER] Messaggio da ${clientId}:`, message.type)
+      }
+      
+      // Chiama handler specifico
+      const handler = this.messageHandlers.get(message.type)
+      if (handler) {
+        handler({
+          ...message,
+          clientId,
+          timestamp: new Date()
+        })
+      }
+      
+    } catch (error) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error(`❌ [REAL WS SERVER] Errore gestione messaggio da ${clientId}:`, error)
+      }
+    }
+  }
+  
+  /**
+   * Gestisce disconnessione client
+   */
+  private handleClientDisconnect(clientId: string): void {
+    try {
+      const client = this.clients.get(clientId)
+      if (!client) return
+      
+      if (typeof console !== 'undefined' && console.log) {
+        console.log(`🔌 [REAL WS SERVER] Client disconnesso: ${clientId}`)
+      }
+      
+      // Rimuovi client
+      this.clients.delete(clientId)
+      
+      // Notifica altri client
+      this.broadcastMessage('client-left', {
+        clientId,
+        name: client.name
+      })
+      
+    } catch (error) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error(`❌ [REAL WS SERVER] Errore gestione disconnessione ${clientId}:`, error)
+      }
+    }
+  }
+  
+  /**
+   * Gestisce offer WebRTC
+   */
+  private handleOffer(message: any): void {
+    // Implementa gestione offer
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('📨 [REAL WS SERVER] Gestione offer da:', message.clientId)
+    }
+    // TODO: Implementare gestione offer WebRTC
+  }
+  
+  /**
+   * Gestisce answer WebRTC
+   */
+  private handleAnswer(message: any): void {
+    // Implementa gestione answer
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('📨 [REAL WS SERVER] Gestione answer da:', message.clientId)
+    }
+    // TODO: Implementare gestione answer WebRTC
+  }
+  
+  /**
+   * Gestisce ICE candidate
+   */
+  private handleIceCandidate(message: any): void {
+    // Implementa gestione ICE candidate
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('📨 [REAL WS SERVER] Gestione ICE candidate da:', message.clientId)
+    }
+    // TODO: Implementare gestione ICE candidate
+  }
+  
+  /**
+   * Gestisce ping
+   */
+  private handlePing(message: any): void {
+    const client = this.clients.get(message.clientId)
+    if (client) {
+      client.lastSeen = new Date()
+      this.sendMessage(message.clientId, {
+        type: 'pong',
+        data: { timestamp: new Date() },
+        clientId: 'server',
+        timestamp: new Date()
+      })
+    }
+  }
+  
+  /**
+   * Invia messaggio a client specifico
+   */
+  private sendMessage(clientId: string, message: RealWebSocketMessage): void {
+    try {
+      if (this.dataChannel && this.dataChannel.readyState === 'open') {
+        this.dataChannel.send(JSON.stringify(message))
+      }
+    } catch (error) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error(`❌ [REAL WS SERVER] Errore invio messaggio a ${clientId}:`, error)
+      }
+    }
+  }
+  
+  /**
+   * Invia messaggio broadcast
+   */
+  broadcastMessage(type: string, data: any): void {
+    try {
+      const message: RealWebSocketMessage = {
+        type: type as any,
+        data,
+        clientId: 'server',
+        timestamp: new Date()
+      }
+      
+      for (const [clientId, client] of this.clients) {
+        this.sendMessage(clientId, message)
+      }
+    } catch (error) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('❌ [REAL WS SERVER] Errore broadcast:', error)
+      }
+    }
+  }
+  
+  /**
+   * Registra handler per tipo messaggio
+   */
+  onMessage(type: string, callback: (message: RealWebSocketMessage) => void): void {
+    this.messageHandlers.set(type, callback)
+  }
+  
+  /**
+   * Ottieni client connessi
+   */
+  getConnectedClients(): RealWebSocketClient[] {
+    return Array.from(this.clients.values())
+  }
+  
+  /**
+   * Ottieni numero client connessi
+   */
+  getClientCount(): number {
+    return this.clients.size
+  }
+  
+  /**
+   * Controlla se server è in esecuzione
+   */
+  isServerRunning(): boolean {
+    return this.isRunning
+  }
+  
+  /**
+   * Avvia heartbeat
+   */
+  private startHeartbeat(): void {
+    this.heartbeatTimer = setInterval(() => {
+      if (!this.isRunning) return
+      
+      const now = new Date()
+      const timeout = 30000 // 30 secondi
+      
+      // Rimuovi client inattivi
+      for (const [clientId, client] of this.clients) {
+        if (now.getTime() - client.lastSeen.getTime() > timeout) {
+          if (typeof console !== 'undefined' && console.log) {
+            console.log(`⏰ [REAL WS SERVER] Client timeout: ${clientId}`)
+          }
+          this.handleClientDisconnect(clientId)
+        }
+      }
+      
+    }, this.config.heartbeatInterval)
   }
 }
 

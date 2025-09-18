@@ -6,7 +6,10 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import { detectLocalIP, detectAllIPs, generateConnectionInfo, copyToClipboard, shareConnectionInfo, type ConnectionInfo } from '../utils/NetworkUtils'
 import { browserTunnelManager, type BrowserTunnelInfo } from '../utils/BrowserTunnelManager'
-import { BrowserWebSocketServer, type BrowserWebSocketClient } from '../server/BrowserWebSocketServer'
+import { RealWebSocketServer, type RealWebSocketClient } from '../server/RealWebSocketServer'
+import { RealWebSocketClient as RealClient, type RealWebSocketClientState } from '../server/RealWebSocketClient'
+import { QRCodeGenerator } from '../utils/QRCodeGenerator'
+import { RemoteIPDiscovery } from '../utils/RemoteIPDiscovery'
 
 // ===== INTERFACCE =====
 export interface DJInfo {
@@ -40,7 +43,7 @@ export interface CollaborativeModeActions {
   setMode: (mode: 'solo' | 'host' | 'client') => void
   startServer: () => Promise<void>
   stopServer: () => void
-  connectToServer: (serverUrl: string, sessionCode: string) => Promise<void>
+  connectToServer: (sessionCode: string) => Promise<void>
   disconnectFromServer: () => void
   startLocalMicrophone: () => Promise<void>
   stopLocalMicrophone: () => void
@@ -79,11 +82,91 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
   })
 
   // Refs per WebSocket e server
-  const wsServerRef = useRef<BrowserWebSocketServer | null>(null)
-  const wsClientRef = useRef<WebSocket | null>(null)
+  const wsServerRef = useRef<RealWebSocketServer | null>(null)
+  const wsClientRef = useRef<RealClient | null>(null)
   const localMicrophoneRef = useRef<MediaStream | null>(null)
 
   // ===== AZIONI =====
+
+  // Auto-discovery del server (completamente autonomo)
+  const discoverServer = useCallback(async (sessionCode: string): Promise<string | null> => {
+    try {
+      console.log(`🔍 [COLLABORATIVE] Ricerca server per codice: ${sessionCode}`)
+      
+      // 1. Controlla se c'è un server attivo nella stessa finestra
+      const globalDiscovery = (window as any).__djServerDiscovery
+      if (globalDiscovery && globalDiscovery.sessionCode === sessionCode && globalDiscovery.isRunning()) {
+        const url = `http://localhost:${globalDiscovery.port}`
+        console.log(`✅ [COLLABORATIVE] Server trovato localmente: ${url}`)
+        return url
+      }
+      
+      // 2. Prova connessioni locali
+      const commonPorts = [8080, 8081, 8082, 3000, 3001, 5000, 5001]
+      const commonHosts = ['localhost', '127.0.0.1']
+      
+      for (const host of commonHosts) {
+        for (const port of commonPorts) {
+          const url = `http://${host}:${port}`
+          try {
+            console.log(`🔍 [COLLABORATIVE] Provo locale: ${url}`)
+            
+            const response = await fetch(`${url}/api/session/${sessionCode}`, {
+              method: 'GET',
+              timeout: 3000
+            })
+            
+            if (response.ok) {
+              console.log(`✅ [COLLABORATIVE] Server locale trovato: ${url}`)
+              return url
+            }
+          } catch (error) {
+            continue
+          }
+        }
+      }
+      
+      // 3. Prova discovery automatico remoto
+      console.log(`🌍 [COLLABORATIVE] Ricerca server remoto automatica...`)
+      try {
+        const discoveryService = RemoteIPDiscovery.getInstance()
+        const remoteResult = await discoveryService.findServer(sessionCode)
+        
+        if (remoteResult.success && remoteResult.server) {
+          const server = remoteResult.server
+          const serverUrl = `http://${server.ip}:${server.port}`
+          
+          console.log(`✅ [COLLABORATIVE] Server remoto trovato: ${serverUrl}`)
+          
+          // Prova a connettersi al server remoto
+          try {
+            const testResponse = await fetch(`${serverUrl}/api/session/${sessionCode}`, {
+              method: 'GET',
+              timeout: 5000
+            })
+            
+            if (testResponse.ok) {
+              console.log(`✅ [COLLABORATIVE] Connessione remota verificata: ${serverUrl}`)
+              return serverUrl
+            }
+          } catch (error) {
+            console.warn(`⚠️ [COLLABORATIVE] Server remoto non raggiungibile: ${error}`)
+          }
+        }
+        
+      } catch (error) {
+        console.warn(`⚠️ [COLLABORATIVE] Errore discovery remoto:`, error)
+      }
+      
+      console.log(`❌ [COLLABORATIVE] Server non trovato per codice: ${sessionCode}`)
+      console.log(`💡 [COLLABORATIVE] Suggerimento: Assicurati che il server sia online e accessibile`)
+      return null
+      
+    } catch (error) {
+      console.error('❌ [COLLABORATIVE] Errore discovery server:', error)
+      return null
+    }
+  }, [])
 
   // Cambia modalità
   const setMode = useCallback((mode: 'solo' | 'host' | 'client') => {
@@ -182,12 +265,17 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
       
       // Avvia server WebSocket REALE
       try {
-        const wsServer = new BrowserWebSocketServer(state.serverPort)
+        const wsServer = new RealWebSocketServer({
+          port: state.serverPort,
+          sessionCode,
+          maxClients: 10,
+          heartbeatInterval: 5000
+        })
         await wsServer.start()
         wsServerRef.current = wsServer
         
         // Gestisci connessioni client
-        wsServer.onMessage('join', (message) => {
+        wsServer.onMessage('client-joined', (message) => {
           console.log(`👋 [COLLABORATIVE] Client connesso: ${message.data.name}`)
           // Aggiorna lista client connessi
           const connectedClients = wsServer.getConnectedClients()
@@ -202,7 +290,44 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
           setState(prev => ({ ...prev, connectedDJs: djInfos }))
         })
         
+        wsServer.onMessage('client-left', (message) => {
+          console.log(`👋 [COLLABORATIVE] Client disconnesso: ${message.data.name}`)
+          // Aggiorna lista client connessi
+          const connectedClients = wsServer.getConnectedClients()
+          const djInfos: DJInfo[] = connectedClients.map(client => ({
+            id: client.id,
+            name: client.name,
+            microphone: client.microphone,
+            quality: 'good' as const,
+            connectedAt: client.connectedAt,
+            lastSeen: client.lastSeen
+          }))
+          setState(prev => ({ ...prev, connectedDJs: djInfos }))
+        })
+        
         console.log(`🖥️ [COLLABORATIVE] Server WebSocket REALE avviato - Codice: ${sessionCode} - IP: ${localIP}`)
+        
+        // Registra server per discovery automatico remoto
+        try {
+          const discoveryService = RemoteIPDiscovery.getInstance()
+          await discoveryService.registerServer(sessionCode, localIP, state.serverPort)
+          console.log(`🌍 [COLLABORATIVE] Server registrato per discovery automatico`)
+          
+          // Avvia heartbeat per mantenere la registrazione attiva
+          const heartbeatInterval = setInterval(async () => {
+            await discoveryService.updateHeartbeat(sessionCode)
+          }, 30000) // Ogni 30 secondi
+          
+          // Salva l'interval per cleanup
+          ;(wsServer as any).heartbeatInterval = heartbeatInterval
+          
+        } catch (error) {
+          console.warn('⚠️ [COLLABORATIVE] Errore registrazione discovery:', error)
+          // Non bloccare l'avvio del server per questo errore
+        }
+        
+        console.log(`🚀 [COLLABORATIVE] Server autonomo avviato con discovery automatico`)
+        
       } catch (error) {
         console.error('❌ [COLLABORATIVE] Errore avvio server WebSocket:', error)
         setState(prev => ({ 
@@ -239,8 +364,26 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
     
     // Ferma server WebSocket REALE
     if (wsServerRef.current) {
+      // Ferma heartbeat
+      const heartbeatInterval = (wsServerRef.current as any).heartbeatInterval
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval)
+      }
+      
+      // Rimuovi registrazione dal discovery
+      if (state.sessionCode) {
+        try {
+          const discoveryService = RemoteIPDiscovery.getInstance()
+          await discoveryService.unregisterServer(state.sessionCode)
+          console.log('🌍 [COLLABORATIVE] Server rimosso da discovery')
+        } catch (error) {
+          console.warn('⚠️ [COLLABORATIVE] Errore rimozione discovery:', error)
+        }
+      }
+      
       await wsServerRef.current.stop()
       wsServerRef.current = null
+      console.log('🛑 [COLLABORATIVE] Server autonomo fermato')
     }
     
     setState(prev => ({ 
@@ -252,26 +395,55 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
     }))
   }, [state.tunnelInfo])
 
-  // Connetti a server (modalità client)
-  const connectToServer = useCallback(async (serverUrl: string, sessionCode: string) => {
+  // Connetti a server (modalità client) - Solo con codice sessione
+  const connectToServer = useCallback(async (sessionCode: string) => {
     try {
-      console.log(`🔗 [COLLABORATIVE] Connessione a server: ${serverUrl}`)
+      console.log(`🔗 [COLLABORATIVE] Connessione con codice: ${sessionCode}`)
       setState(prev => ({ 
         ...prev, 
         serverStatus: 'connecting',
-        serverUrl,
         sessionCode,
         errorMessage: null
       }))
       
-      // Simula connessione (per ora)
-      // TODO: Implementare connessione WebSocket reale
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Auto-discovery del server
+      const serverUrl = await discoverServer(sessionCode)
+      if (!serverUrl) {
+        throw new Error('Server non trovato. Verifica che il DJ titolare sia online e che il codice sia corretto.')
+      }
       
-      setState(prev => ({ 
-        ...prev, 
-        serverStatus: 'running'
-      }))
+      console.log(`🌐 [COLLABORATIVE] Server trovato: ${serverUrl}`)
+      
+      // Crea client WebSocket REALE
+      const wsClient = new RealClient({
+        serverUrl,
+        sessionCode,
+        clientName: 'DJ Collaboratore',
+        heartbeatInterval: 5000
+      })
+      
+      // Configura eventi client
+      wsClient.onStateChange((clientState) => {
+        console.log('🔗 [COLLABORATIVE] Stato client:', clientState)
+        
+        if (clientState.connectionState === 'connected' && clientState.isAuthenticated) {
+          setState(prev => ({ 
+            ...prev, 
+            serverStatus: 'running',
+            serverUrl
+          }))
+        } else if (clientState.connectionState === 'failed') {
+          setState(prev => ({ 
+            ...prev, 
+            serverStatus: 'error',
+            errorMessage: clientState.error || 'Errore connessione'
+          }))
+        }
+      })
+      
+      // Connetti al server
+      await wsClient.connect()
+      wsClientRef.current = wsClient
       
       console.log('✅ [COLLABORATIVE] Connesso al server')
       
@@ -286,11 +458,11 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
   }, [])
 
   // Disconnetti da server
-  const disconnectFromServer = useCallback(() => {
+  const disconnectFromServer = useCallback(async () => {
     console.log('🔌 [COLLABORATIVE] Disconnessione da server...')
     
     if (wsClientRef.current) {
-      wsClientRef.current.close()
+      await wsClientRef.current.disconnect()
       wsClientRef.current = null
     }
     
@@ -354,19 +526,36 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
 
   // Copia informazioni connessione
   const copyConnectionInfo = useCallback(async (): Promise<boolean> => {
-    if (!state.connectionInfo) {
-      console.error('❌ [COLLABORATIVE] Nessuna informazione connessione da copiare')
+    if (!state.sessionCode) {
+      console.error('❌ [COLLABORATIVE] Nessun codice sessione da copiare')
       return false
     }
 
-    const textToCopy = `Sessione DJ Collaborativa
-Codice: ${state.connectionInfo.sessionCode}
-URL: ${state.connectionInfo.serverURL}
+    // Genera URL di connessione
+    let connectionURL: string
+    if (state.connectionType === 'tunnel' && state.tunnelInfo) {
+      connectionURL = state.tunnelInfo.publicUrl
+    } else if (state.publicIP) {
+      connectionURL = `http://${state.publicIP}:${state.serverPort}`
+    } else if (state.localIP) {
+      connectionURL = `http://${state.localIP}:${state.serverPort}`
+    } else {
+      connectionURL = 'URL non disponibile'
+    }
 
-${state.connectionInfo.instructions}`
+    // Genera dati QR code
+    const qrData = QRCodeGenerator.generateConnectionData(
+      state.sessionCode,
+      connectionURL,
+      state.publicIP || state.localIP || 'unknown',
+      state.serverPort
+    )
+
+    // Genera testo da copiare
+    const textToCopy = QRCodeGenerator.generateShareText(qrData)
 
     return await copyToClipboard(textToCopy)
-  }, [state.connectionInfo])
+  }, [state.sessionCode, state.connectionType, state.tunnelInfo, state.publicIP, state.localIP, state.serverPort])
 
   // Condividi informazioni connessione
   const shareConnectionInfoAction = useCallback(async (): Promise<boolean> => {
