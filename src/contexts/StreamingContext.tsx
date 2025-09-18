@@ -17,6 +17,8 @@ export interface StreamingState {
   silenceSecondsRemaining: number
   streamingManager: ContinuousStreamingManager | null
   listenerCount: number // ✅ NUOVO: Contatore ascoltatori
+  broadcastStartTime: Date | null // ✅ NUOVO: Timer di trasmissione
+  broadcastDuration: string // ✅ NUOVO: Durata formattata
 }
 
 type StreamingAction =
@@ -35,6 +37,8 @@ type StreamingAction =
   | { type: 'SET_SILENCE_SECONDS_REMAINING'; payload: number }
   | { type: 'SET_STREAMING_MANAGER'; payload: ContinuousStreamingManager | null }
   | { type: 'SET_LISTENER_COUNT'; payload: number } // ✅ NUOVO: Azione per contatore ascoltatori
+  | { type: 'SET_BROADCAST_START_TIME'; payload: Date | null } // ✅ NUOVO: Azione per timer di trasmissione
+  | { type: 'SET_BROADCAST_DURATION'; payload: string } // ✅ NUOVO: Azione per durata formattata
   | { type: 'RESTORE_STATE_FROM_MANAGER' }
 
 // ===== STATO INIZIALE =====
@@ -52,7 +56,9 @@ const initialState: StreamingState = {
   showSilenceWarning: false,
   silenceSecondsRemaining: 0,
   streamingManager: null,
-  listenerCount: 0 // ✅ NUOVO: Contatore ascoltatori iniziale
+  listenerCount: 0, // ✅ NUOVO: Contatore ascoltatori iniziale
+  broadcastStartTime: null, // ✅ NUOVO: Timer di trasmissione iniziale
+  broadcastDuration: '00:00:00' // ✅ NUOVO: Durata iniziale
 }
 
 // ===== REDUCER =====
@@ -107,6 +113,12 @@ function streamingReducer(state: StreamingState, action: StreamingAction): Strea
     case 'SET_LISTENER_COUNT':
       return { ...state, listenerCount: action.payload }
     
+    case 'SET_BROADCAST_START_TIME':
+      return { ...state, broadcastStartTime: action.payload }
+    
+    case 'SET_BROADCAST_DURATION':
+      return { ...state, broadcastDuration: action.payload }
+    
     case 'RESTORE_STATE_FROM_MANAGER':
       if (state.streamingManager) {
         // ✅ FIX: Usa metodi pubblici invece di proprietà private
@@ -136,6 +148,10 @@ const StreamingContext = createContext<{
   restoreStateFromManager: () => void
   // Nuovo metodo per verificare se i deck sono vuoti
   checkDecksEmpty: () => boolean
+  // ✅ NUOVO: Metodi per il timer di trasmissione
+  startBroadcastTimer: () => void
+  stopBroadcastTimer: () => void
+  updateBroadcastDuration: () => void
 } | undefined>(undefined)
 
 // ===== PROVIDER =====
@@ -195,6 +211,33 @@ export const StreamingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } catch (error) {
       console.error('❌ [STREAMING] Errore nel controllo deck vuoti:', error)
       return true // In caso di errore, considera i deck vuoti per sicurezza
+    }
+  }
+
+  // ✅ NUOVO: Metodi per il timer di trasmissione
+  const startBroadcastTimer = () => {
+    if (!state.broadcastStartTime) {
+      const startTime = new Date()
+      dispatch({ type: 'SET_BROADCAST_START_TIME', payload: startTime })
+      console.log('📡 [BROADCAST TIMER] Timer di trasmissione avviato')
+    }
+  }
+
+  const stopBroadcastTimer = () => {
+    dispatch({ type: 'SET_BROADCAST_START_TIME', payload: null })
+    dispatch({ type: 'SET_BROADCAST_DURATION', payload: '00:00:00' })
+    console.log('📡 [BROADCAST TIMER] Timer di trasmissione fermato')
+  }
+
+  const updateBroadcastDuration = () => {
+    if (state.broadcastStartTime) {
+      const now = new Date()
+      const diff = now.getTime() - state.broadcastStartTime.getTime()
+      const hours = Math.floor(diff / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+      const formattedTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+      dispatch({ type: 'SET_BROADCAST_DURATION', payload: formattedTime })
     }
   }
 
@@ -331,6 +374,49 @@ export const StreamingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [state.streamingManager])
 
+  // ✅ OTTIMIZZATO: Gestione automatica del timer di trasmissione (5s invece di 1s)
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null
+    
+    if (state.isStreaming && state.broadcastStartTime) {
+      // Avvia il timer se non è già attivo - OTTIMIZZATO: 5 secondi invece di 1
+      interval = setInterval(() => {
+        updateBroadcastDuration()
+      }, 5000) // ✅ PERFORMANCE: Ridotto da 1000ms a 5000ms
+    } else if (!state.isStreaming) {
+      // Ferma il timer quando lo streaming si ferma
+      stopBroadcastTimer()
+    }
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+    }
+  }, [state.isStreaming, state.broadcastStartTime])
+
+  // ✅ NUOVO: Avvia il timer quando inizia lo streaming
+  useEffect(() => {
+    if (state.isStreaming && !state.broadcastStartTime) {
+      startBroadcastTimer()
+    }
+  }, [state.isStreaming, state.broadcastStartTime])
+
+  // ✅ NUOVO: Reset del timer quando l'app si chiude
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (state.broadcastStartTime) {
+        console.log('📡 [BROADCAST TIMER] App in chiusura - Timer resettato')
+        stopBroadcastTimer()
+      }
+    }
+    
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [state.broadcastStartTime])
+
   return (
     <StreamingContext.Provider value={{
       state,
@@ -339,7 +425,10 @@ export const StreamingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       clearDebugMessages,
       updateErrorCount,
       restoreStateFromManager,
-      checkDecksEmpty
+      checkDecksEmpty,
+      startBroadcastTimer,
+      stopBroadcastTimer,
+      updateBroadcastDuration
     }}>
       {children}
     </StreamingContext.Provider>

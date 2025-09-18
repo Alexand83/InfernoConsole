@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useMemo, useCallback, memo } from '
 import { Mic, MicOff } from 'lucide-react'
 import { useAudio } from '../contexts/AudioContext'
 import { usePlaylist } from '../contexts/PlaylistContext'
+import { usePTT } from '../hooks/usePTT'
 import AudioDeck from './AudioDeck'
 import Crossfader from './Crossfader'
 import { localDatabase } from '../database/LocalDatabase'
@@ -253,11 +254,9 @@ const DJConsole = memo(() => {
     })()
   }, [autoAdvance])
 
-  // Push-to-talk handlers (keyboard) - restored functionality
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const key = e.code === 'Space' ? 'Space' : e.key
-      if (key !== 'KeyM' || pttActiveRef.current) return
+  // ✅ FIX: Usa il nuovo hook PTT che legge l'impostazione dalle settings
+  usePTT((active: boolean) => {
+    if (active && !pttActiveRef.current) {
       pttActiveRef.current = true
       console.log('🎤 PTT started (keyboard)')
       
@@ -294,11 +293,7 @@ const DJConsole = memo(() => {
       
       // Attiva ducking per lo streaming
       setStreamDucking(true)
-    }
-    
-    const onKeyUp = (e: KeyboardEvent) => {
-      const key = e.code === 'Space' ? 'Space' : e.key
-      if (key !== 'KeyM') return
+    } else if (!active && pttActiveRef.current) {
       pttActiveRef.current = false
       console.log('🎤 PTT stopped (keyboard)')
       
@@ -316,14 +311,7 @@ const DJConsole = memo(() => {
       // Disattiva ducking per lo streaming
       setStreamDucking(false)
     }
-    
-    window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keyup', onKeyUp)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('keyup', onKeyUp)
-    }
-  }, [audioState.leftDeck, audioState.rightDeck, setLeftLocalVolume, setRightLocalVolume, setStreamDucking, toggleMicrophone])
+  })
 
   // Gestisce il mount del componente - SOLO UNA VOLTA
   const hasMounted = useRef(false)

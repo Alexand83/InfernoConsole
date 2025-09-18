@@ -118,12 +118,54 @@ export class AudioMixer {
     try {
       if (!this.mixContext || !this.gainRefs.mixerGain) return
       
-      // Prova a ottenere il microfono
+      // ✅ FIX MICROFONO: Usa le impostazioni del microfono dalle settings
+      const { localDatabase } = await import('../../database/LocalDatabase')
+      const settings = await localDatabase.getSettings()
+      const micSettings = settings?.microphone || {
+        inputDevice: 'default',
+        sampleRate: 48000,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: false
+      }
+      
+      console.log('🎤 [AUDIO MIXER] Usando impostazioni microfono:', micSettings)
+      
+      // ✅ FIX: Seleziona dispositivo microfono specifico se configurato
+      let deviceId = undefined
+      if (micSettings.inputDevice && micSettings.inputDevice !== 'default') {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices()
+          const audioInputs = devices.filter(device => device.kind === 'audioinput')
+          
+          let selectedDevice = audioInputs.find(device => 
+            device.deviceId === micSettings.inputDevice
+          )
+          
+          if (!selectedDevice) {
+            selectedDevice = audioInputs.find(device => 
+              device.label === micSettings.inputDevice
+            )
+          }
+          
+          if (selectedDevice) {
+            deviceId = selectedDevice.deviceId
+            console.log('🎤 [AUDIO MIXER] ✅ Dispositivo microfono selezionato:', selectedDevice.label)
+          }
+        } catch (error) {
+          console.warn('⚠️ [AUDIO MIXER] Errore enumerazione dispositivi:', error)
+        }
+      }
+      
+      // Prova a ottenere il microfono con le impostazioni corrette
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
+          echoCancellation: micSettings.echoCancellation,
+          noiseSuppression: micSettings.noiseSuppression,
+          autoGainControl: micSettings.autoGainControl,
+          sampleRate: micSettings.sampleRate,
+          channelCount: 1,
+          ...(deviceId && { deviceId: { exact: deviceId } })
         }
       })
       

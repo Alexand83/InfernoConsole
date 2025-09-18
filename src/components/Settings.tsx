@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Settings as SettingsIcon, Volume2, Mic, Headphones, Monitor, Save, RotateCcw, Download, Upload, Globe, Shield, Database, Radio, Info, Eye, EyeOff } from 'lucide-react'
 import { localDatabase } from '../database/LocalDatabase'
 import { useSettings, AppSettings } from '../contexts/SettingsContext'
@@ -24,10 +24,195 @@ const Settings = () => {
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState(0)
+  const [isMicTestActive, setIsMicTestActive] = useState(false)
+  const [micTestLevel, setMicTestLevel] = useState(0)
+  const [isListeningForKey, setIsListeningForKey] = useState(false)
   
   // Configurazione aggiornamenti
   const updateUrl = updateConfig.updateUrl
   const currentVersion = updateConfig.currentVersion
+
+  // ✅ FIX: Funzioni per selezione tasto PTT
+  const startKeyListening = () => {
+    setIsListeningForKey(true)
+    console.log('🎹 [SETTINGS] In ascolto per nuovo tasto PTT...')
+  }
+
+  const stopKeyListening = () => {
+    setIsListeningForKey(false)
+    console.log('🎹 [SETTINGS] Interrotto ascolto tasto PTT')
+  }
+
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    if (!isListeningForKey) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    let keyName = event.key
+
+    // Mappa tasti speciali
+    const specialKeys: { [key: string]: string } = {
+      ' ': 'Space',
+      'Control': 'Ctrl',
+      'Alt': 'Alt',
+      'Shift': 'Shift',
+      'Meta': 'Cmd',
+      'Tab': 'Tab',
+      'Enter': 'Enter',
+      'Escape': 'Escape',
+      'Backspace': 'Backspace',
+      'Delete': 'Delete',
+      'ArrowUp': '↑',
+      'ArrowDown': '↓',
+      'ArrowLeft': '←',
+      'ArrowRight': '→',
+      'F1': 'F1',
+      'F2': 'F2',
+      'F3': 'F3',
+      'F4': 'F4',
+      'F5': 'F5',
+      'F6': 'F6',
+      'F7': 'F7',
+      'F8': 'F8',
+      'F9': 'F9',
+      'F10': 'F10',
+      'F11': 'F11',
+      'F12': 'F12'
+    }
+
+    // Usa il nome speciale se disponibile, altrimenti usa il tasto normale
+    keyName = specialKeys[keyName] || keyName
+
+    // Combina con modificatori se presenti
+    const modifiers = []
+    if (event.ctrlKey) modifiers.push('Ctrl')
+    if (event.altKey) modifiers.push('Alt')
+    if (event.shiftKey) modifiers.push('Shift')
+    if (event.metaKey) modifiers.push('Cmd')
+
+    const finalKeyName = modifiers.length > 0 ? `${modifiers.join('+')}+${keyName}` : keyName
+
+    console.log(`🎹 [SETTINGS] Tasto selezionato: ${finalKeyName}`)
+    
+    // Aggiorna l'impostazione direttamente
+    updateSetting('microphone', 'pushToTalkKey', finalKeyName)
+    
+    // Ferma l'ascolto
+    setIsListeningForKey(false)
+  }, [isListeningForKey, updateSetting])
+
+  // Listener per i tasti quando è in modalità ascolto
+  useEffect(() => {
+    if (isListeningForKey) {
+      document.addEventListener('keydown', handleKeyDown, true)
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown, true)
+      }
+    }
+  }, [isListeningForKey, handleKeyDown])
+
+  // ✅ FIX: Funzione per test visuale del microfono usando lo stream esistente
+  const startVisualMicrophoneTest = async (deviceId: string) => {
+    try {
+      setIsMicTestActive(true)
+      setMicTestLevel(0)
+      
+      console.log('🎤 [SETTINGS] Test microfono locale avviato per:', deviceId)
+      
+      // ✅ SEMPLICE: Crea sempre un stream temporaneo per il test
+      const testStream = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: { exact: deviceId } }
+      })
+      
+      const testAudioContext = new AudioContext()
+      const analyser = testAudioContext.createAnalyser()
+      const microphone = testAudioContext.createMediaStreamSource(testStream)
+      
+      microphone.connect(analyser)
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.8
+      
+      const bufferLength = analyser.frequencyBinCount
+      const dataArray = new Uint8Array(bufferLength)
+      
+      console.log('🎤 [SETTINGS] Test microfono configurato:', {
+        deviceId,
+        audioTracks: testStream.getAudioTracks().length,
+        readyState: testStream.getAudioTracks()[0]?.readyState,
+        enabled: testStream.getAudioTracks()[0]?.enabled
+      })
+      
+      const updateLevel = () => {
+        if (!(window as any).__micTestActive) return
+        
+        analyser.getByteFrequencyData(dataArray)
+        
+        // Calcola il livello audio
+        let sum = 0
+        for (let i = 0; i < bufferLength; i++) {
+          sum += dataArray[i]
+        }
+        const average = sum / bufferLength
+        const level = Math.round((average / 255) * 100)
+        
+        setMicTestLevel(level)
+        requestAnimationFrame(updateLevel)
+      }
+      
+      // Salva riferimenti per cleanup
+      ;(window as any).__micTestStream = testStream
+      ;(window as any).__micTestAudioContext = testAudioContext
+      ;(window as any).__micTestAnalyser = analyser
+      ;(window as any).__micTestActive = true
+      
+      // Avvia il loop di aggiornamento
+      updateLevel()
+      
+      // Auto-stop dopo 10 secondi
+      setTimeout(() => {
+        stopVisualMicrophoneTest()
+      }, 10000)
+      
+    } catch (error) {
+      console.error('❌ [SETTINGS] Errore test microfono:', error)
+      alert('Errore nel test del microfono: ' + error.message)
+      setIsMicTestActive(false)
+    }
+  }
+  
+  const stopVisualMicrophoneTest = () => {
+    try {
+      // Ferma il loop di aggiornamento
+      ;(window as any).__micTestActive = false
+      
+      setIsMicTestActive(false)
+      setMicTestLevel(0)
+      
+      // Cleanup: gestisce sia stream temporaneo che analyser esistente
+      if ((window as any).__micTestStream) {
+        // Stream temporaneo creato per il test
+        ;(window as any).__micTestStream.getTracks().forEach((track: MediaStreamTrack) => track.stop())
+        ;(window as any).__micTestStream = null
+      }
+      
+      if ((window as any).__micTestAudioContext) {
+        // AudioContext temporaneo creato per il test
+        ;(window as any).__micTestAudioContext.close()
+        ;(window as any).__micTestAudioContext = null
+      }
+      
+      if ((window as any).__micTestAnalyser) {
+        // Analyser connesso allo stream esistente - solo disconnetti
+        ;(window as any).__micTestAnalyser.disconnect()
+        ;(window as any).__micTestAnalyser = null
+      }
+      
+      console.log('🎤 [SETTINGS] Test visuale microfono fermato')
+    } catch (error) {
+      console.error('❌ [SETTINGS] Errore fermata test microfono:', error)
+    }
+  }
 
   // Carica informazioni di versione
   useEffect(() => {
@@ -301,11 +486,23 @@ const Settings = () => {
     }
   }
 
+  // ✅ DEBUG: Log quando le impostazioni microfono cambiano
+  useEffect(() => {
+    console.log('🎤 [SETTINGS] Impostazioni microfono aggiornate:', {
+      inputDevice: settings.microphone?.inputDevice,
+      echoCancellation: settings.microphone?.echoCancellation,
+      noiseSuppression: settings.microphone?.noiseSuppression,
+      autoGainControl: settings.microphone?.autoGainControl
+    })
+  }, [settings.microphone])
+
   // I settaggi si salvano automaticamente nel context
 
-  // Funzione per caricare i dispositivi microfono disponibili
+  // ✅ FIX MICROFONO: Funzione migliorata per caricare i dispositivi microfono disponibili
   const loadMicrophones = async () => {
     try {
+      console.log('🎤 [SETTINGS] Caricamento dispositivi microfono...')
+      
       // Richiedi permessi per enumerare i dispositivi
       await navigator.mediaDevices.getUserMedia({ audio: true })
         .then(stream => {
@@ -318,9 +515,64 @@ const Settings = () => {
 
       const devices = await navigator.mediaDevices.enumerateDevices()
       const microphones = devices.filter(device => device.kind === 'audioinput')
-      setAvailableMicrophones(microphones)
+      
+      console.log('🎤 [SETTINGS] Dispositivi microfono trovati:', microphones.map(mic => ({
+        deviceId: mic.deviceId,
+        label: mic.label,
+        groupId: mic.groupId
+      })))
+      
+      // ✅ FIX: Identifica il microfono "vero" vs dispositivi che catturano audio sistema
+      const filteredMicrophones = microphones.filter(device => {
+        const label = device.label.toLowerCase()
+        
+        // ✅ ESCLUDI dispositivi che potrebbero catturare audio sistema
+        const excludePatterns = [
+          'stereo mix',
+          'what u hear',
+          'wave out mix',
+          'speakers',
+          'headphones',
+          'output',
+          'playback',
+          'monitor',
+          'loopback',
+          'virtual',
+          'system',
+          'desktop',
+          'screen'
+        ]
+        
+        const shouldExclude = excludePatterns.some(pattern => label.includes(pattern))
+        
+        if (shouldExclude) {
+          console.log(`🎤 [SETTINGS] ESCLUSO: ${device.label} (potrebbe catturare audio sistema)`)
+          return false
+        }
+        
+        // ✅ PREFERISCI dispositivi con nomi chiari di microfono
+        const preferPatterns = [
+          'microphone',
+          'mic',
+          'input',
+          'capture',
+          'recording'
+        ]
+        
+        const isPreferred = preferPatterns.some(pattern => label.includes(pattern))
+        
+        if (isPreferred) {
+          console.log(`🎤 [SETTINGS] PREFERITO: ${device.label} (microfono dedicato)`)
+        }
+        
+        return true
+      })
+      
+      console.log('🎤 [SETTINGS] Microfoni filtrati:', filteredMicrophones.map(mic => mic.label))
+      setAvailableMicrophones(filteredMicrophones)
+      
     } catch (error) {
-      console.error('Error loading microphones:', error)
+      console.error('❌ [SETTINGS] Errore caricamento microfoni:', error)
       // Fallback a dispositivi di base
       setAvailableMicrophones([])
     }
@@ -499,7 +751,28 @@ const Settings = () => {
                     <label className="block text-sm font-medium text-dj-light/60 mb-2">{t('settings.outputDeviceLocal')}</label>
                     <select
                       value={settings.audio?.outputDevice || 'default'}
-                      onChange={(e) => handleSettingChange('audio', 'outputDevice', e.target.value)}
+                      onChange={(e) => {
+                        const newOutputDevice = e.target.value
+                        const currentOutputDevice = settings.audio?.outputDevice || 'default'
+                        
+                        console.log('🔊 [SETTINGS] Cambio output device selezionato:', { from: currentOutputDevice, to: newOutputDevice })
+                        
+                        // Aggiorna le impostazioni
+                        handleSettingChange('audio', 'outputDevice', newOutputDevice)
+                        
+                        // ✅ FIX OUTPUT: Emetti evento solo se il dispositivo è effettivamente cambiato
+                        if (newOutputDevice !== currentOutputDevice) {
+                          setTimeout(() => {
+                            const event = new CustomEvent('djconsole:output-settings-changed', {
+                              detail: { outputDevice: newOutputDevice }
+                            })
+                            window.dispatchEvent(event)
+                            console.log('🔊 [SETTINGS] Evento output-settings-changed emesso per cambio dispositivo')
+                          }, 100)
+                        } else {
+                          console.log('🔊 [SETTINGS] Nessun cambio dispositivo output, evento non emesso')
+                        }
+                      }}
                       className="dj-input w-full"
                     >
                       <option value="default">System Default</option>
@@ -535,8 +808,29 @@ const Settings = () => {
                 <div>
                   <label className="block text-sm font-medium text-dj-light/60 mb-2">{t('settings.inputDevice')}</label>
                   <select
-                                          value={settings.microphone?.inputDevice || 'default'}
-                    onChange={(e) => handleSettingChange('microphone', 'inputDevice', e.target.value)}
+                    value={settings.microphone?.inputDevice || 'default'}
+                    onChange={(e) => {
+                      const newDeviceId = e.target.value
+                      const currentDeviceId = settings.microphone?.inputDevice || 'default'
+                      
+                      console.log('🎤 [SETTINGS] Cambio microfono selezionato:', { from: currentDeviceId, to: newDeviceId })
+                      
+                      // Aggiorna le impostazioni
+                      handleSettingChange('microphone', 'inputDevice', newDeviceId)
+                      
+                      // ✅ FIX MICROFONO: Emetti evento solo se il dispositivo è effettivamente cambiato
+                      if (newDeviceId !== currentDeviceId) {
+                        setTimeout(() => {
+                          const event = new CustomEvent('djconsole:microphone-settings-changed', {
+                            detail: { inputDevice: newDeviceId }
+                          })
+                          window.dispatchEvent(event)
+                          console.log('🎤 [SETTINGS] Evento microfono-settings-changed emesso per cambio dispositivo')
+                        }, 100)
+                      } else {
+                        console.log('🎤 [SETTINGS] Nessun cambio dispositivo, evento non emesso')
+                      }
+                    }}
                     className="dj-input w-full"
                   >
                     <option value="default">Default Microphone</option>
@@ -546,13 +840,91 @@ const Settings = () => {
                       </option>
                     ))}
                   </select>
-                  <button 
-                    onClick={loadMicrophones}
-                    className="mt-2 text-xs text-dj-accent hover:text-dj-highlight transition-colors"
-                  >
-                    🔄 Aggiorna lista dispositivi
-                  </button>
+                  <div className="mt-2 flex gap-2">
+                    <button 
+                      onClick={loadMicrophones}
+                      className="text-xs text-dj-accent hover:text-dj-highlight transition-colors"
+                    >
+                      🔄 Aggiorna lista dispositivi
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const deviceId = settings.microphone?.inputDevice
+                          if (deviceId && deviceId !== 'default') {
+                            if (isMicTestActive) {
+                              stopVisualMicrophoneTest()
+                            } else {
+                              await startVisualMicrophoneTest(deviceId)
+                            }
+                          } else {
+                            alert('Seleziona un microfono specifico per il test')
+                          }
+                        } catch (error) {
+                          console.error('❌ [SETTINGS] Errore test microfono:', error)
+                          alert('Errore nel test del microfono: ' + error.message)
+                        }
+                      }}
+                      className={`text-xs transition-colors ${
+                        isMicTestActive 
+                          ? 'text-red-400 hover:text-red-300' 
+                          : 'text-dj-accent hover:text-dj-highlight'
+                      }`}
+                    >
+                      {isMicTestActive ? '🛑 Stop Test' : '🎤 Test Mic'}
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        try {
+                          console.log('🎤 [SETTINGS] 🔄 Aggiornamento lista dispositivi microfono...')
+                          await loadMicrophones()
+                          alert('Lista dispositivi microfono aggiornata! Controlla la console per i dettagli.')
+                        } catch (error) {
+                          console.error('Errore aggiornamento dispositivi:', error)
+                          alert('Errore durante l\'aggiornamento: ' + error.message)
+                        }
+                      }}
+                      className="text-xs text-dj-accent hover:text-dj-highlight transition-colors"
+                    >
+                      🔄 Aggiorna dispositivi
+                    </button>
+                  </div>
                 </div>
+
+                {/* ✅ FIX: Visualizzatore barre audio microfono */}
+                {isMicTestActive && (
+                  <div className="bg-dj-secondary rounded-lg p-4 mb-6 border border-dj-accent/20">
+                    <h3 className="text-lg font-medium text-white mb-3 flex items-center">
+                      <Mic className="w-5 h-5 mr-2" />
+                      Test Microfono Attivo
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="text-sm text-dj-light/80">
+                        Parla nel microfono per vedere il livello audio:
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="text-xs text-dj-light/60 w-12">Livello:</div>
+                        <div className="flex-1 bg-dj-dark rounded-full h-4 overflow-hidden">
+                          <div 
+                            className={`h-full transition-all duration-100 ${
+                              micTestLevel > 80 ? 'bg-red-500' :
+                              micTestLevel > 60 ? 'bg-yellow-500' :
+                              micTestLevel > 30 ? 'bg-green-500' :
+                              'bg-dj-accent'
+                            }`}
+                            style={{ width: `${micTestLevel}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-dj-light/60 w-8">
+                          {micTestLevel}%
+                        </div>
+                      </div>
+                      <div className="text-xs text-dj-light/60">
+                        {micTestLevel > 0 ? '✅ Microfono funzionante!' : '🔇 Nessun segnale rilevato'}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-6">
                   <div>
@@ -615,13 +987,32 @@ const Settings = () => {
                   <div className="grid grid-cols-2 gap-6 pt-2">
                     <div>
                       <label className="block text-sm font-medium text-dj-light/60 mb-2">Push-to-talk key</label>
-                      <input
-                        type="text"
-                        value={settings.microphone.pushToTalkKey}
-                        onChange={(e) => handleSettingChange('microphone', 'pushToTalkKey', e.target.value)}
-                        className="dj-input w-full"
-                        placeholder="Space"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={settings.microphone.pushToTalkKey}
+                          onChange={(e) => handleSettingChange('microphone', 'pushToTalkKey', e.target.value)}
+                          className="dj-input flex-1"
+                          placeholder="Space"
+                          readOnly={isListeningForKey}
+                        />
+                        <button
+                          type="button"
+                          onClick={isListeningForKey ? stopKeyListening : startKeyListening}
+                          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                            isListeningForKey 
+                              ? 'bg-red-600 hover:bg-red-700 text-white' 
+                              : 'bg-dj-accent hover:bg-dj-accent/80 text-white'
+                          }`}
+                        >
+                          {isListeningForKey ? 'Annulla' : 'Seleziona'}
+                        </button>
+                      </div>
+                      {isListeningForKey && (
+                        <p className="text-sm text-dj-accent mt-2">
+                          🎹 Premi il tasto che vuoi usare per PTT...
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

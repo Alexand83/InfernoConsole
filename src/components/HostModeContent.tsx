@@ -1,0 +1,453 @@
+/**
+ * 🖥️ HOST MODE CONTENT
+ * Contenuto per la modalità DJ Titolare (Server)
+ */
+
+import React, { useState, useEffect } from 'react'
+import { Server, Users, Mic, MicOff, Play, Square, Copy, Share2, Wifi, WifiOff, CheckCircle, AlertCircle } from 'lucide-react'
+import { useCollaborativeMode } from '../contexts/CollaborativeModeContext'
+import { testSTUNConnectivity, detectBestConnectionType } from '../config/webrtc.config'
+
+const HostModeContent: React.FC = () => {
+  const { state, actions } = useCollaborativeMode()
+  const [localMicVolume, setLocalMicVolume] = useState(80)
+  const [remoteVoicesVolume, setRemoteVoicesVolume] = useState(80)
+  const [stunStatus, setStunStatus] = useState<'checking' | 'connected' | 'failed' | 'offline'>('checking')
+  const [connectionType, setConnectionType] = useState<'local' | 'remote' | 'offline'>('local')
+
+  // Testa connettività STUN all'avvio
+  useEffect(() => {
+    const testConnection = async () => {
+      setStunStatus('checking')
+      try {
+        const isConnected = await testSTUNConnectivity()
+        if (isConnected) {
+          setStunStatus('connected')
+          const bestType = await detectBestConnectionType()
+          setConnectionType(bestType)
+        } else {
+          setStunStatus('offline')
+          setConnectionType('offline')
+        }
+      } catch (error) {
+        console.error('Errore test connessione:', error)
+        setStunStatus('offline')
+        setConnectionType('offline')
+      }
+    }
+    
+    testConnection()
+  }, [])
+
+  const handleStartServer = async () => {
+    try {
+      await actions.startServer()
+    } catch (error) {
+      console.error('Errore avvio server:', error)
+    }
+  }
+
+  const handleStopServer = () => {
+    actions.stopServer()
+  }
+
+  const handleStartMicrophone = async () => {
+    try {
+      await actions.startLocalMicrophone()
+    } catch (error) {
+      console.error('Errore avvio microfono:', error)
+    }
+  }
+
+  const handleStopMicrophone = () => {
+    actions.stopLocalMicrophone()
+  }
+
+  const copySessionCode = async () => {
+    if (state.connectionInfo) {
+      const success = await actions.copyConnectionInfo()
+      if (success) {
+        // TODO: Mostrare notifica di copia
+        console.log('✅ Informazioni connessione copiate!')
+      }
+    }
+  }
+
+  const shareSession = async () => {
+    if (state.connectionInfo) {
+      const success = await actions.shareConnectionInfo()
+      if (success) {
+        console.log('✅ Informazioni connessione condivise!')
+      }
+    }
+  }
+
+  return (
+    <div className="host-mode-content">
+      {/* WebRTC Connection Status */}
+      <div className="webrtc-status-section">
+        <div className="status-header">
+          <Wifi className="w-6 h-6 text-blue-400" />
+          <h4>🌐 Connessione WebRTC</h4>
+        </div>
+        
+        <div className="connection-status">
+          <div className={`stun-status ${stunStatus}`}>
+            {stunStatus === 'checking' && (
+              <>
+                <div className="loading-spinner"></div>
+                <span>Test connessione STUN...</span>
+              </>
+            )}
+            {stunStatus === 'connected' && (
+              <>
+                <CheckCircle className="w-5 h-5 text-green-400" />
+                <span>STUN Server Connesso</span>
+              </>
+            )}
+            {stunStatus === 'failed' && (
+              <>
+                <AlertCircle className="w-5 h-5 text-red-400" />
+                <span>STUN Server Non Raggiungibile</span>
+              </>
+            )}
+            {stunStatus === 'offline' && (
+              <>
+                <AlertCircle className="w-5 h-5 text-yellow-400" />
+                <span>Modalità Offline - Solo rete locale</span>
+              </>
+            )}
+          </div>
+          
+          <div className="connection-type">
+            <span className="type-label">Tipo Connessione:</span>
+            <span className={`type-value ${connectionType}`}>
+              {connectionType === 'local' ? '🏠 Locale (stessa rete)' : 
+               connectionType === 'remote' ? '🌐 Remota (internet)' : 
+               '📱 Offline (solo locale)'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Server Status */}
+      <div className="server-status-section">
+        <div className="status-header">
+          <Server className="w-6 h-6 text-blue-400" />
+          <h4>🖥️ Server Collaborativo</h4>
+        </div>
+        
+        <div className={`status-indicator ${state.serverStatus}`}>
+          <div className="status-dot"></div>
+          <span>
+            {state.serverStatus === 'stopped' ? 'Server Fermo' :
+             state.serverStatus === 'running' ? 'Server Attivo' :
+             state.serverStatus === 'error' ? 'Errore Server' : 'Sconosciuto'}
+          </span>
+        </div>
+      </div>
+
+      {/* Session Info */}
+      {state.serverStatus === 'running' && state.sessionCode && (
+        <div className="session-info-section">
+          <div className="session-header">
+            <h5>📋 Informazioni Sessione</h5>
+          </div>
+          
+          <div className="session-details">
+            <div className="session-item">
+              <label htmlFor="session-code">Codice Sessione:</label>
+              <div className="session-code">
+                <code id="session-code">{state.sessionCode}</code>
+                <button onClick={copySessionCode} className="copy-button" title="Copia codice" aria-label="Copia codice sessione">
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="session-item">
+              <label htmlFor="session-url">URL Connessione:</label>
+              <div className="session-url">
+                <code id="session-url">
+                  {(() => {
+                    switch (state.connectionType) {
+                      case 'public':
+                        return state.publicIP ? `ws://${state.publicIP}:${state.serverPort}` : 'IP pubblico non disponibile'
+                      case 'tunnel':
+                        if (state.isCreatingTunnel) {
+                          return '🔄 Creazione tunnel in corso...'
+                        }
+                        return state.tunnelInfo ? state.tunnelInfo.publicUrl : 'Tunnel non creato'
+                      default:
+                        return state.localIP ? `ws://${state.localIP}:${state.serverPort}` : `ws://tuo-ip:${state.serverPort}`
+                    }
+                  })()}
+                </code>
+                <button onClick={copySessionCode} className="copy-button" title="Copia URL" aria-label="Copia URL connessione">
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            
+            {/* IP Information */}
+            <div className="ip-information">
+              <div className="ip-section">
+                <h6>🌐 Informazioni IP</h6>
+                
+                {state.localIP && (
+                  <div className="ip-item">
+                    <label>IP Locale (stessa rete):</label>
+                    <div className="ip-details">
+                      <code className="ip-code">{state.localIP}</code>
+                      <span className="ip-description">Solo stessa WiFi</span>
+                    </div>
+                  </div>
+                )}
+                
+                {state.publicIP && (
+                  <div className="ip-item">
+                    <label>IP Pubblico (internet):</label>
+                    <div className="ip-details">
+                      <code className="ip-code">{state.publicIP}</code>
+                      <span className="ip-description">Accessibile da ovunque</span>
+                    </div>
+                  </div>
+                )}
+                
+                {!state.publicIP && state.connectionType !== 'tunnel' && (
+                  <div className="ip-warning">
+                    <span className="warning-icon">⚠️</span>
+                    <span>IP pubblico non rilevato. Usa "Tunnel" per connessioni esterne automatiche.</span>
+                  </div>
+                )}
+                
+                {state.isCreatingTunnel && (
+                  <div className="tunnel-creating">
+                    <label>🚇 Creazione Tunnel:</label>
+                    <div className="tunnel-progress">
+                      <div className="progress-bar">
+                        <div className="progress-fill"></div>
+                      </div>
+                      <span className="progress-text">Creazione tunnel in corso...</span>
+                    </div>
+                  </div>
+                )}
+                
+                {state.tunnelInfo && (
+                  <div className="tunnel-info">
+                    <label>Tunnel Attivo:</label>
+                    <div className="tunnel-details">
+                      <code className="tunnel-url">{state.tunnelInfo.publicUrl}</code>
+                      <span className="tunnel-status">
+                        {state.tunnelInfo.status === 'connected' ? '✅ Connesso' : '🔄 Connessione...'}
+                      </span>
+                      {state.tunnelInfo.expiresAt && (
+                        <span className="tunnel-expiry">
+                          Scade: {state.tunnelInfo.expiresAt.toLocaleTimeString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Connection Type Selector */}
+              <div className="connection-type-selector">
+                <label>Tipo Connessione:</label>
+                <div className="type-buttons">
+                  <button 
+                    className={`type-button ${state.connectionType === 'local' ? 'active' : ''}`}
+                    onClick={() => actions.setConnectionType('local')}
+                  >
+                    🏠 Locale
+                  </button>
+                  <button 
+                    className={`type-button ${state.connectionType === 'public' ? 'active' : ''}`}
+                    onClick={() => actions.setConnectionType('public')}
+                    disabled={!state.publicIP}
+                  >
+                    🌐 Pubblico
+                  </button>
+                  <button 
+                    className={`type-button ${state.connectionType === 'tunnel' ? 'active' : ''}`}
+                    onClick={() => actions.setConnectionType('tunnel')}
+                  >
+                    🚇 Tunnel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="session-actions">
+            <button onClick={shareSession} className="share-button">
+              <Share2 className="w-4 h-4" />
+              Condividi Sessione
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Connected DJs */}
+      <div className="connected-djs-section">
+        <div className="djs-header">
+          <Users className="w-5 h-5 text-green-400" />
+          <h5>🎤 DJ Connessi: {state.connectedDJs.length}</h5>
+        </div>
+        
+        {state.connectedDJs.length > 0 ? (
+          <div className="djs-list">
+            {state.connectedDJs.map(dj => (
+              <div key={dj.id} className="dj-item">
+                <div className="dj-info">
+                  <div className="dj-name">🎤 {dj.name || 'DJ Remoto'}</div>
+                  <div className="dj-status">
+                    <span className={`mic-status ${dj.microphone ? 'active' : 'inactive'}`}>
+                      {dj.microphone ? '🎤 Attivo' : '🔇 Inattivo'}
+                    </span>
+                    <span className={`quality-status ${dj.quality}`}>
+                      {dj.quality === 'excellent' ? '🟢' :
+                       dj.quality === 'good' ? '🟡' :
+                       dj.quality === 'fair' ? '🟠' : '🔴'}
+                    </span>
+                  </div>
+                </div>
+                <div className="dj-actions">
+                  <button className="mute-button" title="Muta DJ">
+                    🔇
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="no-djs">
+            <p>Nessun DJ connesso</p>
+            <p className="help-text">Condividi il codice sessione per far connettere altri DJ</p>
+          </div>
+        )}
+      </div>
+
+      {/* Audio Controls */}
+      <div className="audio-controls-section">
+        <div className="controls-header">
+          <h5>🎛️ Controlli Audio</h5>
+        </div>
+        
+        <div className="volume-controls">
+          <div className="volume-control">
+            <label>
+              <Mic className="w-4 h-4" />
+              Microfono Locale (TU)
+            </label>
+            <div className="volume-slider">
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                value={localMicVolume}
+                onChange={(e) => setLocalMicVolume(parseInt(e.target.value))}
+              />
+              <span>{localMicVolume}%</span>
+            </div>
+          </div>
+          
+          <div className="volume-control">
+            <label>
+              <Users className="w-4 h-4" />
+              Voci Remote (DJ 2)
+            </label>
+            <div className="volume-slider">
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                value={remoteVoicesVolume}
+                onChange={(e) => setRemoteVoicesVolume(parseInt(e.target.value))}
+              />
+              <span>{remoteVoicesVolume}%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Server Controls */}
+      <div className="server-controls-section">
+        <div className="controls-header">
+          <h5>🎮 Controlli Server</h5>
+        </div>
+        
+        <div className="server-buttons">
+          {state.serverStatus === 'stopped' ? (
+            <button onClick={handleStartServer} className="start-server-button">
+              <Play className="w-4 h-4" />
+              Avvia Server Collaborativo
+            </button>
+          ) : (
+            <button onClick={handleStopServer} className="stop-server-button">
+              <Square className="w-4 h-4" />
+              Ferma Server
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Microphone Controls */}
+      <div className="microphone-controls-section">
+        <div className="controls-header">
+          <h5>🎤 Controlli Microfono</h5>
+        </div>
+        
+        <div className="microphone-buttons">
+          {!state.localMicrophone ? (
+            <button onClick={handleStartMicrophone} className="start-mic-button">
+              <Mic className="w-4 h-4" />
+              Attiva Microfono
+            </button>
+          ) : (
+            <button onClick={handleStopMicrophone} className="stop-mic-button">
+              <MicOff className="w-4 h-4" />
+              Disattiva Microfono
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Instructions */}
+      <div className="instructions-section">
+        <div className="instructions-header">
+          <h5>📋 Come usare</h5>
+        </div>
+        
+        <div className="instructions-list">
+          <div className="instruction-item">
+            <span className="step-number">1</span>
+            <span>Seleziona "Tunnel" per connessioni esterne automatiche</span>
+          </div>
+          <div className="instruction-item">
+            <span className="step-number">2</span>
+            <span>Clicca "Avvia Server Collaborativo"</span>
+          </div>
+          <div className="instruction-item">
+            <span className="step-number">3</span>
+            <span>Condividi il codice sessione con DJ 2</span>
+          </div>
+          <div className="instruction-item">
+            <span className="step-number">4</span>
+            <span>DJ 2 si connette con la stessa app</span>
+          </div>
+          <div className="instruction-item">
+            <span className="step-number">5</span>
+            <span>Entrambi attivano i microfoni</span>
+          </div>
+          <div className="instruction-item">
+            <span className="step-number">6</span>
+            <span>Iniziate la live collaborativa!</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default HostModeContent

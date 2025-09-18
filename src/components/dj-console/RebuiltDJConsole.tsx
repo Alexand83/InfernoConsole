@@ -1,15 +1,18 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { Activity, Settings, Radio, Headphones, Bell } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAudio } from '../../contexts/AudioContext'
 import { useSettings } from '../../contexts/SettingsContext'
 import { localDatabase } from '../../database/LocalDatabase'
 import { usePlaylist } from '../../contexts/PlaylistContext'
 import { useStreaming } from '../../contexts/StreamingContext'
+import { usePTT } from '../../hooks/usePTT'
+import { useTranslation } from '../../i18n'
 // ✅ FIX: Import rimossi - ora gestiti dal StreamingContext
 import EnhancedDeck from './EnhancedDeck'
 import EnhancedMixer from './EnhancedMixer'
 import EnhancedPlaylist from './EnhancedPlaylist'
-import AutoAdvanceManager from './AutoAdvanceManager'
+// AutoAdvanceManager ora è globale in App.tsx
 import DuplicateTrackDialog from './DuplicateTrackDialog'
 import StreamingDebugPanel from './StreamingDebugPanel'
 import ConfirmationDialog from '../ConfirmationDialog'
@@ -50,15 +53,32 @@ const RebuiltDJConsole: React.FC = () => {
   } = useAudio()
   
   const { settings } = useSettings()
-  const { state: playlistState } = usePlaylist()
+  const { state: playlistState, dispatch: playlistDispatch } = usePlaylist()
+  const { t } = useTranslation()
+  const navigate = useNavigate()
   const { 
     state: streamingState, 
     dispatch: streamingDispatch,
     updateErrorCount
   } = useStreaming()
   
-  // Stati locali (solo per il componente, non per streaming)
-  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null)
+  // ✅ FIX: Usa PlaylistContext invece di stato locale per persistenza
+  // const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null)
+  
+  // ✅ FIX: Funzioni per gestire activePlaylistId usando il context
+  const activePlaylistId = playlistState.currentPlaylist?.id || null
+  const setActivePlaylistId = useCallback((playlistId: string | null) => {
+    if (playlistId) {
+      const playlist = playlistState.library.playlists.find(p => p.id === playlistId)
+      if (playlist) {
+        playlistDispatch({ type: 'SET_CURRENT_PLAYLIST', payload: playlist })
+        console.log(`🔄 [PLAYLIST FIX] Playlist selezionata: ${playlist.name}`)
+      }
+    } else {
+      playlistDispatch({ type: 'SET_CURRENT_PLAYLIST', payload: null })
+    }
+  }, [playlistState.library.playlists, playlistDispatch])
+  
   const [leftTrack, setLeftTrack] = useState<any>(null)
   const [rightTrack, setRightTrack] = useState<any>(null)
   
@@ -101,8 +121,11 @@ const RebuiltDJConsole: React.FC = () => {
     showStopConfirmation,
     showSilenceWarning,
     silenceSecondsRemaining,
-    listenerCount
+    listenerCount,
+    broadcastStartTime,
+    broadcastDuration
   } = streamingState
+  
   
   // ✅ CRITICAL FIX: Esponi streamingManager globalmente per AudioContext
   useEffect(() => {
@@ -187,67 +210,33 @@ const RebuiltDJConsole: React.FC = () => {
                 const sources = Array.isArray(stats.icestats.source) ? stats.icestats.source : [stats.icestats.source]
                 console.log('🔍 [LISTENERS] Sorgenti trovate:', sources.length)
                 
-               // ✅ LOGICA INTELLIGENTE: Identifica la nostra sorgente usando il mount point configurato
-               const ourSource = sources.find((source: any) => {
-                 // 1. Controlla se il mount corrisponde esattamente
-                 const mountMatch = source.mount === mountpoint
-                 
-                 // 2. Controlla se l'URL di ascolto contiene il nostro mount
-                 const urlMatch = source.listenurl?.includes(mountpoint)
-                 
-                 // 3. Controlla se il server name corrisponde al nostro (fallback)
-                 const serverNameMatch = source.server_name?.includes('Never Again') || 
-                                       source.server_name?.includes('DJ Console') ||
-                                       source.server_name?.includes('RadioBoss')
-                 
-                 const isOurSource = mountMatch || urlMatch || serverNameMatch
-                 
-                 console.log(`🔍 [LISTENERS] Controllo sorgente:`, {
-                   server_name: source.server_name,
-                   mount: source.mount,
-                   listenurl: source.listenurl,
-                   listeners: source.listeners,
-                   ourMountpoint: mountpoint,
-                   mountMatch,
-                   urlMatch,
-                   serverNameMatch,
-                   isOurSource
-                 })
-                 
-                 return isOurSource
-               })
-               
-               if (ourSource) {
-                 console.log(`🔍 [LISTENERS] ✅ Sorgente identificata:`, {
-                   server_name: ourSource.server_name,
-                   mount: ourSource.mount,
-                   listenurl: ourSource.listenurl,
-                   listeners: ourSource.listeners
-                 })
-               } else {
-                 console.log(`🔍 [LISTENERS] ❌ Nessuna sorgente corrispondente trovata per mount: ${mountpoint}`)
-                 console.log(`🔍 [LISTENERS] Sorgenti disponibili:`, sources.map(s => ({
-                   server_name: s.server_name,
-                   mount: s.mount,
-                   listenurl: s.listenurl
-                 })))
-               }
+                // ✅ SOMMA TUTTI I LISTENERS: Calcola la somma di TUTTI i mount points
+                let totalListeners = 0
+                const activeMounts: any[] = []
                 
-                if (ourSource && ourSource.listeners !== undefined && ourSource.listeners !== null) {
-                  const realListenerCount = parseInt(ourSource.listeners) || 0
-                  streamingDispatch({ type: 'SET_LISTENER_COUNT', payload: realListenerCount })
-                  console.log(`📊 [LISTENERS] ✅ CONTATORE REALE: ${realListenerCount} ascoltatori`)
-                  console.log(`📊 [LISTENERS] ✅ Sorgente selezionata:`, {
-                    server_name: ourSource.server_name,
-                    mount: ourSource.mount,
-                    listenurl: ourSource.listenurl,
-                    listeners: ourSource.listeners
-                  })
+                sources.forEach((source: any) => {
+                  const listeners = parseInt(source.listeners) || 0
+                  if (listeners > 0) {
+                    totalListeners += listeners
+                    activeMounts.push({
+                      mount: source.mount,
+                      server_name: source.server_name,
+                      listeners: listeners
+                    })
+                  }
+                  
+                  console.log(`🔍 [LISTENERS] Mount: ${source.mount} - Listeners: ${listeners}`)
+                })
+                
+                console.log(`📊 [LISTENERS] ✅ TOTALE LISTENERS: ${totalListeners} da ${activeMounts.length} mount attivi`)
+                console.log(`📊 [LISTENERS] Mount attivi:`, activeMounts)
+                
+                if (totalListeners > 0) {
+                  streamingDispatch({ type: 'SET_LISTENER_COUNT', payload: totalListeners })
+                  console.log(`📊 [LISTENERS] ✅ CONTATORE TOTALE AGGIORNATO: ${totalListeners} ascoltatori`)
                   return
                 } else {
-                  console.log('🔍 [LISTENERS] Sorgente non trovata o listeners undefined/null')
-                  console.log('🔍 [LISTENERS] ourSource:', ourSource)
-                  console.log('🔍 [LISTENERS] ourSource.listeners:', ourSource?.listeners)
+                  console.log('🔍 [LISTENERS] Nessun listener attivo su nessun mount')
                 }
               } else {
                 console.log('🔍 [LISTENERS] Struttura dati non valida:', stats)
@@ -273,9 +262,9 @@ const RebuiltDJConsole: React.FC = () => {
         }
       }
 
-      // Aggiorna ogni 15 secondi per bilanciare accuratezza e performance
-      console.log('🔍 [LISTENERS] ✅ Creando interval per contatore automatico (ogni 15s)')
-      const interval = setInterval(updateListenerCount, 15000)
+      // ✅ OTTIMIZZATO: Aggiorna ogni 30 secondi per ridurre CPU usage
+      console.log('🔍 [LISTENERS] ✅ Creando interval per contatore automatico (ogni 30s)')
+      const interval = setInterval(updateListenerCount, 30000) // ✅ PERFORMANCE: Ridotto da 15000ms a 30000ms
       console.log('🔍 [LISTENERS] ✅ Eseguendo primo aggiornamento immediato')
       updateListenerCount() // Aggiorna immediatamente
 
@@ -316,6 +305,8 @@ const RebuiltDJConsole: React.FC = () => {
       setActivePlaylistId(playlistState.library.playlists[0].id)
     }
   }, [activePlaylistId, playlistState.library.playlists])
+  
+  // ✅ FIX: Non serve più sincronizzazione - usiamo direttamente il context
 
   // NUOVO: Listener per sincronizzazione playlist dalla Library
   useEffect(() => {
@@ -434,6 +425,17 @@ const RebuiltDJConsole: React.FC = () => {
     handleTrackLoadInternal('right', track)
   }, [handleTrackLoadInternal])
 
+  // ✅ NUOVO: Funzioni per gestire la rimozione delle tracce dai deck
+  const handleLeftTrackClear = useCallback(() => {
+    console.log(`🗑️ [REBUILT DJ] Left track cleared`)
+    setLeftTrack(null)
+  }, [])
+
+  const handleRightTrackClear = useCallback(() => {
+    console.log(`🗑️ [REBUILT DJ] Right track cleared`)
+    setRightTrack(null)
+  }, [])
+
   // Gestisce l'auto-avanzamento
   const handleAutoAdvance = useCallback((deck: 'left' | 'right') => {
     // Dispatch evento per AutoAdvanceManager
@@ -441,6 +443,8 @@ const RebuiltDJConsole: React.FC = () => {
       detail: { deck }
     }))
   }, [])
+
+  // ✅ FIX AUTOPLAY: Listener rimosso - ora gestito globalmente in AudioContext
 
   // Gestisce l'avviso di traccia duplicata
   const handleDuplicateTrackWarning = useCallback((track: any, activeDeck: 'left' | 'right') => {
@@ -492,6 +496,9 @@ const RebuiltDJConsole: React.FC = () => {
     // Se il streaming è attivo, NON ricreate il stream - aggiornate solo i volumi
     console.log('🎤 PTT change completed - stream NOT recreated (volume-only update)')
   }, [isStreaming, getMixedStream])
+
+  // ✅ FIX: Usa il nuovo hook PTT che legge l'impostazione dalle settings
+  usePTT(handlePTTActivate)
 
   // 🛡️ SICUREZZA: Gestisce la disconnessione (sempre permessa)
   const handleDisconnect = useCallback(() => {
@@ -931,31 +938,17 @@ const RebuiltDJConsole: React.FC = () => {
       streamingDispatch({ type: 'SET_STREAM_ERROR', payload: error })
     }
 
-    // Listener per track-ended dal sistema audio per auto-avanzamento
-    const handleTrackEnded = (event: CustomEvent) => {
-      const { deckId } = event.detail
-      console.log(`🔚 [REBUILT DJ] Track ended on deck ${deckId}, checking auto-advance`)
-      
-      if (!settings.interface.autoAdvance) {
-        console.log('🔄 [REBUILT DJ] Auto-avanzamento disabilitato nelle impostazioni')
-        return
-      }
+    // ✅ FIX CONFLITTO: Rimosso listener track-ended da RebuiltDJConsole
+    // L'AutoAdvanceManager gestisce già l'auto-avanzamento
+    // Questo evita conflitti e esecuzioni multiple
 
-      // Converte deckId da 'A'/'B' a 'left'/'right' 
-      const side = deckId === 'A' ? 'left' : 'right'
-      console.log(`🔄 [REBUILT DJ] Chiamando handleAutoAdvance per deck ${side}`)
-      handleAutoAdvance(side)
-    }
-
-    // Eventi dal StreamingControl e sistema audio
+    // Eventi dal StreamingControl
     window.addEventListener('djconsole:streaming-status-changed', handleStreamingStatusChange as EventListener)
-    window.addEventListener('djconsole:track-ended', handleTrackEnded as EventListener)
     
     return () => {
       window.removeEventListener('djconsole:streaming-status-changed', handleStreamingStatusChange as EventListener)
-      window.removeEventListener('djconsole:track-ended', handleTrackEnded as EventListener)
     }
-  }, [settings.interface.autoAdvance, handleAutoAdvance])
+  }, [])
 
   // ✅ EXPOSE: Esponi getMixedStream globalmente per uso esterno
   ;(window as any).getMixedStream = getMixedStream
@@ -1033,6 +1026,7 @@ const RebuiltDJConsole: React.FC = () => {
 
             {/* Pulsanti azione */}
             <button
+              onClick={() => navigate('/settings')}
               className="p-2 bg-dj-secondary hover:bg-dj-accent rounded-lg transition-colors"
               title="Impostazioni"
             >
@@ -1098,45 +1092,84 @@ const RebuiltDJConsole: React.FC = () => {
               )}
             </button>
 
-            {/* ✅ NUOVO: Contatore Ascoltatori - Design Professionale */}
+            {/* ✅ NUOVO: Contatori Live - Design Professionale */}
             {isStreaming && (
-              <div className="relative group">
-                <div className="flex items-center space-x-3 bg-gradient-to-r from-dj-accent/20 to-dj-secondary/30 backdrop-blur-sm rounded-xl px-4 py-3 border border-dj-accent/30 shadow-lg hover:shadow-dj-accent/20 hover:shadow-xl transition-all duration-300">
-                  {/* Icona con effetto pulsante */}
-                  <div className="relative">
-                    <Headphones className="w-5 h-5 text-white animate-pulse" />
-                    <div className="absolute inset-0 w-5 h-5 bg-white/20 rounded-full animate-ping"></div>
-                  </div>
-                  
-                  {/* Contatore con design elegante e animazione */}
-                  <div className="flex flex-col">
-                    <div className="flex items-baseline space-x-1">
-                      <span 
-                        key={listenerCount} 
-                        className="text-2xl font-bold text-white tracking-tight transition-all duration-500 ease-out transform hover:scale-110"
-                        style={{
-                          textShadow: '0 0 10px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3)',
-                          animation: 'listenerCountGlow 2s ease-in-out'
-                        }}
-                      >
-                        {listenerCount}
-                      </span>
-                      <span className="text-xs text-dj-light/70 uppercase tracking-wider animate-pulse">
-                        LIVE
+              <div className="flex items-center space-x-4">
+                {/* Contatore Ascoltatori */}
+                <div className="relative group">
+                  <div className="flex items-center space-x-3 bg-gradient-to-r from-dj-accent/20 to-dj-secondary/30 backdrop-blur-sm rounded-xl px-4 py-3 border border-dj-accent/30 shadow-lg hover:shadow-dj-accent/20 hover:shadow-xl transition-all duration-300">
+                    {/* Icona con effetto pulsante */}
+                    <div className="relative">
+                      <Headphones className="w-5 h-5 text-white animate-pulse" />
+                      <div className="absolute inset-0 w-5 h-5 bg-white/20 rounded-full animate-ping"></div>
+                    </div>
+                    
+                    {/* Contatore con design elegante e animazione */}
+                    <div className="flex flex-col">
+                      <div className="flex items-baseline space-x-1">
+                        <span 
+                          key={listenerCount} 
+                          className="text-2xl font-bold text-white tracking-tight transition-all duration-500 ease-out transform hover:scale-110"
+                          style={{
+                            textShadow: '0 0 10px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3)',
+                            animation: 'listenerCountGlow 2s ease-in-out'
+                          }}
+                        >
+                          {listenerCount}
+                        </span>
+                        <span className="text-xs text-dj-light/70 uppercase tracking-wider animate-pulse">
+                          LIVE
+                        </span>
+                      </div>
+                      <span className="text-xs text-dj-light/60 -mt-1 transition-colors duration-300">
+                        ascoltatori
                       </span>
                     </div>
-                    <span className="text-xs text-dj-light/60 -mt-1 transition-colors duration-300">
-                      ascoltatori
-                    </span>
                   </div>
                   
-                  
+                  {/* Tooltip informativo */}
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                    🎧 {listenerCount} persone stanno ascoltando su tutti i mount points
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                  </div>
                 </div>
-                
-                {/* Tooltip informativo */}
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
-                  🎧 {listenerCount} persone stanno ascoltando la tua trasmissione
-                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+
+                {/* ✅ NUOVO: Timer di Trasmissione */}
+                <div className="relative group">
+                  <div className="flex items-center space-x-3 bg-gradient-to-r from-green-500/20 to-emerald-500/30 backdrop-blur-sm rounded-xl px-4 py-3 border border-green-400/30 shadow-lg hover:shadow-green-400/20 hover:shadow-xl transition-all duration-300">
+                    {/* Icona timer con effetto pulsante */}
+                    <div className="relative">
+                      <Activity className="w-5 h-5 text-green-300 animate-pulse" />
+                      <div className="absolute inset-0 w-5 h-5 bg-green-300/20 rounded-full animate-ping"></div>
+                    </div>
+                    
+                    {/* Timer con design elegante */}
+                    <div className="flex flex-col">
+                      <div className="flex items-baseline space-x-1">
+                        <span 
+                          className="text-2xl font-bold text-white tracking-tight transition-all duration-500 ease-out transform hover:scale-110 font-mono"
+                          style={{
+                            textShadow: '0 0 10px rgba(34, 197, 94, 0.5), 0 0 20px rgba(34, 197, 94, 0.3)',
+                            animation: 'listenerCountGlow 2s ease-in-out'
+                          }}
+                        >
+                          {broadcastDuration}
+                        </span>
+                        <span className="text-xs text-green-300/70 uppercase tracking-wider animate-pulse">
+                          ON AIR
+                        </span>
+                      </div>
+                      <span className="text-xs text-green-300/60 -mt-1 transition-colors duration-300">
+                        tempo trasmissione
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* Tooltip informativo */}
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                    ⏱️ Tempo di trasmissione in corso
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1154,6 +1187,7 @@ const RebuiltDJConsole: React.FC = () => {
             track={leftTrack}
             onTrackLoad={handleLeftTrackLoad}
             onAutoAdvance={handleAutoAdvance}
+            onTrackClear={handleLeftTrackClear}
           />
           
           <EnhancedDeck
@@ -1162,6 +1196,7 @@ const RebuiltDJConsole: React.FC = () => {
             track={rightTrack}
             onTrackLoad={handleRightTrackLoad}
             onAutoAdvance={handleAutoAdvance}
+            onTrackClear={handleRightTrackClear}
           />
         </div>
 
@@ -1189,12 +1224,7 @@ const RebuiltDJConsole: React.FC = () => {
         {/* RIMUOVO IL GRANDE PANNELLO STREAMING - ora solo il pulsante funziona */}
       </div>
 
-      {/* Auto-advance manager (invisibile) */}
-      <AutoAdvanceManager
-        activePlaylistId={activePlaylistId}
-        onTrackLoad={handleTrackLoadInternal}
-        onDuplicateTrackWarning={handleDuplicateTrackWarning}
-      />
+      {/* ✅ FIX AUTOPLAY: AutoAdvanceManager ora è globale in App.tsx */}
 
       {/* Dialog traccia duplicata */}
       <DuplicateTrackDialog
@@ -1235,7 +1265,7 @@ const RebuiltDJConsole: React.FC = () => {
             </div>
           </div>
           <div>
-            <span>PTT: Tieni premuto M per attivare il microfono</span>
+            <span>{t('streaming.pttInstruction').replace('{key}', settings.microphone.pushToTalkKey)}</span>
           </div>
         </div>
       </footer>

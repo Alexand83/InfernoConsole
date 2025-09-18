@@ -3,7 +3,7 @@ import { Routes, Route } from 'react-router-dom'
 import TopNav from './components/TopNav'
 import DJConsole from './components/DJConsole'
 import NewDJConsole from './components/NewDJConsole'
-import { RebuiltDJConsole } from './components/dj-console'
+import { RebuiltDJConsole, AutoAdvanceManager } from './components/dj-console'
 // Rimossi import diretti per lazy loading
 // import LibraryManager from './components/LibraryManager'
 // import Settings from './components/Settings'
@@ -13,8 +13,10 @@ import { PlaylistProvider } from './contexts/PlaylistContext'
 import { SettingsProvider } from './contexts/SettingsContext'
 import { TimerProvider } from './contexts/TimerContext'
 import { StreamingProvider } from './contexts/StreamingContext'
+import { CollaborativeModeProvider } from './contexts/CollaborativeModeContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import './styles/themes.css'
+import './styles/collaborative.css'
 
 function App() {
   // Debug: Monitor re-render dell'intero albero
@@ -75,7 +77,8 @@ function App() {
         <AudioProvider>
           <PlaylistProvider>
             <StreamingProvider>
-              <ErrorBoundary>
+              <CollaborativeModeProvider>
+                <ErrorBoundary>
               <div className="flex flex-col min-h-screen bg-dj-dark">
                 <TopNav />
                 <main className="flex-1 overflow-y-auto transition-opacity duration-200 ease-in-out">
@@ -97,8 +100,16 @@ function App() {
                     </Routes>
                   </React.Suspense>
                 </main>
+                
+                {/* ✅ FIX AUTOPLAY: AutoAdvanceManager globale - rimane sempre attivo */}
+                <AutoAdvanceManager
+                  activePlaylistId={undefined} // Sarà gestito internamente
+                  onTrackLoad={undefined} // Sarà gestito internamente
+                  onDuplicateTrackWarning={undefined} // Sarà gestito internamente
+                />
               </div>
-              </ErrorBoundary>
+                </ErrorBoundary>
+              </CollaborativeModeProvider>
             </StreamingProvider>
           </PlaylistProvider>
         </AudioProvider>

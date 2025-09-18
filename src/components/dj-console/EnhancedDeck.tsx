@@ -7,7 +7,8 @@ import {
   Volume2, 
   Disc,
   Clock,
-  Activity
+  Activity,
+  X
 } from 'lucide-react'
 import { useAudio } from '../../contexts/AudioContext'
 import { useSettings } from '../../contexts/SettingsContext'
@@ -26,6 +27,7 @@ interface EnhancedDeckProps {
   } | null
   onTrackLoad?: (track: any) => void
   onAutoAdvance?: (deck: 'left' | 'right') => void
+  onTrackClear?: (deck: 'left' | 'right') => void
 }
 
 const EnhancedDeck: React.FC<EnhancedDeckProps> = ({ 
@@ -33,7 +35,8 @@ const EnhancedDeck: React.FC<EnhancedDeckProps> = ({
   deckId, 
   track,
   onTrackLoad,
-  onAutoAdvance 
+  onAutoAdvance,
+  onTrackClear
 }) => {
   const { 
     state: audioState,
@@ -49,7 +52,9 @@ const EnhancedDeck: React.FC<EnhancedDeckProps> = ({
     setRightLocalVolume, 
     seekLeftTo,
     seekRightTo,
-    handlePlayPauseDefinitive
+    handlePlayPauseDefinitive,
+    clearLeftDeck,
+    clearRightDeck
   } = useAudio()
   
   const { settings } = useSettings()
@@ -83,13 +88,21 @@ const EnhancedDeck: React.FC<EnhancedDeckProps> = ({
     }
   }, [side, audioState.leftDeck.localVolume, audioState.rightDeck.localVolume])
 
-  // Auto-avanzamento quando la traccia finisce
+  // ✅ FIX AUTOPLAY: Auto-avanzamento quando la traccia finisce
   useEffect(() => {
     if (!currentTrack || !settings.interface.autoAdvance || !isPlaying) return
 
     const duration = currentTrack.duration
-    if (duration && currentTime >= duration - 1 && currentTime > 0) { // 1 secondo prima della fine
-      console.log(`🔄 Track ending in deck ${deckId}, triggering auto-advance`)
+    if (duration && currentTime >= duration - 0.5 && currentTime > 0) { // ✅ FIX: 0.5 secondi prima della fine per maggiore precisione
+      console.log(`🔄 [AUTOPLAY] Track ending in deck ${deckId} (${currentTime.toFixed(1)}s/${duration}s), triggering auto-advance`)
+      
+      // ✅ FIX: Emetti evento per il sistema di auto-advance
+      const event = new CustomEvent('djconsole:request-auto-advance', {
+        detail: { deck: side, track: currentTrack }
+      })
+      window.dispatchEvent(event)
+      
+      // ✅ FIX: Chiama anche direttamente la funzione
       onAutoAdvance?.(side)
     }
   }, [currentTime, currentTrack, settings.interface.autoAdvance, deckId, side, onAutoAdvance, isPlaying])
@@ -134,6 +147,18 @@ const EnhancedDeck: React.FC<EnhancedDeckProps> = ({
       stopRightTrack()
     }
   }, [side, stopLeftTrack, stopRightTrack])
+
+  const handleClearDeck = useCallback(() => {
+    console.log(`🗑️ [DECK] Liberando deck ${side}`)
+    if (side === 'left') {
+      clearLeftDeck()
+    } else {
+      clearRightDeck()
+    }
+    
+    // ✅ FIX: Notifica il componente padre per aggiornare lo stato locale
+    onTrackClear?.(side)
+  }, [side, clearLeftDeck, clearRightDeck, onTrackClear])
 
   const handleSkipBackward = useCallback(() => {
     const audioElement = document.querySelector(`audio[data-deck="${side === 'left' ? 'A' : 'B'}"]`) as HTMLAudioElement
@@ -308,6 +333,17 @@ const EnhancedDeck: React.FC<EnhancedDeckProps> = ({
         >
           <SkipForward className="w-4 h-4" />
         </button>
+        
+        {/* ✅ NUOVO: Pulsante per liberare il deck */}
+        {currentTrack && (
+          <button
+            onClick={handleClearDeck}
+            className="w-8 h-8 bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 hover:border-red-500/50 rounded-md flex items-center justify-center transition-all duration-200 group"
+            title="Libera deck (rimuovi traccia)"
+          >
+            <X className="w-4 h-4 text-red-400 group-hover:text-red-300" />
+          </button>
+        )}
       </div>
 
       {/* Controllo volume locale */}

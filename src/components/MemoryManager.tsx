@@ -75,7 +75,7 @@ const MemoryManager: React.FC<MemoryManagerProps> = ({
         handleMemoryWarning()
         console.warn('⚠️ Memoria critica durante import!')
       }
-    }, 3000) // Controlla ogni 3 secondi per ridurre overhead
+    }, 10000) // ✅ PERFORMANCE: Ridotto da 3000ms a 10000ms per ridurre overhead
 
     return () => clearInterval(interval)
   }, [isImporting, getMemoryInfo, onMemoryWarning])

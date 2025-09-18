@@ -7,6 +7,7 @@ import AudioManager from '../audio/AudioManager'
 import '../audio/GlobalAudioPersistence' // Auto-inizializza la persistenza
 import { usePlaylist } from '../contexts/PlaylistContext'
 import { useSettings } from '../contexts/SettingsContext'
+import { usePTT } from '../hooks/usePTT'
 import { useStreaming } from '../contexts/StreamingContext'
 import { localDatabase } from '../database/LocalDatabase'
 import { getBlob } from '../database/BlobStore'
@@ -2680,28 +2681,14 @@ const NewDJConsole: React.FC = () => {
     }
   }, [pttActive, handlePTTEnd])
   
-  // Gestione tasti PTT
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'KeyM' && !e.repeat) {
-        handlePTTStart()
-      }
+  // ✅ FIX: Usa il nuovo hook PTT che legge l'impostazione dalle settings
+  usePTT((active: boolean) => {
+    if (active) {
+      handlePTTStart()
+    } else {
+      handlePTTEnd()
     }
-    
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'KeyM') {
-        handlePTTEnd()
-      }
-    }
-    
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-    
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
-    }
-  }, [handlePTTStart, handlePTTEnd])
+  })
   
   // Listener per l'auto-advance
   useEffect(() => {

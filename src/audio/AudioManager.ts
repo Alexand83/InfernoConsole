@@ -1,4 +1,5 @@
 // AudioManager semplificato - senza AudioRouter complesso
+import { localDatabase } from '../database/LocalDatabase'
 
 interface Track {
   id: string
@@ -361,10 +362,65 @@ export class AudioManager {
   
   private async enableMicrophone(): Promise<void> {
     try {
-      this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      console.log('🎤 Microphone enabled')
+      // ✅ FIX MICROFONO: Usa le impostazioni del microfono dalle settings
+      const settings = await localDatabase.getSettings();
+      const micSettings = settings?.microphone || {
+        inputDevice: 'default',
+        sampleRate: 48000,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: false
+      };
+      
+      console.log('🎤 [AUDIO MANAGER] Usando impostazioni microfono:', micSettings);
+      
+      // ✅ FIX: Seleziona dispositivo microfono specifico se configurato
+      let deviceId = undefined;
+      if (micSettings.inputDevice && micSettings.inputDevice !== 'default') {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const audioInputs = devices.filter(device => device.kind === 'audioinput');
+          
+          // Cerca prima per deviceId, poi per label
+          let selectedDevice = audioInputs.find(device => 
+            device.deviceId === micSettings.inputDevice
+          );
+          
+          if (!selectedDevice) {
+            selectedDevice = audioInputs.find(device => 
+              device.label === micSettings.inputDevice
+            );
+          }
+          
+          if (selectedDevice) {
+            deviceId = selectedDevice.deviceId;
+            console.log('🎤 [AUDIO MANAGER] ✅ Dispositivo microfono selezionato:', selectedDevice.label);
+          } else {
+            console.warn('⚠️ [AUDIO MANAGER] Dispositivo microfono non trovato:', micSettings.inputDevice);
+          }
+        } catch (error) {
+          console.warn('⚠️ [AUDIO MANAGER] Errore enumerazione dispositivi:', error);
+        }
+      }
+      
+      // ✅ FIX: Configurazione microfono con dispositivo specifico
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false,
+          latency: 0,
+          sampleRate: micSettings.sampleRate,
+          channelCount: 1,
+          sampleSize: 16,
+          ...(deviceId && { deviceId: { exact: deviceId } })
+        }
+      };
+      
+      this.microphoneStream = await navigator.mediaDevices.getUserMedia(constraints)
+      console.log('🎤 [AUDIO MANAGER] Microfono abilitato con dispositivo specifico:', deviceId ? 'SÌ' : 'DEFAULT')
     } catch (error) {
-      console.error('❌ Error enabling microphone:', error)
+      console.error('❌ [AUDIO MANAGER] Errore abilitazione microfono:', error)
     }
   }
   
@@ -372,7 +428,25 @@ export class AudioManager {
     if (this.microphoneStream) {
       this.microphoneStream.getTracks().forEach(track => track.stop())
       this.microphoneStream = null
-      console.log('🎤 Microphone disabled')
+      console.log('🎤 [AUDIO MANAGER] Microfono disabilitato')
+    }
+  }
+  
+  // ✅ FIX MICROFONO: Metodo pubblico per reinizializzare il microfono
+  public async reinitializeMicrophone(): Promise<void> {
+    console.log('🎤 [AUDIO MANAGER] Reinizializzazione microfono richiesta...')
+    
+    // Disabilita il microfono corrente se attivo
+    if (this.microphoneStream) {
+      this.disableMicrophone()
+      // Aspetta un momento per la pulizia
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    
+    // Riabilita il microfono con le nuove impostazioni
+    if (this.state?.isMicrophoneEnabled) {
+      await this.enableMicrophone()
+      console.log('🎤 [AUDIO MANAGER] Microfono reinizializzato con nuove impostazioni')
     }
   }
   

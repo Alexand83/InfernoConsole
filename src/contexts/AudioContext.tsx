@@ -170,6 +170,8 @@ const AudioContext = createContext<{
   setCrossfader: (value: number) => void
   addToDeck: (track: any, deck: 'left' | 'right') => Promise<void>
   incrementPlayCount: (trackId: string) => Promise<void>
+  clearLeftDeck: () => void
+  clearRightDeck: () => void
 } | undefined>(undefined)
 
 // ===== PROVIDER =====
@@ -183,6 +185,135 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const micStreamRef = useRef<MediaStream | null>(null)
   const soundEffectsManagerRef = useRef<SoundEffectsManager | null>(null)
   const microphoneEffectsManagerRef = useRef<MicrophoneEffectsManager | null>(null)
+  const lastMicrophoneReinitRef = useRef<number>(0) // Per debouncing delle reinizializzazioni
+  
+  // ✅ FIX: Esponi il micStreamRef globalmente per il test visuale
+  useEffect(() => {
+    ;(window as any).micStreamRef = micStreamRef
+    ;(window as any).getCurrentMicStream = () => micStreamRef.current
+    return () => {
+      ;(window as any).micStreamRef = null
+      ;(window as any).getCurrentMicStream = null
+    }
+  }, [])
+
+  // ✅ FIX AUTOPLAY: Listener globale per caricamento tracce (spostato dopo le dichiarazioni delle funzioni)
+
+  // ✅ FIX: Riconnetti l'output device immediatamente
+  const reconnectOutputDevice = async (): Promise<void> => {
+    try {
+      const outputDevice = settings?.audio?.outputDevice
+      if (!outputDevice || outputDevice === 'default') {
+        console.log('🔊 [OUTPUT] Usando dispositivo output predefinito')
+        return
+      }
+
+      console.log(`🔊 [OUTPUT] Riconnessione immediata a dispositivo: ${outputDevice}`)
+      
+      // ✅ FIX: Configura immediatamente tutti gli elementi audio
+      const audioElements = [leftAudioRef.current, rightAudioRef.current].filter(Boolean)
+      
+      for (const audioElement of audioElements) {
+        if (audioElement) {
+          try {
+            // ✅ FIX: Usa setSinkId per cambiare immediatamente l'output
+            if ('setSinkId' in audioElement) {
+              await (audioElement as any).setSinkId(outputDevice)
+              console.log(`🔊 [OUTPUT] ✅ Dispositivo output riconnesso immediatamente: ${outputDevice}`)
+            } else {
+              console.warn('⚠️ [OUTPUT] setSinkId non supportato, usa dispositivo predefinito')
+            }
+          } catch (error) {
+            console.warn(`⚠️ [OUTPUT] Errore riconnessione dispositivo output:`, error)
+          }
+        }
+      }
+      
+      // ✅ FIX: Configura anche gli elementi audio di streaming se esistono
+      const streamingElements = document.querySelectorAll('audio[data-streaming="true"]')
+      for (const element of streamingElements) {
+        if ('setSinkId' in element) {
+          try {
+            await (element as any).setSinkId(outputDevice)
+            console.log(`🔊 [OUTPUT] ✅ Elemento streaming riconnesso: ${outputDevice}`)
+          } catch (error) {
+            console.warn(`⚠️ [OUTPUT] Errore riconnessione elemento streaming:`, error)
+          }
+        }
+      }
+      
+      console.log('🔊 [OUTPUT] ✅ Riconnessione output completata con successo!')
+      
+    } catch (error) {
+      console.error('❌ [OUTPUT] Errore durante la riconnessione output:', error)
+      throw error
+    }
+  }
+
+  // ✅ FIX: Riconnetti il microfono al sistema di streaming esistente
+  const reconnectMicrophoneToExistingStream = async (): Promise<void> => {
+    if (!micStreamRef.current) {
+      console.warn('⚠️ [MIC] Nessun stream microfono disponibile per riconnessione')
+      return
+    }
+    
+    // Verifica se esiste già un sistema di streaming attivo
+    const existingMicGain = (window as any).currentPTTMicGain
+    const existingMixerGain = (window as any).currentPTTMixerGain
+    const existingContext = (window as any).currentPTTContext
+    
+    if (!existingMicGain || !existingMixerGain || !existingContext) {
+      console.warn('⚠️ [MIC] Sistema di streaming non trovato, impossibile riconnettere')
+      return
+    }
+    
+    try {
+      console.log('🎤 [MIC] Riconnessione al sistema di streaming esistente...')
+      
+      // Disconnetti il vecchio microfono se esiste
+      if (existingMicGain) {
+        existingMicGain.disconnect()
+        console.log('🎤 [MIC] Vecchio microfono disconnesso')
+      }
+      
+      // Crea un nuovo MediaStreamSource per il nuovo microfono
+      const newMicSource = existingContext.createMediaStreamSource(micStreamRef.current)
+      
+      // Crea un nuovo gain per il microfono
+      const newMicGain = existingContext.createGain()
+      newMicSource.connect(newMicGain)
+      
+      // Riconnetti al sistema esistente
+      newMicGain.connect(existingMixerGain)
+      console.log('🎤 [MIC] Microfono riconnesso al mixer esistente')
+      
+      // Trova il MediaStreamDestination esistente e riconnetti
+      const existingDestination = (window as any).currentStreamDestination
+      if (existingDestination) {
+        newMicGain.connect(existingDestination)
+        console.log('🎤 [MIC] Microfono riconnesso al MediaStreamDestination esistente')
+      }
+      
+      // Aggiorna i riferimenti globali
+      ;(window as any).currentPTTMicGain = newMicGain
+      
+      // Imposta il volume iniziale
+      const pttActive = state.microphone?.isEnabled || false
+      if (pttActive) {
+        newMicGain.gain.setValueAtTime(1.0, existingContext.currentTime)
+        console.log('🎤 [MIC] Microfono riconnesso e attivato al 100%')
+      } else {
+        newMicGain.gain.setValueAtTime(0.0, existingContext.currentTime)
+        console.log('🎤 [MIC] Microfono riconnesso ma silenziato (PTT non attivo)')
+      }
+      
+      console.log('🎤 [MIC] ✅ Riconnessione completata con successo!')
+      
+    } catch (error) {
+      console.error('❌ [MIC] Errore durante la riconnessione:', error)
+      throw error
+    }
+  }
 
   // ===== INIZIALIZZAZIONE MANAGER EFFETTI =====
   useEffect(() => {
@@ -226,9 +357,14 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           console.log('✅ [INIT] Microfono inizializzato con successo con impostazioni corrette:', micStream)
         } else {
           console.warn('⚠️ [INIT] Fallback a microfono generico...')
-          const fallbackStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-          micStreamRef.current = fallbackStream
-          console.log('✅ [INIT] Microfono fallback inizializzato:', fallbackStream)
+          // ✅ FIX: Anche il fallback deve usare le impostazioni del microfono
+          const fallbackStream = await createMicrophoneStream()
+          if (fallbackStream) {
+            micStreamRef.current = fallbackStream
+            console.log('✅ [INIT] Microfono fallback inizializzato con impostazioni:', fallbackStream)
+          } else {
+            console.error('❌ [INIT] Impossibile inizializzare microfono anche con fallback')
+          }
         }
       } catch (e: any) {
         console.warn('⚠️ [INIT] Microfono non disponibile all\'avvio:', e.message)
@@ -354,6 +490,9 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         // ✅ CRITICAL FIX: Imposta il volume iniziale del mixer per lo streaming
         mixerGain.gain.setValueAtTime(1.0, mixContext.currentTime) // Streaming sempre al 100% inizialmente
+        
+        // ✅ FIX: Salva il riferimento al MediaStreamDestination per riconnessioni future
+        ;(window as any).currentStreamDestination = destinationStream
         
         // ✅ ESPONI nodi globali per gli effetti audio
         ;(window as any).mixerGain = mixerGain;
@@ -792,9 +931,14 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               console.log('🎤 [MIC] Accesso al microfono ottenuto con impostazioni corrette:', micStream)
             } else {
               console.warn('⚠️ [MIC] Fallback a microfono generico...')
-              const fallbackStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-              micStreamRef.current = fallbackStream
-              console.log('🎤 [MIC] Fallback microfono ottenuto:', fallbackStream)
+              // ✅ FIX: Anche il fallback deve usare le impostazioni del microfono
+              const fallbackStream = await createMicrophoneStream()
+              if (fallbackStream) {
+                micStreamRef.current = fallbackStream
+                console.log('🎤 [MIC] Fallback microfono ottenuto con impostazioni:', fallbackStream)
+              } else {
+                console.error('❌ [MIC] Impossibile ottenere microfono anche con fallback')
+              }
             }
           } catch (e: any) {
             console.error('❌ [MIC] Errore accesso al microfono:', e.message)
@@ -1816,6 +1960,48 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [dispatch, state.rightDeck.localVolume, getMixedStream])
 
+  // ✅ FIX AUTOPLAY: Listener globale per caricamento tracce
+  useEffect(() => {
+    const handleGlobalTrackLoad = (event: CustomEvent) => {
+      const { deck, track } = event.detail
+      console.log(`🔄 [AUDIO CONTEXT] Global track load received: ${track.title} → ${deck} deck`)
+      console.log(`🔄 [AUDIO CONTEXT] Event detail:`, event.detail)
+      
+      try {
+        // ✅ FIX: Aggiorna prima lo stato del deck
+        if (deck === 'left') {
+          console.log(`🔄 [AUDIO CONTEXT] Loading track in LEFT deck:`, track.title)
+          dispatch({ type: 'SET_LEFT_DECK_TRACK', payload: track })
+          playLeftTrack({
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            duration: track.duration,
+            url: track.url
+          })
+        } else if (deck === 'right') {
+          console.log(`🔄 [AUDIO CONTEXT] Loading track in RIGHT deck:`, track.title)
+          dispatch({ type: 'SET_RIGHT_DECK_TRACK', payload: track })
+          playRightTrack({
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            duration: track.duration,
+            url: track.url
+          })
+        }
+        console.log(`✅ [AUDIO CONTEXT] Track loaded globally: ${track.title} → ${deck} deck`)
+      } catch (error) {
+        console.error('❌ [AUDIO CONTEXT] Error loading track globally:', error)
+      }
+    }
+
+    window.addEventListener('djconsole:load-track', handleGlobalTrackLoad as EventListener)
+    return () => {
+      window.removeEventListener('djconsole:load-track', handleGlobalTrackLoad as EventListener)
+    }
+  }, [playLeftTrack, playRightTrack, dispatch])
+
   // ✅ FIX: Aggiorna i volumi locali degli elementi audio HTML
   const updateLocalVolumes = useCallback(() => {
     if (leftAudioRef.current) {
@@ -2223,6 +2409,37 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [])
 
+  // ✅ NUOVO: Funzioni per liberare i deck
+  const clearLeftDeck = useCallback(() => {
+    console.log('🗑️ [DECK CLEAR] Liberando deck sinistro')
+    dispatch({ type: 'SET_LEFT_DECK_TRACK', payload: null })
+    dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: false })
+    dispatch({ type: 'SET_LEFT_DECK_TIME', payload: 0 })
+    
+    // Ferma l'audio se è in riproduzione
+    const leftAudio = document.querySelector('audio[data-deck="A"]') as HTMLAudioElement
+    if (leftAudio) {
+      leftAudio.pause()
+      leftAudio.currentTime = 0
+      leftAudio.src = ''
+    }
+  }, [])
+
+  const clearRightDeck = useCallback(() => {
+    console.log('🗑️ [DECK CLEAR] Liberando deck destro')
+    dispatch({ type: 'SET_RIGHT_DECK_TRACK', payload: null })
+    dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: false })
+    dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: 0 })
+    
+    // Ferma l'audio se è in riproduzione
+    const rightAudio = document.querySelector('audio[data-deck="B"]') as HTMLAudioElement
+    if (rightAudio) {
+      rightAudio.pause()
+      rightAudio.currentTime = 0
+      rightAudio.src = ''
+    }
+  }, [])
+
   // ✅ CROSSFADER: Funzione per impostare il crossfader (solo per streaming)
   const setCrossfader = useCallback((value: number) => {
     const clampedValue = Math.max(0, Math.min(1, value))
@@ -2499,6 +2716,216 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [])
 
+         // ✅ FIX MICROFONO: Gestione intelligente del cambio impostazioni microfono
+         useEffect(() => {
+           const handleMicrophoneSettingsChange = async (event: Event) => {
+             const customEvent = event as CustomEvent
+             const newDeviceId = customEvent?.detail?.inputDevice
+             const forceReinit = customEvent?.detail?.forceReinit
+             const forceCleanup = customEvent?.detail?.forceCleanup
+             
+             // ✅ FIX: Debouncing per evitare reinizializzazioni multiple rapide
+             const now = Date.now()
+             const timeSinceLastReinit = now - lastMicrophoneReinitRef.current
+             const DEBOUNCE_TIME = 500 // 500ms di debouncing
+             
+             if (timeSinceLastReinit < DEBOUNCE_TIME && !forceReinit && !forceCleanup) {
+               console.log('🎤 [MIC] Reinizializzazione ignorata per debouncing (ultima:', timeSinceLastReinit, 'ms fa)')
+               return
+             }
+             
+             lastMicrophoneReinitRef.current = now
+             console.log('🎤 [MIC] Impostazioni microfono cambiate:', { newDeviceId, forceReinit, forceCleanup })
+             
+             // ✅ FIX: Verifica se il dispositivo è effettivamente cambiato
+             let deviceChanged = false
+             if (newDeviceId && micStreamRef.current) {
+               const currentStream = micStreamRef.current
+               const audioTrack = currentStream.getAudioTracks()[0]
+               if (audioTrack) {
+                 const currentDeviceId = audioTrack.getSettings().deviceId
+                 deviceChanged = currentDeviceId !== newDeviceId
+                 console.log('🎤 [MIC] Verifica cambio dispositivo:', { current: currentDeviceId, new: newDeviceId, changed: deviceChanged })
+               }
+             }
+             
+             // ✅ FIX: Solo se il dispositivo è cambiato o è richiesta una reinizializzazione forzata
+             if (deviceChanged || forceReinit || forceCleanup) {
+               console.log('🎤 [MIC] Reinizializzazione necessaria, procedendo...')
+               
+               // ✅ FIX: Ferma gli stream microfono attivi in modo più smooth
+               if (micStreamRef.current) {
+                 console.log('🎤 [MIC] Fermando stream microfono corrente...')
+                 micStreamRef.current.getTracks().forEach(track => {
+                   track.stop()
+                 })
+                 micStreamRef.current = null
+               }
+               
+               // ✅ FIX: Pulisci gli stream globali solo se necessario
+               if (forceCleanup && (window as any).__activeMicrophoneStreams) {
+                 console.log('🎤 [MIC] Pulizia forzata stream globali...')
+                 ;(window as any).__activeMicrophoneStreams.forEach((stream: MediaStream) => {
+                   stream.getTracks().forEach(track => track.stop())
+                 })
+                 ;(window as any).__activeMicrophoneStreams.clear()
+               }
+               
+               // ✅ FIX: Reinizializza l'AudioManager solo se necessario
+               if ((window as any).audioManager && typeof (window as any).audioManager.reinitializeMicrophone === 'function') {
+                 console.log('🎤 [MIC] Reinizializzando AudioManager...')
+                 try {
+                   await (window as any).audioManager.reinitializeMicrophone()
+                 } catch (error) {
+                   console.warn('⚠️ [MIC] Errore reinizializzazione AudioManager:', error)
+                 }
+               }
+               
+               // ✅ FIX: Gestione più intelligente dell'abilitazione/disabilitazione
+               const wasEnabled = state.microphone.isEnabled
+               if (wasEnabled) {
+                 // Se il microfono era abilitato, riabilitalo dopo un breve delay
+                 console.log('🎤 [MIC] Microfono era abilitato, riabilitando con nuove impostazioni...')
+                 
+                 // Aspetta un momento per la pulizia
+                 await new Promise(resolve => setTimeout(resolve, 100))
+                 
+                 // Riabilita il microfono
+                 dispatch({ type: 'SET_MICROPHONE_ENABLED', payload: true })
+               } else {
+                 // Se il microfono non era abilitato, non fare nulla
+                 console.log('🎤 [MIC] Microfono non era abilitato, nessuna azione necessaria')
+               }
+             } else {
+               console.log('🎤 [MIC] Nessun cambio dispositivo rilevato, reinizializzazione non necessaria')
+             }
+             
+             // ✅ FIX: Ricreazione ottimizzata del stream microfono
+             console.log('🎤 [MIC] 🔄 Ricreazione stream microfono con nuove impostazioni...')
+             try {
+               // Aspetta un momento per assicurarsi che il dispatch sia processato
+               await new Promise(resolve => setTimeout(resolve, 100))
+               
+               const newStream = await createMicrophoneStream()
+               if (newStream) {
+                 micStreamRef.current = newStream
+                 console.log('🎤 [MIC] ✅ Stream microfono ricreato con successo!')
+                 
+                 // ✅ FIX: Verifica rapida del dispositivo
+                 const audioTrack = newStream.getAudioTracks()[0]
+                 if (audioTrack && newDeviceId) {
+                   const trackSettings = audioTrack.getSettings()
+                   if (trackSettings.deviceId === newDeviceId) {
+                     console.log('🎤 [MIC] ✅ Dispositivo corretto!')
+                   } else {
+                     console.warn('⚠️ [MIC] Dispositivo diverso da quello richiesto')
+                   }
+                 }
+                 
+                 // ✅ CRITICAL FIX: Riconnetti il microfono al sistema di streaming esistente
+                 console.log('🎤 [MIC] 🔄 Riconnessione microfono al sistema di streaming esistente...')
+                 try {
+                   // Riconnetti il microfono al sistema esistente senza ricreare tutto
+                   await reconnectMicrophoneToExistingStream()
+                   console.log('🎤 [MIC] ✅ Microfono riconnesso al sistema di streaming esistente!')
+                 } catch (reconnectError) {
+                   console.error('❌ [MIC] Errore riconnessione al sistema di streaming:', reconnectError)
+                 }
+               } else {
+                 console.error('❌ [MIC] Errore creazione stream')
+               }
+             } catch (fallbackError) {
+               console.error('❌ [MIC] Errore creazione stream:', fallbackError)
+             }
+           }
+    
+    // Listener per cambiamenti nelle impostazioni microfono
+    window.addEventListener('djconsole:microphone-settings-changed', handleMicrophoneSettingsChange as EventListener)
+    
+    return () => {
+      window.removeEventListener('djconsole:microphone-settings-changed', handleMicrophoneSettingsChange as EventListener)
+    }
+         }, [state.microphone.isEnabled])
+
+         // ✅ FIX OUTPUT: Gestione intelligente del cambio output device
+         useEffect(() => {
+           const handleOutputSettingsChange = async (event: Event) => {
+             const customEvent = event as CustomEvent
+             const newOutputDevice = customEvent?.detail?.outputDevice
+             
+             console.log('🔊 [OUTPUT] Impostazioni output cambiate:', { newOutputDevice })
+             
+             // ✅ FIX: Riconnetti immediatamente l'output device
+             try {
+               await reconnectOutputDevice()
+               console.log('🔊 [OUTPUT] ✅ Output device riconnesso con successo!')
+             } catch (reconnectError) {
+               console.error('❌ [OUTPUT] Errore riconnessione output device:', reconnectError)
+             }
+           }
+           
+           window.addEventListener('djconsole:output-settings-changed', handleOutputSettingsChange as EventListener)
+           return () => {
+             window.removeEventListener('djconsole:output-settings-changed', handleOutputSettingsChange as EventListener)
+           }
+         }, [settings.audio?.outputDevice, reconnectOutputDevice])
+
+         // ✅ FIX MICROFONO: Monitora cambiamenti del deviceId e forza reinizializzazione
+         useEffect(() => {
+           const currentDeviceId = (state.microphone as any).inputDevice || 'default'
+           console.log('🎤 [MIC] DeviceId microfono cambiato:', currentDeviceId)
+           
+           // Se il microfono è attivo e il deviceId è cambiato, forza reinizializzazione
+           if (state.microphone.isEnabled && currentDeviceId) {
+             console.log('🎤 [MIC] DeviceId cambiato con microfono attivo, forzando reinizializzazione...')
+             
+             // Emetti evento per forzare reinizializzazione
+             const event = new CustomEvent('djconsole:microphone-settings-changed', {
+               detail: { inputDevice: currentDeviceId, forceReinit: true }
+             })
+             window.dispatchEvent(event)
+           }
+         }, [(state.microphone as any).inputDevice, state.microphone.isEnabled])
+
+         // ✅ FIX MICROFONO: Reinizializzazione ottimizzata senza retry aggressivi
+         useEffect(() => {
+           if (state.microphone.isEnabled) {
+             console.log('🎤 [MIC] Microfono riabilitato, verificando stream...')
+             
+             // ✅ FIX: Singolo tentativo ottimizzato senza retry multipli
+             const createStreamOnce = async () => {
+               if (!micStreamRef.current) {
+                 try {
+                   console.log('🎤 [MIC] Creazione stream microfono...')
+                   const stream = await createMicrophoneStream()
+                   if (stream) {
+                     micStreamRef.current = stream
+                     console.log('🎤 [MIC] ✅ Stream microfono creato con successo!')
+                   } else {
+                     console.warn('⚠️ [MIC] Stream creato ma null')
+                   }
+                 } catch (error) {
+                   console.error('❌ [MIC] Errore creazione stream:', error)
+                 }
+               } else {
+                 console.log('🎤 [MIC] Stream microfono già attivo')
+               }
+             }
+             
+             // ✅ FIX: Singolo tentativo con delay minimo per evitare interruzioni audio
+             setTimeout(createStreamOnce, 50)
+           } else {
+             console.log('🎤 [MIC] Microfono disabilitato, pulendo stream...')
+             // Pulisci lo stream quando il microfono viene disabilitato
+             if (micStreamRef.current) {
+               micStreamRef.current.getTracks().forEach(track => track.stop())
+               micStreamRef.current = null
+               console.log('🎤 [MIC] Stream microfono pulito')
+             }
+           }
+         }, [state.microphone.isEnabled])
+
+
   // ✅ CONFIGURAZIONE MICROFONO CON ISOLAMENTO AUDIO SISTEMA
   const createMicrophoneStream = async (): Promise<MediaStream | null> => {
     try {
@@ -2527,72 +2954,262 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       };
       
       console.log('🎤 [MIC] Usando impostazioni microfono dalle settings:', micSettings);
+      console.log('🎤 [MIC] 🔍 DEBUG: Device ID richiesto:', micSettings.inputDevice);
       
-      // ✅ CORREZIONE: Seleziona dispositivo microfono specifico se configurato
+      // ✅ FIX MICROFONO: Seleziona dispositivo microfono specifico se configurato
       let deviceId = undefined;
+      console.log('🎤 [MIC] 🔍 DEBUG: Impostazione microfono da cercare:', micSettings.inputDevice);
+      
       if (micSettings.inputDevice && micSettings.inputDevice !== 'default') {
         try {
           const devices = await navigator.mediaDevices.enumerateDevices();
           const audioInputs = devices.filter(device => device.kind === 'audioinput');
-          console.log('🎤 [MIC] Dispositivi audio input disponibili:', audioInputs);
+          console.log('🎤 [MIC] 🔍 DEBUG: Dispositivi audio input disponibili:', audioInputs.map(d => ({
+            deviceId: d.deviceId,
+            label: d.label,
+            groupId: d.groupId
+          })));
           
-          const selectedDevice = audioInputs.find(device => 
-            device.label === micSettings.inputDevice || 
+          // ✅ FIX: Cerca prima per deviceId, poi per label
+          let selectedDevice = audioInputs.find(device => 
             device.deviceId === micSettings.inputDevice
           );
           
+          if (!selectedDevice) {
+            selectedDevice = audioInputs.find(device => 
+              device.label === micSettings.inputDevice
+            );
+          }
+          
           if (selectedDevice) {
             deviceId = selectedDevice.deviceId;
-            console.log('🎤 [MIC] Usando dispositivo microfono specifico:', selectedDevice.label, selectedDevice.deviceId);
+            console.log('🎤 [MIC] ✅ Dispositivo microfono selezionato:', {
+              label: selectedDevice.label,
+              deviceId: selectedDevice.deviceId,
+              groupId: selectedDevice.groupId
+            });
+            
+            // ✅ FIX: Verifica che non sia un dispositivo che cattura audio sistema
+            const label = selectedDevice.label.toLowerCase();
+            const problematicPatterns = [
+              'stereo mix', 'what u hear', 'wave out mix', 'speakers', 
+              'headphones', 'output', 'playback', 'monitor', 'loopback',
+              'virtual', 'system', 'desktop', 'screen'
+            ];
+            
+            const isProblematic = problematicPatterns.some(pattern => label.includes(pattern));
+            if (isProblematic) {
+              console.warn('⚠️ [MIC] ATTENZIONE: Il dispositivo selezionato potrebbe catturare audio sistema!', selectedDevice.label);
+              console.warn('⚠️ [MIC] CONSIGLIO: Cambia dispositivo nelle impostazioni per evitare feedback');
+            }
+            
           } else {
-            console.warn('⚠️ [MIC] Dispositivo microfono non trovato, uso default');
+            console.error('❌ [MIC] ERRORE: Dispositivo microfono non trovato!', {
+              cercato: micSettings.inputDevice,
+              disponibili: audioInputs.map(d => ({ deviceId: d.deviceId, label: d.label }))
+            });
+            console.log('🎤 [MIC] Dispositivi disponibili:', audioInputs.map(d => d.label));
+            console.warn('⚠️ [MIC] Il dispositivo potrebbe essere stato disconnesso. Userò il microfono di default.');
+            
+            // ✅ FIX: Aggiorna le impostazioni per usare il microfono di default
+            try {
+              const { localDatabase } = await import('../database/LocalDatabase');
+              const currentSettings = await localDatabase.getSettings();
+              if (currentSettings?.microphone?.inputDevice === micSettings.inputDevice) {
+                console.log('🎤 [MIC] 🔄 Aggiornando impostazioni per usare microfono di default...');
+                await localDatabase.updateSettings({
+                  ...currentSettings,
+                  microphone: {
+                    ...currentSettings.microphone,
+                    inputDevice: 'default'
+                  }
+                });
+                console.log('🎤 [MIC] ✅ Impostazioni aggiornate per usare microfono di default');
+              }
+            } catch (updateError) {
+              console.warn('⚠️ [MIC] Errore aggiornamento impostazioni:', updateError);
+            }
           }
         } catch (error) {
           console.warn('⚠️ [MIC] Errore enumerazione dispositivi:', error);
         }
+      } else {
+        console.log('🎤 [MIC] Usando microfono di default (nessun dispositivo specifico configurato)');
       }
       
-      // ✅ SOLUZIONE PRATICA: Configurazione microfono per minimizzare cattura audio sistema
+      // ✅ FIX MICROFONO: Configurazione aggressiva per prevenire cattura audio sistema
       const constraints = {
         audio: {
-          // ✅ PARAMETRI BASE per isolamento
-          echoCancellation: micSettings.echoCancellation,        // Usa impostazione settings
-          noiseSuppression: micSettings.noiseSuppression,        // Usa impostazione settings
-          autoGainControl: micSettings.autoGainControl,          // Usa impostazione settings
-          latency: 0,                    // Latenza minima
-          sampleRate: micSettings.sampleRate,             // Usa impostazione settings
-          channelCount: 1,               // Mono per ridurre latenza
-          sampleSize: 16,                // 16-bit per compatibilità
-          ...(deviceId && { deviceId: deviceId }),  // ✅ CORREZIONE: Usa dispositivo specifico
+          // ✅ PARAMETRI BASE per isolamento massimo
+          echoCancellation: true,             // ✅ FORZATO: Sempre attivo per prevenire feedback
+          noiseSuppression: true,             // ✅ FORZATO: Sempre attivo per pulire il segnale
+          autoGainControl: false,             // ✅ DISABILITATO: Controllo manuale del volume
+          latency: 0,                         // Latenza minima
+          sampleRate: micSettings.sampleRate, // Usa impostazione settings
+          channelCount: 1,                    // Mono per ridurre latenza
+          sampleSize: 16,                     // 16-bit per compatibilità
+          ...(deviceId && { deviceId: { exact: deviceId } }),  // ✅ FIX: Forza dispositivo specifico con "exact"
           
-          // ✅ PARAMETRI GOOGLE per isolamento avanzato
-          googEchoCancellation: true,        // Cancellazione eco Google
-          googNoiseSuppression: true,        // Soppressione rumore Google
-          googAutoGainControl: false,        // Controllo guadagno manuale
-          googHighpassFilter: true,          // Filtro passa-alto
-          googTypingNoiseDetection: true,    // Rilevamento rumore tastiera
-          googAudioMirroring: false,         // Disabilita mirroring
+          // ✅ PARAMETRI GOOGLE AGGIUNTIVI per isolamento massimo
+          googEchoCancellation: true,         // Cancellazione eco Google
+          googNoiseSuppression: true,         // Soppressione rumore Google
+          googAutoGainControl: false,         // ✅ DISABILITATO: Controllo guadagno manuale
+          googHighpassFilter: true,           // Filtro passa-alto
+          googTypingNoiseDetection: true,     // Rilevamento rumore tastiera
+          googAudioMirroring: false,          // ✅ CRITICO: Disabilita mirroring audio
           
           // ✅ PARAMETRI AGGIUNTIVI per isolamento massimo
-          googDAEchoCancellation: true,      // Cancellazione eco digitale avanzata
-          googNoiseReduction: true,          // Riduzione rumore avanzata
-          googBeamforming: true,             // Beamforming per direzionalità
+          googDAEchoCancellation: true,       // Cancellazione eco digitale avanzata
+          googNoiseReduction: true,           // Riduzione rumore avanzata
+          googBeamforming: true,              // Beamforming per direzionalità
           
           // ✅ PARAMETRI SPECIFICI per prevenire cattura audio sistema
-          suppressLocalAudioPlayback: true,  // Esclude audio locale (se supportato)
-          googEchoCancellation2: true,       // Cancellazione eco v2
-          googNoiseSuppression2: true,       // Soppressione rumore v2
-          googHighpassFilter2: true,         // Filtro passa-alto v2
-          googTypingNoiseDetection2: true,   // Rilevamento rumore tastiera v2
-          googAudioMirroring2: false         // Disabilita mirroring v2
+          suppressLocalAudioPlayback: true,   // Esclude audio locale (se supportato)
+          googEchoCancellation2: true,        // Cancellazione eco v2
+          googNoiseSuppression2: true,        // Soppressione rumore v2
+          googHighpassFilter2: true,          // Filtro passa-alto v2
+          googTypingNoiseDetection2: true,    // Rilevamento rumore tastiera v2
+          googAudioMirroring2: false,         // ✅ CRITICO: Disabilita mirroring v2
+          
+          // ✅ NUOVI PARAMETRI per isolamento audio sistema
+          googAudioMirroring3: false,         // Disabilita mirroring v3
+          googEchoCancellation3: true,        // Cancellazione eco v3
+          googNoiseSuppression3: true,        // Soppressione rumore v3
+          googHighpassFilter3: true,          // Filtro passa-alto v3
+          googTypingNoiseDetection3: true,    // Rilevamento rumore tastiera v3
+          
+          // ✅ PARAMETRI EXPERIMENTAL per isolamento massimo
+          experimentalEchoCancellation: true, // Cancellazione eco sperimentale
+          experimentalNoiseSuppression: true, // Soppressione rumore sperimentale
+          experimentalAutoGainControl: false, // ✅ DISABILITATO: Controllo guadagno sperimentale
+          experimentalHighpassFilter: true,   // Filtro passa-alto sperimentale
+          experimentalTypingNoiseDetection: true, // Rilevamento rumore tastiera sperimentale
+          experimentalAudioMirroring: false   // ✅ CRITICO: Disabilita mirroring sperimentale
         }
       };
 
       console.log('🎤 [MIC] Configurazione anti-eco + esclusione audio live applicata:', constraints);
+      console.log('🎤 [MIC] 🔍 DEBUG: Richiesta getUserMedia con deviceId:', deviceId);
       
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        // ✅ FIX: Verifica se il dispositivo selezionato è effettivamente quello richiesto
+        const audioTrack = stream.getAudioTracks()[0];
+        if (audioTrack && deviceId) {
+          const trackSettings = audioTrack.getSettings();
+          if (trackSettings.deviceId !== deviceId) {
+            console.warn('⚠️ [MIC] ATTENZIONE: Il browser ha ignorato il deviceId specifico!');
+            console.warn('⚠️ [MIC] Richiesto:', deviceId);
+            console.warn('⚠️ [MIC] Ottenuto:', trackSettings.deviceId);
+            console.warn('⚠️ [MIC] Questo può causare feedback audio se il dispositivo sbagliato cattura audio sistema');
+            
+            // ✅ FIX: Prova a forzare il dispositivo corretto
+            console.log('🎤 [MIC] 🔍 DEBUG: Tentativo di forzare il dispositivo corretto...');
+            
+            // Ferma lo stream corrente
+            stream.getTracks().forEach(track => track.stop());
+            
+            // Prova con constraints più specifici
+            const forcedConstraints = {
+              audio: {
+                deviceId: { exact: deviceId },
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: false,
+                latency: 0,
+                sampleRate: micSettings.sampleRate,
+                channelCount: 1,
+                sampleSize: 16
+              }
+            };
+            
+            try {
+              stream = await navigator.mediaDevices.getUserMedia(forcedConstraints);
+              console.log('🎤 [MIC] ✅ Dispositivo forzato con successo!');
+              
+              // ✅ FIX: Verifica che il nuovo stream usi il dispositivo corretto
+              const newAudioTrack = stream.getAudioTracks()[0];
+              if (newAudioTrack) {
+                const newTrackSettings = newAudioTrack.getSettings();
+                if (newTrackSettings.deviceId === deviceId) {
+                  console.log('🎤 [MIC] ✅ PERFETTO: Nuovo stream usa il dispositivo corretto!');
+                } else {
+                  console.warn('⚠️ [MIC] ATTENZIONE: Anche il tentativo forzato non ha funzionato!');
+                  console.warn('  🔑 Richiesto:', deviceId);
+                  console.warn('  🔑 Ottenuto:', newTrackSettings.deviceId);
+                }
+              }
+            } catch (forcedError) {
+              console.warn('⚠️ [MIC] Impossibile forzare il dispositivo specifico:', forcedError);
+              // Usa il fallback
+              throw new Error('DeviceId specifico non disponibile');
+            }
+          }
+        }
+        
+      } catch (error) {
+        console.warn('⚠️ [MIC] Errore con dispositivo specifico, provo fallback:', error);
+        
+        // ✅ FALLBACK: Prova senza deviceId specifico ma con le stesse impostazioni anti-eco
+        const fallbackConstraints = {
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: false,
+            latency: 0,
+            sampleRate: micSettings.sampleRate,
+            channelCount: 1,
+            sampleSize: 16,
+            // ✅ PARAMETRI GOOGLE AGGIUNTIVI per isolamento massimo
+            googEchoCancellation: true,
+            googNoiseSuppression: true,
+            googAutoGainControl: false,
+            googHighpassFilter: true,
+            googTypingNoiseDetection: true,
+            googAudioMirroring: false,
+            googDAEchoCancellation: true,
+            googNoiseReduction: true,
+            googBeamforming: true,
+            suppressLocalAudioPlayback: true,
+            googEchoCancellation2: true,
+            googNoiseSuppression2: true,
+            googHighpassFilter2: true,
+            googTypingNoiseDetection2: true,
+            googAudioMirroring2: false,
+            googAudioMirroring3: false,
+            googEchoCancellation3: true,
+            googNoiseSuppression3: true,
+            googHighpassFilter3: true,
+            googTypingNoiseDetection3: true,
+            experimentalEchoCancellation: true,
+            experimentalNoiseSuppression: true,
+            experimentalAutoGainControl: false,
+            experimentalHighpassFilter: true,
+            experimentalTypingNoiseDetection: true,
+            experimentalAudioMirroring: false
+          }
+        };
+        
+        console.log('🎤 [MIC] 🔍 DEBUG: Tentativo fallback senza deviceId specifico');
+        stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        console.log('🎤 [MIC] ✅ Fallback riuscito - usando microfono di default con impostazioni anti-eco');
+      }
       
-      // ✅ NUOVO: Verifica che l'audio live non venga catturato
+      console.log('🎤 [MIC] 🔍 DEBUG: Stream ottenuto:', {
+        id: stream.id,
+        active: stream.active,
+        tracks: stream.getTracks().map(track => ({
+          id: track.id,
+          label: track.label,
+          enabled: track.enabled,
+          muted: track.muted,
+          settings: track.getSettings()
+        }))
+      });
+      
+      // ✅ FIX MICROFONO: Verifica che l'audio live non venga catturato
       console.log('🎤 [MIC] Stream microfono creato con esclusione audio live');
       console.log('🎤 [MIC] Audio tracks:', stream.getAudioTracks().map(track => ({
         id: track.id,
@@ -2602,10 +3219,78 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         settings: track.getSettings()
       })));
       
+      // ✅ FIX MICROFONO: Verifica che le impostazioni anti-eco siano attive
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) {
+        const settings = audioTrack.getSettings();
+        console.log('🎤 [MIC] Impostazioni track microfono:', settings);
+        
+        // Verifica che l'echo cancellation sia attivo
+        if (settings.echoCancellation !== true) {
+          console.warn('⚠️ [MIC] ATTENZIONE: Echo cancellation non attivo!');
+        }
+        
+        // Verifica che il noise suppression sia attivo
+        if (settings.noiseSuppression !== true) {
+          console.warn('⚠️ [MIC] ATTENZIONE: Noise suppression non attivo!');
+        }
+        
+        // Verifica che l'auto gain control sia disattivo
+        if (settings.autoGainControl !== false) {
+          console.warn('⚠️ [MIC] ATTENZIONE: Auto gain control attivo (dovrebbe essere disattivo)!');
+        }
+        
+        // ✅ FIX: Verifica che il dispositivo selezionato sia corretto
+        if (settings.deviceId && deviceId && settings.deviceId !== deviceId) {
+          console.warn('⚠️ [MIC] ATTENZIONE: DeviceId non corrisponde! Richiesto:', deviceId, 'Ottenuto:', settings.deviceId);
+        }
+        
+        // ✅ FIX: Verifica che il label del dispositivo sia corretto
+        const deviceLabel = (settings as any).label;
+        if (deviceLabel) {
+          const label = deviceLabel.toLowerCase();
+          const problematicPatterns = [
+            'stereo mix', 'what u hear', 'wave out mix', 'speakers', 
+            'headphones', 'output', 'playback', 'monitor', 'loopback',
+            'virtual', 'system', 'desktop', 'screen'
+          ];
+          
+          const isProblematic = problematicPatterns.some(pattern => label.includes(pattern));
+          if (isProblematic) {
+            console.error('❌ [MIC] ERRORE CRITICO: Il microfono selezionato potrebbe catturare audio sistema!', deviceLabel);
+            console.error('❌ [MIC] Questo causerà feedback audio. Cambia dispositivo nelle impostazioni.');
+          } else {
+            console.log('✅ [MIC] Dispositivo microfono verificato come sicuro:', deviceLabel);
+          }
+        }
+      }
+      
       // ✅ TRACKING: Aggiungi stream al tracking
       if ((window as any).addAudioStreamToTracking) {
         ;(window as any).addAudioStreamToTracking(stream);
       }
+      
+      // ✅ DEBUG: Traccia tutti gli stream microfono attivi
+      if (!(window as any).__activeMicrophoneStreams) {
+        (window as any).__activeMicrophoneStreams = new Set();
+      }
+      (window as any).__activeMicrophoneStreams.add(stream);
+      
+      console.log('🎤 [MIC] 🔍 DEBUG: Stream microfono aggiunto al tracking. Totale attivi:', (window as any).__activeMicrophoneStreams.size);
+      
+      // ✅ DEBUG: Lista tutti gli stream microfono attivi
+      (window as any).__activeMicrophoneStreams.forEach((activeStream: MediaStream, index: number) => {
+        console.log(`🎤 [MIC] 🔍 DEBUG: Stream attivo #${index}:`, {
+          id: activeStream.id,
+          active: activeStream.active,
+          tracks: activeStream.getTracks().map(track => ({
+            id: track.id,
+            label: track.label,
+            enabled: track.enabled,
+            muted: track.muted
+          }))
+        });
+      });
       
       // ✅ CLEANUP: Chiudi solo AudioContext temporanei del microfono, NON quello principale
       if (typeof window !== 'undefined' && window.AudioContext) {
@@ -2840,6 +3525,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setCrossfader,
       addToDeck,
       incrementPlayCount,
+      clearLeftDeck,
+      clearRightDeck,
       
       // Dispatch per modifiche di stato
       dispatch

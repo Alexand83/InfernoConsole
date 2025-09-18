@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Volume2, Mic, MicOff, Radio, Settings } from 'lucide-react'
 import { useAudio } from '../../contexts/AudioContext'
 import { useSettings } from '../../contexts/SettingsContext'
+import { usePTT } from '../../hooks/usePTT'
+import { useTranslation } from '../../i18n'
 
 interface EnhancedMixerProps {
   leftDeckActive: boolean
@@ -25,6 +27,7 @@ const EnhancedMixer: React.FC<EnhancedMixerProps> = ({
   } = useAudio()
   
   const { settings } = useSettings()
+  const { t } = useTranslation()
   
   // Stati locali per i controlli
   const [masterVolume, setMasterVolume] = useState(0.8) // Volume locale
@@ -36,6 +39,34 @@ const EnhancedMixer: React.FC<EnhancedMixerProps> = ({
   useEffect(() => {
     setCrossfaderValue(audioState.crossfader)
   }, [audioState.crossfader])
+
+  // Log microphone status only when it changes (prevents console spam)
+  useEffect(() => {
+    const micDevice = settings.microphone?.inputDevice;
+    if (micDevice && micDevice !== 'default') {
+      if ((window as any).__activeMicrophoneStreams && (window as any).__activeMicrophoneStreams.size > 0) {
+        const activeStreams = Array.from((window as any).__activeMicrophoneStreams);
+        if (activeStreams.length > 0) {
+          const stream = activeStreams[activeStreams.length - 1] as MediaStream;
+          const audioTrack = stream.getAudioTracks()[0];
+          if (audioTrack) {
+            const trackSettings = audioTrack.getSettings();
+            const trackDeviceId = trackSettings.deviceId;
+            const trackLabel = (trackSettings as any).label || 'Unknown';
+            
+            if (trackDeviceId === micDevice) {
+              console.log('🎯 [PTT] Dispositivo corretto!');
+            } else {
+              console.log('❌ [PTT] Dispositivo diverso!');
+            }
+            console.log('🎤 [PTT] Stream attivo:', trackLabel, 'Device:', trackDeviceId?.substring(0, 8) + '...');
+          }
+        }
+      } else {
+        console.log('🎤 [PTT] Nessun stream microfono attivo trovato');
+      }
+    }
+  }, [settings.microphone?.inputDevice, audioState.microphone?.isEnabled])
 
   // Gestione PTT con ducking SOLO WebAudio (non tocca volumi locali)
   const handlePTTActivate = useCallback((active: boolean) => {
@@ -106,38 +137,8 @@ const EnhancedMixer: React.FC<EnhancedMixerProps> = ({
     }
   }, [onStreamVolumeChange])
 
-  // Gestione keyboard shortcuts per PTT
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Solo se non stiamo digitando in un input
-      if (e.target && (e.target as HTMLElement).tagName === 'INPUT') return
-      if (e.target && (e.target as HTMLElement).tagName === 'TEXTAREA') return
-      
-      if (e.code === 'KeyM' && !pttActive) {
-        e.preventDefault()
-        handlePTTActivate(true)
-      }
-    }
-    
-    const handleKeyUp = (e: KeyboardEvent) => {
-      // Solo se non stiamo digitando in un input
-      if (e.target && (e.target as HTMLElement).tagName === 'INPUT') return
-      if (e.target && (e.target as HTMLElement).tagName === 'TEXTAREA') return
-      
-      if (e.code === 'KeyM' && pttActive) {
-        e.preventDefault()
-        handlePTTActivate(false)
-      }
-    }
-    
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-    
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
-    }
-  }, [pttActive, handlePTTActivate])
+  // ✅ FIX: Usa il nuovo hook PTT che legge l'impostazione dalle settings
+  usePTT(handlePTTActivate)
 
   return (
     <div className="bg-dj-primary rounded-xl border border-dj-accent/30 p-4">
@@ -242,32 +243,7 @@ const EnhancedMixer: React.FC<EnhancedMixerProps> = ({
           <h4 className="text-sm font-medium text-white mb-3 text-center">Microfono</h4>
           
           {/* Toggle Microfono */}
-          <div className="mb-3">
-            <button
-              onClick={() => {
-                // ✅ CRITICAL FIX: Il microfono viene gestito automaticamente dal PTT
-                // Non serve più toggle manuale
-                console.log('🎤 Microfono gestito automaticamente dal PTT')
-              }}
-              className={`w-full p-2 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2 ${
-                audioState.microphone?.isEnabled
-                  ? 'bg-green-600 hover:bg-green-700 text-white'
-                  : 'bg-gray-600 hover:bg-gray-700 text-white'
-              }`}
-            >
-              {audioState.microphone?.isEnabled ? (
-                <>
-                  <Mic className="w-4 h-4" />
-                  <span className="text-sm">Microfono ON</span>
-                </>
-              ) : (
-                <>
-                  <MicOff className="w-4 h-4" />
-                  <span className="text-sm">Microfono OFF</span>
-                </>
-              )}
-            </button>
-          </div>
+          {/* ✅ RIMOSSO: Pulsante Microfono OFF - ora gestito automaticamente dal PTT */}
 
           {/* PTT Button */}
           <div className="mb-3">
@@ -285,11 +261,112 @@ const EnhancedMixer: React.FC<EnhancedMixerProps> = ({
             >
               <Mic className="w-4 h-4" />
               <span className="text-sm font-bold">
-                {pttActive ? 'PTT ACTIVE' : 'HOLD PTT'}
+                {pttActive ? t('streaming.pttActive') : t('streaming.activatePTT')}
               </span>
             </button>
+            
+            {/* ✅ INDICATORE MICROFONO IN TEMPO REALE */}
+            {pttActive && (
+              <div className="mt-2 bg-red-900/80 text-red-100 px-2 py-1 rounded text-xs font-mono border border-red-500/50">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse"></div>
+                  <span className="truncate">
+                    {(() => {
+                      // Mostra il nome del microfono attualmente in uso
+                      const micDevice = settings.microphone?.inputDevice;
+                      if (micDevice && micDevice !== 'default') {
+                        // Cerca il nome del dispositivo dalle impostazioni
+                        const deviceName = micDevice;
+                        return `MIC: ${deviceName.length > 25 ? deviceName.substring(0, 25) + '...' : deviceName}`;
+                      } else {
+                        return 'MIC: Default';
+                      }
+                    })()}
+                  </span>
+                </div>
+                
+                {/* ✅ INDICATORE STATO MICROFONO */}
+                <div className="mt-1 text-xs text-red-200/80">
+                  {(() => {
+                    const micDevice = settings.microphone?.inputDevice;
+                    if (micDevice && micDevice !== 'default') {
+                      // Verifica se il dispositivo potrebbe essere problematico
+                      const label = micDevice.toLowerCase();
+                      const problematicPatterns = [
+                        'stereo mix', 'what u hear', 'wave out mix', 'speakers', 
+                        'headphones', 'output', 'playback', 'monitor', 'loopback',
+                        'virtual', 'system', 'desktop', 'screen'
+                      ];
+                      
+                      const isProblematic = problematicPatterns.some(pattern => label.includes(pattern));
+                      if (isProblematic) {
+                        return '⚠️ ATTENZIONE: Potrebbe catturare audio sistema!';
+                      } else {
+                        return '✅ Microfono dedicato selezionato';
+                      }
+                    } else {
+                      return 'ℹ️ Usando microfono di default';
+                    }
+                  })()}
+                </div>
+                
+                {/* ✅ INDICATORE CORRISPONDENZA DISPOSITIVO */}
+                <div className="mt-1 text-xs text-red-300/70">
+                  {(() => {
+                    const micDevice = settings.microphone?.inputDevice;
+                    if (micDevice && micDevice !== 'default') {
+                      // Verifica se il dispositivo selezionato corrisponde a quello effettivamente in uso
+                      if ((window as any).__activeMicrophoneStreams && (window as any).__activeMicrophoneStreams.size > 0) {
+                        const activeStreams = Array.from((window as any).__activeMicrophoneStreams);
+                        if (activeStreams.length > 0) {
+                          const stream = activeStreams[activeStreams.length - 1] as MediaStream;
+                          const audioTrack = stream.getAudioTracks()[0];
+                          if (audioTrack) {
+                            const trackSettings = audioTrack.getSettings();
+                            const trackDeviceId = trackSettings.deviceId;
+                            
+                            if (trackDeviceId === micDevice) {
+                              return '🎯 PERFETTO: Dispositivo corrisponde!';
+                            } else {
+                              return '❌ PROBLEMA: Dispositivo diverso da quello selezionato!';
+                            }
+                          }
+                        }
+                      }
+                      return '❓ Verifica corrispondenza non disponibile';
+                    } else {
+                      return 'ℹ️ Usando microfono di default';
+                    }
+                  })()}
+                </div>
+                
+                {/* ✅ INDICATORE MICROFONO EFFETTIVO DAL BROWSER */}
+                <div className="mt-1 text-xs text-red-300/70">
+                  {(() => {
+                    // Prova a ottenere informazioni dal stream microfono attivo
+                    if ((window as any).__activeMicrophoneStreams && (window as any).__activeMicrophoneStreams.size > 0) {
+                      const activeStreams = Array.from((window as any).__activeMicrophoneStreams);
+                      if (activeStreams.length > 0) {
+                        const stream = activeStreams[activeStreams.length - 1] as MediaStream; // Prendi l'ultimo stream
+                        const audioTrack = stream.getAudioTracks()[0];
+                        if (audioTrack) {
+                          const trackSettings = audioTrack.getSettings();
+                          const trackLabel = (trackSettings as any).label || 'Unknown';
+                          const trackDeviceId = trackSettings.deviceId;
+                          
+                          return `🔍 Browser: ${trackLabel.length > 20 ? trackLabel.substring(0, 20) + '...' : trackLabel}`;
+                        }
+                      }
+                    }
+                    
+                    return '🔍 Browser: Stream info non disponibile';
+                  })()}
+                </div>
+              </div>
+            )}
+            
             <div className="text-xs text-dj-light/50 mt-1 text-center">
-              Tieni premuto M o il pulsante
+              {t('streaming.pttInstruction').replace('{key}', settings.microphone.pushToTalkKey)}
             </div>
           </div>
 
