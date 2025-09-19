@@ -120,11 +120,13 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
         console.warn('⚠️ [COLLABORATIVE] Errore rilevamento IP pubblico client:', error)
       }
       
+      console.log(`🔍 [COLLABORATIVE] Host da provare:`, commonHosts)
+      
       for (const host of commonHosts) {
         for (const port of commonPorts) {
           const url = `http://${host}:${port}`
           try {
-            console.log(`🔍 [COLLABORATIVE] Provo locale: ${url}`)
+            console.log(`🔍 [COLLABORATIVE] Provo connessione: ${url}`)
             
             const response = await fetch(`${url}/api/session/${sessionCode}`, {
               method: 'GET',
