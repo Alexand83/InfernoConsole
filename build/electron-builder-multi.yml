@@ -19,6 +19,7 @@ win:
 
 # Configurazione per macOS
 mac:
+  publish: false  # Disabilita pubblicazione automatica - pubblicazione manuale
   target:
     - target: dmg
       arch:
