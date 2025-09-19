@@ -19,7 +19,7 @@ win:
 
 # Configurazione per macOS
 mac:
-  publish: false  # Disabilita pubblicazione automatica - pubblicazione manuale
+  # Riattivata pubblicazione automatica - workflow unificato
   target:
     - target: dmg
       arch:
@@ -75,6 +75,11 @@ directories:
 # Configurazione per la versione
 generateUpdatesFilesForAllChannels: true
 
+# Configurazione globale per build multipli
+buildDependenciesFromSource: false
+nodeGypRebuild: false
+npmRebuild: false
+
 # Configurazione per generare app-update.yml (solo per portable)
 
 # Configurazione auto-updater
@@ -83,6 +88,10 @@ publish:
   owner: Alexand83
   repo: InfernoConsole
   releaseType: release
+  # Configurazione per evitare conflitti di timing
+  timeout: 300000  # 5 minuti timeout
+  releaseDraft: false
+  releasePrerelease: false
 
 
 # Configurazione per download differenziali
