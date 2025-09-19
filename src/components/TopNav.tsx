@@ -43,7 +43,7 @@ const TopNav = () => {
               title="Modalità Collaborativa"
             >
               <Users className="w-4 h-4" />
-              <span className="font-medium">🤝 Collaborativo</span>
+              <span className="font-medium">🤝 Collaborazione DJ</span>
             </button>
           </nav>
         </div>
