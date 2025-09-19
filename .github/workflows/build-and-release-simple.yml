@@ -122,7 +122,9 @@ jobs:
           - Versione sviluppata da Alessandro(NeverAgain)
           - Licenza MIT
           - Supporto completo per streaming Icecast
-        files: dist/*.dmg
+        files: |
+          dist-electron/*.dmg
+          dist-electron/*.zip
         draft: false
         prerelease: false
         generate_release_notes: true
