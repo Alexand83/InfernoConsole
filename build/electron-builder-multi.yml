@@ -88,10 +88,6 @@ publish:
   owner: Alexand83
   repo: InfernoConsole
   releaseType: release
-  # Configurazione per evitare conflitti di timing
-  timeout: 300000  # 5 minuti timeout
-  releaseDraft: false
-  releasePrerelease: false
 
 
 # Configurazione per download differenziali
