@@ -101,9 +101,24 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
         return url
       }
       
-      // 2. Prova connessioni locali
+      // 2. Prova connessioni locali e remote
       const commonPorts = [8080, 8081, 8082, 3000, 3001, 5000, 5001]
       const commonHosts = ['localhost', '127.0.0.1']
+      
+      // Aggiungi IP pubblico se disponibile
+      if (state.publicIP) {
+        commonHosts.push(state.publicIP)
+      }
+      
+      // Prova a rilevare l'IP pubblico del client
+      try {
+        const clientPublicIP = await detectPublicIP()
+        if (clientPublicIP && !commonHosts.includes(clientPublicIP)) {
+          commonHosts.push(clientPublicIP)
+        }
+      } catch (error) {
+        console.warn('⚠️ [COLLABORATIVE] Errore rilevamento IP pubblico client:', error)
+      }
       
       for (const host of commonHosts) {
         for (const port of commonPorts) {
