@@ -248,12 +248,19 @@ class AppUpdater {
       
       // ✅ FIX: Parametri corretti per macOS e Windows
       if (process.platform === 'darwin') {
-        // macOS: force=true, isSilent=false per mostrare il progresso
-        autoUpdater.quitAndInstall(true, false)
+        // macOS: force=false, isSilent=false per installazione corretta
+        console.log('🍎 macOS: Installazione aggiornamento...')
+        autoUpdater.quitAndInstall(false, false)
       } else {
         // Windows: force=true, isSilent=true per installazione silenziosa
+        console.log('🪟 Windows: Installazione aggiornamento...')
         autoUpdater.quitAndInstall(true, true)
       }
+    } else {
+      console.log('⚠️ Installazione non possibile:', {
+        isDownloaded: this.downloadState.isDownloaded,
+        isInstalling: this.downloadState.isInstalling
+      })
     }
   }
 

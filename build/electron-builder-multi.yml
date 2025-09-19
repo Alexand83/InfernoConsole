@@ -42,6 +42,10 @@ mac:
   generateUpdatesFilesForAllChannels: true
   # ✅ FIX: Forza la generazione di file .blockmap per delta updates su macOS
   compression: maximum
+  # Configurazione per auto-updater macOS
+  publishAutoUpdate: true
+  # Genera file di aggiornamento per macOS
+  generateUpdatesFilesForAllChannels: true
 
 # Linux rimosso - non necessario
 
@@ -88,6 +92,10 @@ publish:
   owner: Alexand83
   repo: InfernoConsole
   releaseType: release
+  # Configurazione per auto-updater
+  publishAutoUpdate: true
+  # Genera file di aggiornamento
+  generateUpdatesFilesForAllChannels: true
 
 
 # Configurazione per download differenziali
