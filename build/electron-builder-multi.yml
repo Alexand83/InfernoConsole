@@ -12,10 +12,7 @@ win:
   requestedExecutionLevel: asInvoker
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
-  # Configurazione per auto-updater con file completo (no delta)
-  generateUpdatesFilesForAllChannels: false
-  # ✅ FIX: Disabilita delta updates per usare file completo
-  compression: maximum
+  # ✅ FIX: compression spostata a livello globale
 
 # Configurazione per macOS
 mac:
@@ -38,12 +35,6 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
   # Configurazione per auto-updater su macOS
   electronUpdaterCompatibility: ">=2.16"
-  # Configurazione per delta updates su macOS
-  generateUpdatesFilesForAllChannels: true
-  # ✅ FIX: Forza la generazione di file .blockmap per delta updates su macOS
-  compression: maximum
-  # Configurazione per auto-updater macOS
-  publishAutoUpdate: true
 
 # Linux rimosso - non necessario
 
@@ -74,13 +65,14 @@ directories:
   output: dist-electron
   buildResources: build
 
-# Configurazione per la versione
-generateUpdatesFilesForAllChannels: true
-
 # Configurazione globale per build multipli
 buildDependenciesFromSource: false
 nodeGypRebuild: false
 npmRebuild: false
+
+# Configurazione per la versione e compressione
+generateUpdatesFilesForAllChannels: true
+compression: maximum
 
 # Configurazione per generare app-update.yml (solo per portable)
 
@@ -92,8 +84,6 @@ publish:
   releaseType: release
   # Configurazione per auto-updater
   publishAutoUpdate: true
-  # Genera file di aggiornamento
-  generateUpdatesFilesForAllChannels: true
 
 
 # Configurazione per download differenziali
