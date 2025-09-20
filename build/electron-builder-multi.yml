@@ -31,8 +31,8 @@ mac:
   # icon: build/icon.icns  # Commented out - using default Electron icon
   hardenedRuntime: true
   gatekeeperAssess: false
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
+  # entitlements: build/entitlements.mac.plist  # Temporaneamente disabilitato per test
+  # entitlementsInherit: build/entitlements.mac.plist  # Temporaneamente disabilitato per test
   # Configurazione per auto-updater su macOS
   electronUpdaterCompatibility: ">=2.16"
 
