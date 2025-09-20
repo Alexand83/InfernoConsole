@@ -245,7 +245,7 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
         setState(prev => ({ ...prev, isCreatingTunnel: true }))
         console.log('🚇 [COLLABORATIVE] Creazione tunnel automatico PLUG-AND-PLAY...')
         
-        tunnelInfo = await browserTunnelManager.createTunnel(state.serverPort, 'cloudflare')
+        tunnelInfo = await browserTunnelManager.createTunnelWithFallback(state.serverPort)
         console.log(`🌐 [COLLABORATIVE] Tunnel PLUG-AND-PLAY creato: ${tunnelInfo.publicUrl}`)
         
         setState(prev => ({ ...prev, isCreatingTunnel: false, connectionType: 'tunnel' }))

@@ -4,11 +4,13 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { Server, Users, Mic, MicOff, Play, Square, Copy, Share2, Wifi, WifiOff, CheckCircle, AlertCircle, Volume2 } from 'lucide-react'
+import { Server, Users, Mic, MicOff, Play, Square, Copy, Share2, Wifi, WifiOff, CheckCircle, AlertCircle, Volume2, Settings } from 'lucide-react'
 import { useCollaborativeMode } from '../contexts/CollaborativeModeContext'
 import { useStreaming } from '../contexts/StreamingContext'
 import { useCollaborativeAudio } from '../hooks/useCollaborativeAudio'
 import { testSTUNConnectivity, detectBestConnectionType } from '../config/webrtc.config'
+import { CloudflareConfigPanel } from './CloudflareConfigPanel'
+import { BrowserTunnelManager } from '../utils/BrowserTunnelManager'
 
 const HostModeContent: React.FC = () => {
   const { state, actions } = useCollaborativeMode()
@@ -18,6 +20,8 @@ const HostModeContent: React.FC = () => {
   const [remoteVoicesVolume, setRemoteVoicesVolume] = useState(80)
   const [stunStatus, setStunStatus] = useState<'checking' | 'connected' | 'failed' | 'offline'>('checking')
   const [connectionType, setConnectionType] = useState<'local' | 'remote' | 'offline'>('local')
+  const [showCloudflareConfig, setShowCloudflareConfig] = useState(false)
+  const [isCloudflareConfigured, setIsCloudflareConfigured] = useState(false)
 
   // Testa connettività STUN all'avvio
   useEffect(() => {
@@ -41,6 +45,12 @@ const HostModeContent: React.FC = () => {
     }
     
     testConnection()
+  }, [])
+
+  // Verifica configurazione Cloudflare
+  useEffect(() => {
+    const tunnelManager = new BrowserTunnelManager()
+    setIsCloudflareConfigured(tunnelManager.isCloudflareConfigured())
   }, [])
 
   const handleStartServer = async () => {
@@ -83,6 +93,15 @@ const HostModeContent: React.FC = () => {
       if (success) {
         console.log('✅ Informazioni connessione condivise!')
       }
+    }
+  }
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      console.log('✅ Testo copiato:', text)
+    } catch (error) {
+      console.error('❌ Errore copia:', error)
     }
   }
 
@@ -163,6 +182,39 @@ const HostModeContent: React.FC = () => {
               <p>✅ Accessibile da internet</p>
               <p>✅ Condividi solo il codice sessione</p>
             </div>
+            
+            {/* Informazioni per il Collaboratore */}
+            {state.tunnelInfo && (
+              <div className="collaborator-info">
+                <h6>📤 Per il DJ Collaboratore:</h6>
+                <div className="collaborator-details">
+                  <div className="info-item">
+                    <span className="info-label">Codice Sessione:</span>
+                    <div className="info-value">
+                      <code>{state.sessionCode}</code>
+                      <button onClick={copySessionCode} className="copy-button" title="Copia codice">
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">URL Server:</span>
+                    <div className="info-value">
+                      <code>{state.tunnelInfo.publicUrl}</code>
+                      <button onClick={() => copyToClipboard(state.tunnelInfo!.publicUrl)} className="copy-button" title="Copia URL">
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="collaborator-instructions">
+                  <p>💡 <strong>Istruzioni per DJ Collaboratore:</strong></p>
+                  <p>1. Apri la stessa app in modalità "DJ Collaboratore"</p>
+                  <p>2. Inserisci il codice: <code>{state.sessionCode}</code></p>
+                  <p>3. Il sistema troverà automaticamente il server</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -180,6 +232,29 @@ const HostModeContent: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Configurazione Cloudflare */}
+        <div className="cloudflare-config-section">
+          <div className="config-header">
+            <h5>☁️ Configurazione Cloudflare (Opzionale)</h5>
+            <button
+              onClick={() => setShowCloudflareConfig(true)}
+              className="config-button"
+              title="Configura Cloudflare per tunnel più stabili"
+            >
+              <Settings className="w-4 h-4" />
+              {isCloudflareConfigured ? 'Configurato' : 'Configura'}
+            </button>
+          </div>
+          <div className="config-info">
+            <p className="text-sm text-dj-light/70">
+              {isCloudflareConfigured 
+                ? '✅ Cloudflare configurato - Tunnel più stabili e veloci'
+                : 'Configura Cloudflare per tunnel più stabili e veloci (opzionale)'
+              }
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Session Info */}
@@ -286,29 +361,16 @@ const HostModeContent: React.FC = () => {
                 )}
               </div>
               
-              {/* Connection Type Selector */}
-              <div className="connection-type-selector">
-                <label>Tipo Connessione:</label>
-                <div className="type-buttons">
-                  <button 
-                    className={`type-button ${state.connectionType === 'local' ? 'active' : ''}`}
-                    onClick={() => actions.setConnectionType('local')}
-                  >
-                    🏠 Locale
-                  </button>
-                  <button 
-                    className={`type-button ${state.connectionType === 'public' ? 'active' : ''}`}
-                    onClick={() => actions.setConnectionType('public')}
-                    disabled={!state.publicIP}
-                  >
-                    🌐 Pubblico
-                  </button>
-                  <button 
-                    className={`type-button ${state.connectionType === 'tunnel' ? 'active' : ''}`}
-                    onClick={() => actions.setConnectionType('tunnel')}
-                  >
-                    🚇 Tunnel
-                  </button>
+              {/* PLUG-AND-PLAY: Connessione automatica */}
+              <div className="auto-connection-info">
+                <div className="auto-connection-header">
+                  <CheckCircle className="w-5 h-5 text-green-400" />
+                  <span>🚀 Connessione Automatica PLUG-AND-PLAY</span>
+                </div>
+                <div className="auto-connection-details">
+                  <p>✅ Il sistema creerà automaticamente un tunnel</p>
+                  <p>✅ Nessuna configurazione richiesta</p>
+                  <p>✅ Accessibile da internet</p>
                 </div>
               </div>
             </div>
@@ -591,6 +653,16 @@ const HostModeContent: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Cloudflare Configuration Panel */}
+      <CloudflareConfigPanel
+        isOpen={showCloudflareConfig}
+        onClose={() => setShowCloudflareConfig(false)}
+        onConfigured={() => {
+          setIsCloudflareConfigured(true)
+          setShowCloudflareConfig(false)
+        }}
+      />
     </div>
   )
 }

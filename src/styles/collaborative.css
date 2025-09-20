@@ -236,6 +236,27 @@
   @apply text-yellow-400;
 }
 
+/* ===== CLOUDFLARE CONFIG SECTION ===== */
+.cloudflare-config-section {
+  @apply bg-gray-800/30 border border-gray-600/30 rounded-lg p-4 mt-4;
+}
+
+.config-header {
+  @apply flex items-center justify-between mb-3;
+}
+
+.config-header h5 {
+  @apply text-gray-300 font-semibold text-sm;
+}
+
+.config-button {
+  @apply flex items-center space-x-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors;
+}
+
+.config-info {
+  @apply text-sm text-gray-400;
+}
+
 /* ===== COLLABORATIVE AUDIO MIXING ===== */
 .streaming-status {
   @apply mb-4 p-3 bg-gray-700/30 rounded-md;
@@ -982,4 +1003,67 @@
 
 .progress-text {
   @apply text-sm text-blue-300 text-center;
+}
+
+/* ===== COLLABORATOR INFO ===== */
+.collaborator-info {
+  @apply mt-4 p-4 bg-blue-900/20 border border-blue-700/50 rounded-lg;
+}
+
+.collaborator-info h6 {
+  @apply text-base font-semibold text-blue-400 mb-3;
+}
+
+.collaborator-details {
+  @apply space-y-3 mb-4;
+}
+
+.info-item {
+  @apply flex flex-col space-y-1;
+}
+
+.info-label {
+  @apply text-sm font-medium text-gray-300;
+}
+
+.info-value {
+  @apply flex items-center space-x-2;
+}
+
+.info-value code {
+  @apply bg-gray-800 text-green-400 px-2 py-1 rounded text-sm font-mono;
+  @apply border border-gray-600;
+}
+
+.collaborator-instructions {
+  @apply space-y-2 p-3 bg-gray-800/30 rounded border border-gray-600;
+}
+
+.collaborator-instructions p {
+  @apply text-sm text-gray-300;
+}
+
+.collaborator-instructions code {
+  @apply bg-gray-700 text-yellow-400 px-1 py-0.5 rounded text-xs font-mono;
+}
+
+/* ===== AUTO CONNECTION INFO ===== */
+.auto-connection-info {
+  @apply mt-4 p-4 bg-green-900/20 border border-green-700/50 rounded-lg;
+}
+
+.auto-connection-header {
+  @apply flex items-center space-x-2 mb-3;
+}
+
+.auto-connection-header span {
+  @apply text-base font-semibold text-green-400;
+}
+
+.auto-connection-details {
+  @apply space-y-1;
+}
+
+.auto-connection-details p {
+  @apply text-sm text-green-300;
 }
