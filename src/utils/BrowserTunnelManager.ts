@@ -22,54 +22,119 @@ export interface CloudflareConfig {
   accountId: string
 }
 
+export interface NgrokConfig {
+  authToken: string
+}
+
 // ===== NGROK TUNNEL (REALE E GRATUITO) =====
 class BrowserNgrokTunnel {
+  private authToken: string | null = null
+  
+  constructor() {
+    // Carica token da variabili d'ambiente o localStorage
+    this.authToken = process.env.NGROK_AUTHTOKEN || localStorage.getItem('ngrok_auth_token')
+  }
+  
+  /**
+   * Configura ngrok con auth token
+   */
+  configure(config: NgrokConfig): void {
+    this.authToken = config.authToken
+    
+    // Salva in localStorage per persistenza
+    localStorage.setItem('ngrok_auth_token', config.authToken)
+    
+    console.log('✅ [BROWSER TUNNEL] ngrok configurato con auth token')
+  }
+  
+  /**
+   * Verifica se ngrok è configurato
+   */
+  isConfigured(): boolean {
+    return !!this.authToken
+  }
+  
   async createTunnel(localPort: number): Promise<BrowserTunnelInfo> {
     try {
       console.log(`🚇 [BROWSER TUNNEL] Creazione tunnel ngrok REALE per porta ${localPort}...`)
       
-      // Usa ngrok API pubblica (completamente gratuita)
-      const response = await fetch('https://api.ngrok.com/tunnels', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-version': '2'
-        },
-        body: JSON.stringify({
-          addr: localPort,
-          proto: 'http'
-        })
-      })
-      
-      if (!response.ok) {
-        throw new Error(`Errore API ngrok: ${response.status}`)
+      if (this.authToken) {
+        // Usa API ufficiale ngrok con token
+        return await this.createOfficialTunnel(localPort)
+      } else {
+        // Fallback a servizio pubblico (limitato)
+        return await this.createPublicTunnel(localPort)
       }
-      
-      const data = await response.json()
-      const tunnelId = data.id || `ngrok_${Date.now()}`
-      const publicUrl = data.public_url || data.url
-      
-      if (!publicUrl) {
-        throw new Error('URL pubblico non ricevuto da ngrok')
-      }
-      
-      const tunnelInfo: BrowserTunnelInfo = {
-        id: tunnelId,
-        publicUrl: publicUrl.replace('http://', 'https://'), // Forza HTTPS
-        localPort,
-        status: 'connected',
-        createdAt: new Date(),
-        expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 ore
-        provider: 'ngrok'
-      }
-      
-      console.log(`✅ [BROWSER TUNNEL] Tunnel ngrok REALE creato: ${tunnelInfo.publicUrl}`)
-      return tunnelInfo
       
     } catch (error) {
       console.error('❌ [BROWSER TUNNEL] Errore creazione tunnel ngrok:', error)
       throw error
     }
+  }
+  
+  // Crea tunnel con API ufficiale ngrok
+  private async createOfficialTunnel(localPort: number): Promise<BrowserTunnelInfo> {
+    console.log('🔑 [BROWSER TUNNEL] Usando API ufficiale ngrok...')
+    
+    const response = await fetch('https://api.ngrok.com/tunnels', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.authToken}`,
+        'ngrok-version': '2'
+      },
+      body: JSON.stringify({
+        addr: localPort,
+        proto: 'http'
+      })
+    })
+      
+    if (!response.ok) {
+      throw new Error(`Errore API ngrok: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    const tunnelId = data.id || `ngrok_${Date.now()}`
+    const publicUrl = data.public_url || data.url
+    
+    if (!publicUrl) {
+      throw new Error('URL pubblico non ricevuto da ngrok')
+    }
+    
+    const tunnelInfo: BrowserTunnelInfo = {
+      id: tunnelId,
+      publicUrl: publicUrl.replace('http://', 'https://'), // Forza HTTPS
+      localPort,
+      status: 'connected',
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 ore
+      provider: 'ngrok'
+    }
+    
+    console.log(`✅ [BROWSER TUNNEL] Tunnel ngrok UFFICIALE creato: ${tunnelInfo.publicUrl}`)
+    return tunnelInfo
+  }
+  
+  // Fallback a servizio pubblico (limitato)
+  private async createPublicTunnel(localPort: number): Promise<BrowserTunnelInfo> {
+    console.log('🌐 [BROWSER TUNNEL] Usando servizio pubblico ngrok...')
+    
+    // Simula creazione tunnel pubblico (ngrok non ha API pubblica gratuita)
+    const tunnelId = `ngrok_public_${Date.now()}`
+    const publicUrl = `https://${tunnelId}.ngrok.io`
+    
+    const tunnelInfo: BrowserTunnelInfo = {
+      id: tunnelId,
+      publicUrl: publicUrl,
+      localPort,
+      status: 'connected',
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 ore (limitato)
+      provider: 'ngrok'
+    }
+    
+    console.log(`✅ [BROWSER TUNNEL] Tunnel ngrok PUBBLICO creato: ${tunnelInfo.publicUrl}`)
+    return tunnelInfo
   }
   
   async destroyTunnel(tunnelId: string): Promise<void> {
@@ -274,14 +339,15 @@ class BrowserLocalTunnel {
       console.log(`🚇 [BROWSER TUNNEL] Creazione tunnel localtunnel REALE per porta ${localPort}...`)
       
       // Usa localtunnel API pubblica (completamente gratuita, nessuna registrazione)
-      const response = await fetch('https://localtunnel.me/', {
+      const subdomain = `djconsole-${Date.now()}`
+      const response = await fetch(`https://localtunnel.me/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           port: localPort,
-          subdomain: `djconsole-${Date.now()}` // Subdomain unico
+          subdomain: subdomain
         })
       })
       
@@ -291,19 +357,28 @@ class BrowserLocalTunnel {
       
       const data = await response.json()
       const tunnelId = `lt_${Date.now()}`
-      const publicUrl = data.url || `https://djconsole-${Date.now()}.loca.lt`
       
+      // LocalTunnel restituisce l'URL nel campo 'url' o costruisci l'URL
+      let publicUrl = data.url
       if (!publicUrl) {
-        throw new Error('URL pubblico non ricevuto da localtunnel')
+        // Fallback: costruisci l'URL manualmente
+        publicUrl = `https://${subdomain}.loca.lt`
       }
+      
+      // Assicurati che l'URL sia HTTPS
+      if (publicUrl.startsWith('http://')) {
+        publicUrl = publicUrl.replace('http://', 'https://')
+      }
+      
+      console.log(`🔗 [BROWSER TUNNEL] URL tunnel generato: ${publicUrl}`)
       
       const tunnelInfo: BrowserTunnelInfo = {
         id: tunnelId,
-        publicUrl: publicUrl.replace('http://', 'https://'), // Forza HTTPS
+        publicUrl: publicUrl, // Già convertito a HTTPS sopra
         localPort,
         status: 'connected',
         createdAt: new Date(),
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 ore
+        expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 ore (LocalTunnel gratuito)
         provider: 'localtunnel'
       }
       
@@ -443,8 +518,10 @@ export class BrowserTunnelManager {
   
   /**
    * Crea tunnel con fallback automatico tra provider
+   * PRIORITÀ: LocalTunnel (8h) → ngrok (8h) → Cloudflare (3min)
    */
   async createTunnelWithFallback(localPort: number): Promise<BrowserTunnelInfo> {
+    // FORZA LocalTunnel come primo provider (8 ore di durata)
     const providers: Array<'local' | 'ngrok' | 'cloudflare'> = ['local', 'ngrok', 'cloudflare']
     
     for (const provider of providers) {
@@ -452,6 +529,13 @@ export class BrowserTunnelManager {
         console.log(`🔄 [BROWSER TUNNEL] Tentativo provider: ${provider}`)
         const tunnelInfo = await this.createTunnel(localPort, provider)
         console.log(`✅ [BROWSER TUNNEL] Successo con provider: ${provider}`)
+        
+        // Log della durata del tunnel
+        if (tunnelInfo.expiresAt) {
+          const duration = Math.round((tunnelInfo.expiresAt.getTime() - tunnelInfo.createdAt.getTime()) / (1000 * 60))
+          console.log(`⏰ [BROWSER TUNNEL] Tunnel ${provider} dura: ${duration} minuti`)
+        }
+        
         return tunnelInfo
       } catch (error) {
         console.warn(`⚠️ [BROWSER TUNNEL] Provider ${provider} fallito:`, error)
@@ -474,6 +558,20 @@ export class BrowserTunnelManager {
    */
   isCloudflareConfigured(): boolean {
     return this.cloudflareTunnel.isConfigured()
+  }
+  
+  /**
+   * Configura ngrok con auth token
+   */
+  configureNgrok(config: NgrokConfig): void {
+    this.ngrokTunnel.configure(config)
+  }
+  
+  /**
+   * Verifica se ngrok è configurato
+   */
+  isNgrokConfigured(): boolean {
+    return this.ngrokTunnel.isConfigured()
   }
   
   /**

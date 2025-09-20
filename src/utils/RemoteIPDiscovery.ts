@@ -149,29 +149,43 @@ export class RemoteIPDiscovery {
     
     for (const service of discoveryServices) {
       try {
+        console.log(`🔍 [REMOTE DISCOVERY] Provo servizio: ${service}`)
         const response = await fetch(`${service}/api/find/${sessionCode}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json'
           },
-          timeout: 5000
+          timeout: 3000 // Ridotto timeout per evitare attese lunghe
         })
         
         if (response.ok) {
           const data = await response.json()
           if (data.success && data.server) {
+            console.log(`✅ [REMOTE DISCOVERY] Server trovato su ${service}`)
             return {
               success: true,
               server: data.server
             }
           }
+        } else if (response.status === 404) {
+          // 404 è normale se il server non è registrato su questo servizio
+          console.log(`ℹ️ [REMOTE DISCOVERY] Server non trovato su ${service} (404)`)
+          continue
+        } else {
+          console.warn(`⚠️ [REMOTE DISCOVERY] Errore HTTP ${response.status} su ${service}`)
         }
       } catch (error) {
-        console.warn(`⚠️ [REMOTE DISCOVERY] Errore ricerca su ${service}:`, error)
+        // Ignora errori di rete (ERR_NAME_NOT_RESOLVED, ERR_CONNECTION_REFUSED, etc.)
+        if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+          console.log(`ℹ️ [REMOTE DISCOVERY] Servizio ${service} non raggiungibile`)
+        } else {
+          console.warn(`⚠️ [REMOTE DISCOVERY] Errore ricerca su ${service}:`, error)
+        }
         continue
       }
     }
     
+    console.log(`ℹ️ [REMOTE DISCOVERY] Server non trovato su nessun servizio distribuito`)
     return { success: false, error: 'Non trovato su servizi distribuiti' }
   }
   

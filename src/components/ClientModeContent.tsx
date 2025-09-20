@@ -14,6 +14,8 @@ const ClientModeContent: React.FC = () => {
   const [manualIP, setManualIP] = useState('')
   const [connectionMode, setConnectionMode] = useState<'auto' | 'manual'>('auto')
   const [stunStatus, setStunStatus] = useState<'checking' | 'connected' | 'failed' | 'offline'>('checking')
+  const [isTestingConnection, setIsTestingConnection] = useState(false)
+  const [testResult, setTestResult] = useState<string | null>(null)
 
   // Testa connettività STUN all'avvio
   useEffect(() => {
@@ -71,8 +73,37 @@ const ClientModeContent: React.FC = () => {
     actions.stopLocalMicrophone()
   }
 
+  const handleTestConnection = async () => {
+    if (!sessionCode) {
+      setTestResult('❌ Inserisci il codice sessione!')
+      return
+    }
+
+    setIsTestingConnection(true)
+    setTestResult(null)
+
+    try {
+      console.log(`🧪 [TEST] Test connessione REALE per codice: ${sessionCode}`)
+      
+      // Test connessione REALE usando lo stesso discovery del client
+      const testResult = await actions.testServerConnection(sessionCode)
+      
+      if (testResult.success) {
+        setTestResult(`✅ CONNESSIONE VERIFICATA!\n🌐 Server: ${testResult.serverUrl}\n🎯 Codice: ${sessionCode}\n⏰ Testato: ${new Date().toLocaleTimeString()}`)
+      } else {
+        setTestResult(`❌ CONNESSIONE FALLITA!\n🔍 Codice: ${sessionCode}\n💡 Motivo: ${testResult.error}\n\n💡 Verifica che:\n• Il DJ titolare sia online\n• Il codice sia corretto\n• Il tunnel sia attivo`)
+      }
+
+    } catch (error) {
+      console.error('❌ [TEST] Errore test connessione:', error)
+      setTestResult(`❌ Errore test: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`)
+    } finally {
+      setIsTestingConnection(false)
+    }
+  }
+
   const copyConnectionInfo = () => {
-    const info = `URL: ${serverUrl}\nCodice: ${sessionCode}`
+    const info = `URL: ${state.serverUrl}\nCodice: ${sessionCode}`
     navigator.clipboard.writeText(info)
     // TODO: Mostrare notifica di copia
   }
@@ -201,14 +232,33 @@ const ClientModeContent: React.FC = () => {
           
           <div className="connection-actions">
             {state.serverStatus === 'stopped' ? (
-              <button 
-                onClick={handleConnect}
-                className="connect-button"
-                disabled={!sessionCode}
-              >
-                <Play className="w-4 h-4" />
-                Connetti al Server
-              </button>
+              <>
+                <button 
+                  onClick={handleTestConnection}
+                  className="test-button"
+                  disabled={!sessionCode || isTestingConnection}
+                >
+                  {isTestingConnection ? (
+                    <>
+                      <div className="loading-spinner"></div>
+                      Test in corso...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Test Connessione
+                    </>
+                  )}
+                </button>
+                <button 
+                  onClick={handleConnect}
+                  className="connect-button"
+                  disabled={!sessionCode}
+                >
+                  <Play className="w-4 h-4" />
+                  Connetti al Server
+                </button>
+              </>
             ) : (
               <button 
                 onClick={handleDisconnect}
@@ -219,6 +269,15 @@ const ClientModeContent: React.FC = () => {
               </button>
             )}
           </div>
+
+          {/* Test Result */}
+          {testResult && (
+            <div className="test-result">
+              <div className="test-result-content">
+                <pre>{testResult}</pre>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

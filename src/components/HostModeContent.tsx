@@ -10,6 +10,7 @@ import { useStreaming } from '../contexts/StreamingContext'
 import { useCollaborativeAudio } from '../hooks/useCollaborativeAudio'
 import { testSTUNConnectivity, detectBestConnectionType } from '../config/webrtc.config'
 import { CloudflareConfigPanel } from './CloudflareConfigPanel'
+import { NgrokConfigPanel } from './NgrokConfigPanel'
 import { BrowserTunnelManager } from '../utils/BrowserTunnelManager'
 
 const HostModeContent: React.FC = () => {
@@ -22,6 +23,8 @@ const HostModeContent: React.FC = () => {
   const [connectionType, setConnectionType] = useState<'local' | 'remote' | 'offline'>('local')
   const [showCloudflareConfig, setShowCloudflareConfig] = useState(false)
   const [isCloudflareConfigured, setIsCloudflareConfigured] = useState(false)
+  const [showNgrokConfig, setShowNgrokConfig] = useState(false)
+  const [isNgrokConfigured, setIsNgrokConfigured] = useState(false)
 
   // Testa connettività STUN all'avvio
   useEffect(() => {
@@ -47,10 +50,11 @@ const HostModeContent: React.FC = () => {
     testConnection()
   }, [])
 
-  // Verifica configurazione Cloudflare
+  // Verifica configurazione Cloudflare e ngrok
   useEffect(() => {
     const tunnelManager = new BrowserTunnelManager()
     setIsCloudflareConfigured(tunnelManager.isCloudflareConfigured())
+    setIsNgrokConfigured(tunnelManager.isNgrokConfigured())
   }, [])
 
   const handleStartServer = async () => {
@@ -234,27 +238,51 @@ const HostModeContent: React.FC = () => {
         )}
 
         {/* Configurazione Cloudflare */}
-        <div className="cloudflare-config-section">
-          <div className="config-header">
-            <h5>☁️ Configurazione Cloudflare (Opzionale)</h5>
-            <button
-              onClick={() => setShowCloudflareConfig(true)}
-              className="config-button"
-              title="Configura Cloudflare per tunnel più stabili"
-            >
-              <Settings className="w-4 h-4" />
-              {isCloudflareConfigured ? 'Configurato' : 'Configura'}
-            </button>
-          </div>
-          <div className="config-info">
-            <p className="text-sm text-dj-light/70">
-              {isCloudflareConfigured 
-                ? '✅ Cloudflare configurato - Tunnel più stabili e veloci'
-                : 'Configura Cloudflare per tunnel più stabili e veloci (opzionale)'
-              }
-            </p>
-          </div>
-        </div>
+            <div className="tunnel-config-sections">
+              <div className="cloudflare-config-section">
+                <div className="config-header">
+                  <h5>☁️ Configurazione Cloudflare (Opzionale)</h5>
+                  <button
+                    onClick={() => setShowCloudflareConfig(true)}
+                    className="config-button"
+                    title="Configura Cloudflare per tunnel più stabili"
+                  >
+                    <Settings className="w-4 h-4" />
+                    {isCloudflareConfigured ? 'Configurato' : 'Configura'}
+                  </button>
+                </div>
+                <div className="config-info">
+                  <p className="text-sm text-dj-light/70">
+                    {isCloudflareConfigured 
+                      ? '✅ Cloudflare configurato - Tunnel più stabili e veloci'
+                      : 'Configura Cloudflare per tunnel più stabili e veloci (opzionale)'
+                    }
+                  </p>
+                </div>
+              </div>
+
+              <div className="ngrok-config-section">
+                <div className="config-header">
+                  <h5>🔑 Configurazione ngrok (Opzionale)</h5>
+                  <button
+                    onClick={() => setShowNgrokConfig(true)}
+                    className="config-button"
+                    title="Configura ngrok per tunnel più stabili"
+                  >
+                    <Settings className="w-4 h-4" />
+                    {isNgrokConfigured ? 'Configurato' : 'Configura'}
+                  </button>
+                </div>
+                <div className="config-info">
+                  <p className="text-sm text-dj-light/70">
+                    {isNgrokConfigured 
+                      ? '✅ ngrok configurato - Tunnel più stabili e veloci'
+                      : 'Configura ngrok per tunnel più stabili e veloci (opzionale)'
+                    }
+                  </p>
+                </div>
+              </div>
+            </div>
       </div>
 
       {/* Session Info */}
@@ -344,10 +372,51 @@ const HostModeContent: React.FC = () => {
                 )}
                 
                 {state.tunnelInfo && (
-                  <div className="tunnel-info">
-                    <label>Tunnel Attivo:</label>
-                    <div className="tunnel-details">
-                      <code className="tunnel-url">{state.tunnelInfo.publicUrl}</code>
+                  <div className="ip-item tunnel-highlight">
+                    <label>🌐 Tunnel URL (Accesso Remoto):</label>
+                    <div className="ip-details">
+                      <code className="ip-code tunnel-url-code">{state.tunnelInfo.publicUrl}</code>
+                      <div className="tunnel-actions">
+                        <button 
+                          onClick={() => navigator.clipboard.writeText(state.tunnelInfo!.publicUrl)}
+                          className="copy-tunnel-btn"
+                          title="Copia URL tunnel"
+                        >
+                          📋 Copia
+                        </button>
+                        <span className="tunnel-status">
+                          {state.tunnelInfo.status === 'connected' ? '✅ Connesso' : '🔄 Connessione...'}
+                        </span>
+                        {state.tunnelInfo.expiresAt && (
+                          <span className="tunnel-expiry">
+                            Scade: {state.tunnelInfo.expiresAt.toLocaleTimeString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* TUNNEL URL - Mostra sempre se disponibile */}
+              {state.tunnelInfo && (
+                <div className="tunnel-url-section">
+                  <div className="tunnel-url-header">
+                    <CheckCircle className="w-5 h-5 text-green-400" />
+                    <span>🌐 Tunnel URL Attivo</span>
+                  </div>
+                  <div className="tunnel-url-content">
+                    <div className="tunnel-url-display">
+                      <code className="tunnel-url-text">{state.tunnelInfo.publicUrl}</code>
+                      <button 
+                        onClick={() => navigator.clipboard.writeText(state.tunnelInfo!.publicUrl)}
+                        className="copy-tunnel-button"
+                        title="Copia URL tunnel"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="tunnel-info-details">
                       <span className="tunnel-status">
                         {state.tunnelInfo.status === 'connected' ? '✅ Connesso' : '🔄 Connessione...'}
                       </span>
@@ -358,9 +427,9 @@ const HostModeContent: React.FC = () => {
                       )}
                     </div>
                   </div>
-                )}
-              </div>
-              
+                </div>
+              )}
+
               {/* PLUG-AND-PLAY: Connessione automatica */}
               <div className="auto-connection-info">
                 <div className="auto-connection-header">
@@ -661,6 +730,16 @@ const HostModeContent: React.FC = () => {
         onConfigured={() => {
           setIsCloudflareConfigured(true)
           setShowCloudflareConfig(false)
+        }}
+      />
+
+      {/* ngrok Configuration Panel */}
+      <NgrokConfigPanel
+        isOpen={showNgrokConfig}
+        onClose={() => setShowNgrokConfig(false)}
+        onConfigured={() => {
+          setIsNgrokConfigured(true)
+          setShowNgrokConfig(false)
         }}
       />
     </div>

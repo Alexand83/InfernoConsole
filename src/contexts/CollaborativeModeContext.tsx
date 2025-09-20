@@ -54,6 +54,7 @@ export interface CollaborativeModeActions {
   shareConnectionInfo: () => Promise<boolean>
   detectLocalIP: () => Promise<void>
   setConnectionType: (type: 'p2p' | 'tunnel') => void
+  testServerConnection: (sessionCode: string) => Promise<{ success: boolean; serverUrl?: string; error?: string }>
 }
 
 // ===== CONTESTO =====
@@ -245,7 +246,21 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
         setState(prev => ({ ...prev, isCreatingTunnel: true }))
         console.log('🚇 [COLLABORATIVE] Creazione tunnel automatico PLUG-AND-PLAY...')
         
-        tunnelInfo = await browserTunnelManager.createTunnelWithFallback(state.serverPort)
+        // Prova LocalTunnel prima, poi fallback a ngrok se fallisce
+        try {
+          tunnelInfo = await browserTunnelManager.createTunnel(state.serverPort, 'local')
+          console.log(`✅ [COLLABORATIVE] LocalTunnel creato: ${tunnelInfo.publicUrl}`)
+        } catch (error) {
+          console.warn('⚠️ [COLLABORATIVE] LocalTunnel fallito, provo ngrok:', error)
+          try {
+            tunnelInfo = await browserTunnelManager.createTunnel(state.serverPort, 'ngrok')
+            console.log(`✅ [COLLABORATIVE] ngrok creato: ${tunnelInfo.publicUrl}`)
+          } catch (ngrokError) {
+            console.warn('⚠️ [COLLABORATIVE] ngrok fallito, provo Cloudflare:', ngrokError)
+            tunnelInfo = await browserTunnelManager.createTunnel(state.serverPort, 'cloudflare')
+            console.log(`✅ [COLLABORATIVE] Cloudflare creato: ${tunnelInfo.publicUrl}`)
+          }
+        }
         console.log(`🌐 [COLLABORATIVE] Tunnel PLUG-AND-PLAY creato: ${tunnelInfo.publicUrl}`)
         
         // Configura rinnovo automatico tunnel
@@ -698,6 +713,37 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
     }
   }, [])
 
+  // Test connessione server (per bottone test)
+  const testServerConnection = useCallback(async (sessionCode: string): Promise<{ success: boolean; serverUrl?: string; error?: string }> => {
+    try {
+      console.log(`🧪 [TEST] Test connessione server per codice: ${sessionCode}`)
+      
+      // Usa lo stesso discovery del client per testare la connessione REALE
+      const serverUrl = await discoverServer(sessionCode)
+      
+      if (serverUrl) {
+        console.log(`✅ [TEST] Server trovato: ${serverUrl}`)
+        return {
+          success: true,
+          serverUrl: serverUrl
+        }
+      } else {
+        console.log(`❌ [TEST] Server non trovato per codice: ${sessionCode}`)
+        return {
+          success: false,
+          error: 'Server non trovato. Verifica che il DJ titolare sia online e il codice sia corretto.'
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ [TEST] Errore test connessione:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Errore sconosciuto'
+      }
+    }
+  }, [discoverServer])
+
   // ===== RENDER =====
   const actions: CollaborativeModeActions = {
     setMode,
@@ -713,7 +759,8 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
     copyConnectionInfo,
     shareConnectionInfo: shareConnectionInfoAction,
     detectLocalIP: detectLocalIPAction,
-    setConnectionType
+    setConnectionType,
+    testServerConnection
   }
 
   return (
