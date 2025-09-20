@@ -6,7 +6,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import { detectLocalIP, detectPublicIP, detectAllIPs, generateConnectionInfo, copyToClipboard, shareConnectionInfo, type ConnectionInfo } from '../utils/NetworkUtils'
 import { browserTunnelManager, type BrowserTunnelInfo } from '../utils/BrowserTunnelManager'
-import { RealWebSocketServer, type RealWebSocketClient } from '../server/RealWebSocketServer'
+import { BrowserWebSocketServer, type BrowserWebSocketClient } from '../server/BrowserWebSocketServer'
 import { RealWebSocketClient as RealClient, type RealWebSocketClientState } from '../server/RealWebSocketClient'
 import { QRCodeGenerator } from '../utils/QRCodeGenerator'
 import { RemoteIPDiscovery } from '../utils/RemoteIPDiscovery'
@@ -83,7 +83,7 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
   })
 
   // Refs per WebSocket e server
-  const wsServerRef = useRef<RealWebSocketServer | null>(null)
+  const wsServerRef = useRef<BrowserWebSocketServer | null>(null)
   const wsClientRef = useRef<RealClient | null>(null)
   const localMicrophoneRef = useRef<MediaStream | null>(null)
 
@@ -248,6 +248,26 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
         tunnelInfo = await browserTunnelManager.createTunnelWithFallback(state.serverPort)
         console.log(`🌐 [COLLABORATIVE] Tunnel PLUG-AND-PLAY creato: ${tunnelInfo.publicUrl}`)
         
+        // Configura rinnovo automatico tunnel
+        browserTunnelManager.setTunnelRenewalCallback((newTunnel) => {
+          console.log(`🔄 [COLLABORATIVE] Tunnel rinnovato automaticamente: ${newTunnel.publicUrl}`)
+          setState(prev => ({ 
+            ...prev, 
+            tunnelInfo: {
+              id: newTunnel.id,
+              publicUrl: newTunnel.publicUrl,
+              localPort: newTunnel.localPort,
+              status: newTunnel.status,
+              createdAt: newTunnel.createdAt,
+              expiresAt: newTunnel.expiresAt,
+              provider: newTunnel.provider
+            }
+          }))
+        })
+        
+        // Avvia rinnovo automatico
+        browserTunnelManager.startTunnelRenewal()
+        
         setState(prev => ({ ...prev, isCreatingTunnel: false, connectionType: 'tunnel' }))
       } catch (error) {
         console.warn('⚠️ [COLLABORATIVE] Tunnel fallito, fallback a IP locale:', error)
@@ -282,12 +302,12 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
       
       // Avvia server WebSocket REALE
       try {
-        const wsServer = new RealWebSocketServer({
-          port: state.serverPort,
-          sessionCode,
-          maxClients: 10,
-          heartbeatInterval: 5000
-        })
+      const wsServer = new BrowserWebSocketServer({
+        port: state.serverPort,
+        sessionCode,
+        maxClients: 10,
+        heartbeatInterval: 5000
+      })
         await wsServer.start()
         wsServerRef.current = wsServer
         
@@ -402,6 +422,9 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
       wsServerRef.current = null
       console.log('🛑 [COLLABORATIVE] Server autonomo fermato')
     }
+    
+    // Ferma rinnovo automatico tunnel
+    browserTunnelManager.stopTunnelRenewal()
     
     setState(prev => ({ 
       ...prev, 

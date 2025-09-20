@@ -59,7 +59,7 @@ class BrowserNgrokTunnel {
         localPort,
         status: 'connected',
         createdAt: new Date(),
-        expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 ore (limite gratuito)
+        expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 ore
         provider: 'ngrok'
       }
       
@@ -213,7 +213,7 @@ class BrowserCloudflareTunnel {
       localPort,
       status: 'connected',
       createdAt: new Date(),
-      expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 ore
+      expiresAt: new Date(Date.now() + 3 * 60 * 1000), // 3 minuti (Cloudflare gratuito)
       provider: 'cloudflare'
     }
     
@@ -391,6 +391,8 @@ export class BrowserTunnelManager {
   private webrtcTunnel: BrowserWebRTCTunnel
   private localTunnel: BrowserLocalTunnel
   private activeTunnel: BrowserTunnelInfo | null = null
+  private renewalInterval: NodeJS.Timeout | null = null
+  private onTunnelRenewed: ((newTunnel: BrowserTunnelInfo) => void) | null = null
   
   constructor() {
     this.cloudflareTunnel = new BrowserCloudflareTunnel()
@@ -443,7 +445,7 @@ export class BrowserTunnelManager {
    * Crea tunnel con fallback automatico tra provider
    */
   async createTunnelWithFallback(localPort: number): Promise<BrowserTunnelInfo> {
-    const providers: Array<'local' | 'cloudflare' | 'ngrok'> = ['local', 'cloudflare', 'ngrok']
+    const providers: Array<'local' | 'ngrok' | 'cloudflare'> = ['local', 'ngrok', 'cloudflare']
     
     for (const provider of providers) {
       try {
@@ -472,6 +474,74 @@ export class BrowserTunnelManager {
    */
   isCloudflareConfigured(): boolean {
     return this.cloudflareTunnel.isConfigured()
+  }
+  
+  /**
+   * Imposta callback per rinnovo tunnel
+   */
+  setTunnelRenewalCallback(callback: (newTunnel: BrowserTunnelInfo) => void): void {
+    this.onTunnelRenewed = callback
+  }
+  
+  /**
+   * Avvia rinnovo automatico tunnel
+   */
+  startTunnelRenewal(): void {
+    if (this.renewalInterval) {
+      clearInterval(this.renewalInterval)
+    }
+    
+    // Controlla ogni 2 minuti se il tunnel sta per scadere
+    this.renewalInterval = setInterval(() => {
+      this.checkAndRenewTunnel()
+    }, 2 * 60 * 1000) // 2 minuti
+    
+    console.log('🔄 [BROWSER TUNNEL] Rinnovo automatico tunnel avviato')
+  }
+  
+  /**
+   * Ferma rinnovo automatico tunnel
+   */
+  stopTunnelRenewal(): void {
+    if (this.renewalInterval) {
+      clearInterval(this.renewalInterval)
+      this.renewalInterval = null
+    }
+    
+    console.log('🛑 [BROWSER TUNNEL] Rinnovo automatico tunnel fermato')
+  }
+  
+  /**
+   * Controlla e rinnova tunnel se necessario
+   */
+  private async checkAndRenewTunnel(): Promise<void> {
+    if (!this.activeTunnel || !this.activeTunnel.expiresAt) {
+      return
+    }
+    
+    const now = new Date()
+    const expiresAt = this.activeTunnel.expiresAt
+    const timeUntilExpiry = expiresAt.getTime() - now.getTime()
+    
+    // Se il tunnel scade tra meno di 5 minuti, rinnovalo
+    if (timeUntilExpiry < 5 * 60 * 1000) {
+      console.log('🔄 [BROWSER TUNNEL] Tunnel in scadenza, rinnovo automatico...')
+      
+      try {
+        const oldTunnel = this.activeTunnel
+        const newTunnel = await this.createTunnelWithFallback(oldTunnel.localPort)
+        
+        console.log(`✅ [BROWSER TUNNEL] Tunnel rinnovato: ${oldTunnel.publicUrl} → ${newTunnel.publicUrl}`)
+        
+        // Notifica il rinnovo
+        if (this.onTunnelRenewed) {
+          this.onTunnelRenewed(newTunnel)
+        }
+        
+      } catch (error) {
+        console.error('❌ [BROWSER TUNNEL] Errore rinnovo tunnel:', error)
+      }
+    }
   }
   
   /**

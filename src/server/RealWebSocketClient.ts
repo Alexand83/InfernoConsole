@@ -84,6 +84,9 @@ export class RealWebSocketClient {
       
       this.setupDataChannel()
       
+      // Aspetta che il data channel sia pronto prima di inviare messaggi
+      await this.waitForDataChannel()
+      
       // Invia richiesta di connessione
       await this.sendJoinRequest()
       
@@ -365,12 +368,49 @@ export class RealWebSocketClient {
   }
   
   /**
+   * Aspetta che il data channel sia pronto
+   */
+  private async waitForDataChannel(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.dataChannel) {
+        reject(new Error('Data channel non creato'))
+        return
+      }
+      
+      if (this.dataChannel.readyState === 'open') {
+        resolve()
+        return
+      }
+      
+      const timeout = setTimeout(() => {
+        reject(new Error('Timeout attesa data channel'))
+      }, 5000)
+      
+      this.dataChannel.onopen = () => {
+        clearTimeout(timeout)
+        resolve()
+      }
+      
+      this.dataChannel.onerror = (error) => {
+        clearTimeout(timeout)
+        reject(error)
+      }
+    })
+  }
+
+  /**
    * Invia messaggio al server
    */
   async sendMessage(message: RealWebSocketClientMessage): Promise<void> {
     try {
+      // Se il data channel non è pronto, usa WebSocket
       if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
-        throw new Error('Data channel non disponibile')
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify(message))
+          return
+        } else {
+          throw new Error('Nessuna connessione disponibile')
+        }
       }
       
       this.dataChannel.send(JSON.stringify(message))
