@@ -44,8 +44,6 @@ mac:
   compression: maximum
   # Configurazione per auto-updater macOS
   publishAutoUpdate: true
-  # Genera file di aggiornamento per macOS
-  generateUpdatesFilesForAllChannels: true
 
 # Linux rimosso - non necessario
 
