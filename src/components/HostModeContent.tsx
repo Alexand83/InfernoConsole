@@ -149,6 +149,37 @@ const HostModeContent: React.FC = () => {
              state.serverStatus === 'error' ? 'Errore Server' : 'Sconosciuto'}
           </span>
         </div>
+
+        {/* Plug-and-Play Status */}
+        {state.serverStatus === 'running' && (
+          <div className="plug-and-play-status">
+            <div className="plug-and-play-header">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+              <h5>🚀 Modalità PLUG-AND-PLAY Attiva</h5>
+            </div>
+            <div className="plug-and-play-info">
+              <p>✅ Nessuna configurazione richiesta</p>
+              <p>✅ Tunnel automatico creato</p>
+              <p>✅ Accessibile da internet</p>
+              <p>✅ Condividi solo il codice sessione</p>
+            </div>
+          </div>
+        )}
+
+        {state.isCreatingTunnel && (
+          <div className="tunnel-creating">
+            <div className="tunnel-creating-header">
+              <div className="loading-spinner"></div>
+              <h5>🚇 Creazione Tunnel PLUG-AND-PLAY...</h5>
+            </div>
+            <div className="tunnel-progress">
+              <div className="progress-bar">
+                <div className="progress-fill"></div>
+              </div>
+              <div className="progress-text">Configurazione automatica in corso...</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Session Info */}
@@ -536,27 +567,27 @@ const HostModeContent: React.FC = () => {
         <div className="instructions-list">
           <div className="instruction-item">
             <span className="step-number">1</span>
-            <span>Seleziona "Tunnel" per connessioni esterne automatiche</span>
+            <span>🚀 Clicca "Avvia Server Collaborativo" (PLUG-AND-PLAY automatico)</span>
           </div>
           <div className="instruction-item">
             <span className="step-number">2</span>
-            <span>Clicca "Avvia Server Collaborativo"</span>
+            <span>⏳ Attendi creazione tunnel automatico (5-10 secondi)</span>
           </div>
           <div className="instruction-item">
             <span className="step-number">3</span>
-            <span>Condividi il codice sessione con DJ 2</span>
+            <span>📋 Copia e condividi il codice sessione con DJ 2</span>
           </div>
           <div className="instruction-item">
             <span className="step-number">4</span>
-            <span>DJ 2 si connette con la stessa app</span>
+            <span>🔗 DJ 2 si connette con la stessa app (modalità Client)</span>
           </div>
           <div className="instruction-item">
             <span className="step-number">5</span>
-            <span>Entrambi attivano i microfoni</span>
+            <span>🎤 Entrambi attivano i microfoni per il mixing</span>
           </div>
           <div className="instruction-item">
             <span className="step-number">6</span>
-            <span>Iniziate la live collaborativa!</span>
+            <span>📡 Inizia lo streaming live con audio mixato</span>
           </div>
         </div>
       </div>

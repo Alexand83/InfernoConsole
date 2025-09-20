@@ -239,37 +239,36 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
       // Genera codice sessione
       const sessionCode = generateSessionCode()
       
-      // Gestisci tunnel se necessario
+      // 🚇 TUNNEL AUTOMATICO PER PLUG-AND-PLAY
       let tunnelInfo: TunnelInfo | null = null
-      if (state.connectionType === 'tunnel') {
-        try {
-          setState(prev => ({ ...prev, isCreatingTunnel: true }))
-          console.log('🚇 [COLLABORATIVE] Creazione tunnel in corso...')
-          
-          tunnelInfo = await browserTunnelManager.createTunnel(state.serverPort, 'cloudflare')
-          console.log(`🚇 [COLLABORATIVE] Tunnel creato: ${tunnelInfo.publicUrl}`)
-          
-          setState(prev => ({ ...prev, isCreatingTunnel: false }))
-        } catch (error) {
-          console.error('❌ [COLLABORATIVE] Errore creazione tunnel:', error)
-          setState(prev => ({ 
-            ...prev, 
-            serverStatus: 'error',
-            errorMessage: `Errore creazione tunnel: ${error}`,
-            isCreatingTunnel: false
-          }))
-          return
-        }
+      try {
+        setState(prev => ({ ...prev, isCreatingTunnel: true }))
+        console.log('🚇 [COLLABORATIVE] Creazione tunnel automatico PLUG-AND-PLAY...')
+        
+        tunnelInfo = await browserTunnelManager.createTunnel(state.serverPort, 'cloudflare')
+        console.log(`🌐 [COLLABORATIVE] Tunnel PLUG-AND-PLAY creato: ${tunnelInfo.publicUrl}`)
+        
+        setState(prev => ({ ...prev, isCreatingTunnel: false, connectionType: 'tunnel' }))
+      } catch (error) {
+        console.warn('⚠️ [COLLABORATIVE] Tunnel fallito, fallback a IP locale:', error)
+        setState(prev => ({ ...prev, isCreatingTunnel: false, connectionType: 'p2p' }))
+        // Continua senza tunnel
       }
       
-      // Genera informazioni connessione
+      // Genera informazioni connessione - PRIORITÀ TUNNEL PER PLUG-AND-PLAY
       let connectionIP: string
-      if (state.connectionType === 'tunnel' && tunnelInfo) {
+      if (tunnelInfo) {
+        // Usa tunnel se disponibile (PLUG-AND-PLAY)
         connectionIP = tunnelInfo.publicUrl
-      } else if (state.connectionType === 'public' && publicIP) {
+        console.log(`🔗 [COLLABORATIVE] Connessione PLUG-AND-PLAY via tunnel: ${connectionIP}`)
+      } else if (publicIP) {
+        // Fallback a IP pubblico
         connectionIP = publicIP
+        console.log(`🌍 [COLLABORATIVE] Connessione via IP pubblico: ${connectionIP}`)
       } else {
+        // Fallback a IP locale
         connectionIP = localIP
+        console.log(`🏠 [COLLABORATIVE] Connessione via IP locale: ${connectionIP}`)
       }
       
       const connectionInfo = generateConnectionInfo(sessionCode, connectionIP, state.serverPort)
