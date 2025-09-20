@@ -882,3 +882,47 @@
     @apply flex-col space-y-2;
   }
 }
+
+/* ===== CONNECTION MODE SELECTOR ===== */
+.connection-mode-selector {
+  @apply mb-4;
+}
+
+.connection-mode-selector label {
+  @apply block text-sm font-medium text-gray-300 mb-2;
+}
+
+.mode-buttons {
+  @apply flex space-x-2;
+}
+
+.mode-button {
+  @apply px-4 py-2 rounded-md text-sm font-medium transition-colors;
+  @apply bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white;
+  @apply border border-gray-600;
+}
+
+.mode-button.active {
+  @apply bg-blue-600 text-white border-blue-500;
+}
+
+.mode-button:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* ===== MANUAL CONNECTION ===== */
+.manual-connection {
+  @apply space-y-4;
+}
+
+.manual-connection .connection-info {
+  @apply mb-4;
+}
+
+.manual-connection .connection-info h5 {
+  @apply text-base font-semibold text-white mb-2;
+}
+
+.manual-connection .connection-info p {
+  @apply text-gray-300 text-sm;
+}

@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
-import { detectLocalIP, detectAllIPs, generateConnectionInfo, copyToClipboard, shareConnectionInfo, type ConnectionInfo } from '../utils/NetworkUtils'
+import { detectLocalIP, detectPublicIP, detectAllIPs, generateConnectionInfo, copyToClipboard, shareConnectionInfo, type ConnectionInfo } from '../utils/NetworkUtils'
 import { browserTunnelManager, type BrowserTunnelInfo } from '../utils/BrowserTunnelManager'
 import { RealWebSocketServer, type RealWebSocketClient } from '../server/RealWebSocketServer'
 import { RealWebSocketClient as RealClient, type RealWebSocketClientState } from '../server/RealWebSocketClient'
@@ -44,6 +44,7 @@ export interface CollaborativeModeActions {
   startServer: () => Promise<void>
   stopServer: () => void
   connectToServer: (sessionCode: string) => Promise<void>
+  connectToServerWithIP: (sessionCode: string, serverIP: string) => Promise<void>
   disconnectFromServer: () => void
   startLocalMicrophone: () => Promise<void>
   stopLocalMicrophone: () => void
@@ -474,6 +475,75 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
     }
   }, [])
 
+  // Connetti a server con IP specifico (modalità client manuale)
+  const connectToServerWithIP = useCallback(async (sessionCode: string, serverIP: string) => {
+    try {
+      console.log(`🔗 [COLLABORATIVE] Connessione manuale con IP: ${serverIP}`)
+      setState(prev => ({ 
+        ...prev, 
+        serverStatus: 'connecting',
+        sessionCode,
+        errorMessage: null
+      }))
+      
+      // Costruisci URL server
+      const serverUrl = serverIP.startsWith('http') ? serverIP : `http://${serverIP}`
+      console.log(`🌐 [COLLABORATIVE] Server URL: ${serverUrl}`)
+      
+      // Crea client WebSocket REALE
+      const wsClient = new RealClient({
+        serverUrl,
+        sessionCode,
+        clientName: 'DJ Collaboratore',
+        heartbeatInterval: 5000
+      })
+      
+      // Configura eventi client
+      wsClient.onStateChange((clientState) => {
+        console.log('🔗 [COLLABORATIVE] Stato client:', clientState)
+        
+        if (clientState.connectionState === 'connected' && clientState.isAuthenticated) {
+          setState(prev => ({ 
+            ...prev, 
+            serverStatus: 'running',
+            connectedDJs: [{
+              id: 'host',
+              name: 'DJ Titolare',
+              microphone: false,
+              quality: 'excellent',
+              connectedAt: new Date()
+            }]
+          }))
+        } else if (clientState.connectionState === 'disconnected') {
+          setState(prev => ({ 
+            ...prev, 
+            serverStatus: 'stopped',
+            connectedDJs: []
+          }))
+        }
+      })
+      
+      // Salva riferimento client
+      wsClientRef.current = wsClient
+      
+      // Connetti
+      await wsClient.connect()
+      
+    } catch (error) {
+      console.error('❌ [COLLABORATIVE] Errore connessione:', error)
+      setState(prev => ({ 
+        ...prev, 
+        serverStatus: 'stopped',
+        errorMessage: error instanceof Error ? error.message : 'Errore di connessione'
+      }))
+      
+      // Cleanup
+      if (wsClientRef.current) {
+        wsClientRef.current = null
+      }
+    }
+  }, [])
+
   // Disconnetti da server
   const disconnectFromServer = useCallback(async () => {
     console.log('🔌 [COLLABORATIVE] Disconnessione da server...')
@@ -612,6 +682,7 @@ export const CollaborativeModeProvider: React.FC<{ children: React.ReactNode }> 
     startServer,
     stopServer,
     connectToServer,
+    connectToServerWithIP,
     disconnectFromServer,
     startLocalMicrophone,
     stopLocalMicrophone,
