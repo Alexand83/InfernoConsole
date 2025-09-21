@@ -1,6 +1,10 @@
+/**
+ * ☁️ CLOUDFLARE CONFIG PANEL
+ * Pannello per configurare Cloudflare Tunnel
+ */
+
 import React, { useState, useEffect } from 'react'
-import { Settings, Key, User, CheckCircle, AlertCircle, Info } from 'lucide-react'
-import { BrowserTunnelManager, CloudflareConfig } from '../utils/BrowserTunnelManager'
+import { Settings, Key, User, CheckCircle, AlertCircle, Info, X } from 'lucide-react'
 
 interface CloudflareConfigPanelProps {
   isOpen: boolean
@@ -21,17 +25,17 @@ export const CloudflareConfigPanel: React.FC<CloudflareConfigPanelProps> = ({
   const [isConfigured, setIsConfigured] = useState(false)
 
   useEffect(() => {
-    // Verifica se Cloudflare è già configurato
-    const tunnelManager = new BrowserTunnelManager()
-    setIsConfigured(tunnelManager.isCloudflareConfigured())
-    
-    // Carica valori salvati
-    const savedToken = localStorage.getItem('cloudflare_api_token')
-    const savedAccountId = localStorage.getItem('cloudflare_account_id')
-    
-    if (savedToken) setApiToken(savedToken)
-    if (savedAccountId) setAccountId(savedAccountId)
-  }, [])
+    if (isOpen) {
+      // Verifica se Cloudflare è già configurato
+      const savedToken = localStorage.getItem('cloudflare_api_token')
+      const savedAccountId = localStorage.getItem('cloudflare_account_id')
+      
+      setIsConfigured(!!(savedToken && savedAccountId))
+      
+      if (savedToken) setApiToken(savedToken)
+      if (savedAccountId) setAccountId(savedAccountId)
+    }
+  }, [isOpen])
 
   const handleSave = async () => {
     if (!apiToken.trim() || !accountId.trim()) {
@@ -43,13 +47,9 @@ export const CloudflareConfigPanel: React.FC<CloudflareConfigPanelProps> = ({
     setError(null)
 
     try {
-      const config: CloudflareConfig = {
-        apiToken: apiToken.trim(),
-        accountId: accountId.trim()
-      }
-
-      const tunnelManager = new BrowserTunnelManager()
-      tunnelManager.configureCloudflare(config)
+      // Salva la configurazione
+      localStorage.setItem('cloudflare_api_token', apiToken.trim())
+      localStorage.setItem('cloudflare_account_id', accountId.trim())
 
       setSuccess(true)
       setIsConfigured(true)
@@ -80,7 +80,7 @@ export const CloudflareConfigPanel: React.FC<CloudflareConfigPanelProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-dj-dark rounded-lg p-6 w-full max-w-md mx-4">
+      <div className="bg-dj-dark rounded-lg p-6 w-full max-w-md mx-4 border border-dj-accent/20">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-2">
             <Settings className="w-5 h-5 text-dj-accent" />
@@ -89,8 +89,10 @@ export const CloudflareConfigPanel: React.FC<CloudflareConfigPanelProps> = ({
           <button
             onClick={onClose}
             className="text-dj-light hover:text-white transition-colors"
+            title="Chiudi pannello"
+            aria-label="Chiudi pannello"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -188,3 +190,5 @@ export const CloudflareConfigPanel: React.FC<CloudflareConfigPanelProps> = ({
     </div>
   )
 }
+
+export default CloudflareConfigPanel

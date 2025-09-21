@@ -31,7 +31,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // ✅ NUOVO: Listener per progresso download aggiornamenti
   on: (event, callback) => ipcRenderer.on(event, callback),
-  removeListener: (event, callback) => ipcRenderer.removeListener(event, callback)
+  removeListener: (event, callback) => ipcRenderer.removeListener(event, callback),
+  // ✅ NGROK RIMOSSO - SOLO CLOUDFLARE
+
+  // ===== WEBSOCKET SERVER API =====
+  websocketServerAPI: {
+    startServer: (sessionCode, port) => ipcRenderer.invoke('start-websocket-server', sessionCode, port),
+    stopServer: () => ipcRenderer.invoke('stop-websocket-server'),
+    getClients: () => ipcRenderer.invoke('get-websocket-clients'),
+    getServerInfo: () => ipcRenderer.invoke('get-websocket-server-info'),
+    // Event listeners
+    onClientConnected: (callback) => ipcRenderer.on('websocket-client-connected', callback),
+    onClientAuthenticated: (callback) => ipcRenderer.on('websocket-client-authenticated', callback),
+    onClientDisconnected: (callback) => ipcRenderer.on('websocket-client-disconnected', callback),
+    onAudioData: (callback) => ipcRenderer.on('websocket-audio-data', callback),
+    onMicrophoneStatus: (callback) => ipcRenderer.on('websocket-microphone-status', callback),
+    removeAllListeners: () => {
+      ipcRenderer.removeAllListeners('websocket-client-connected')
+      ipcRenderer.removeAllListeners('websocket-client-authenticated')
+      ipcRenderer.removeAllListeners('websocket-client-disconnected')
+      ipcRenderer.removeAllListeners('websocket-audio-data')
+      ipcRenderer.removeAllListeners('websocket-microphone-status')
+    }
+  },
+
+  // ===== CLOUDFLARE TUNNEL API =====
+  cloudflareTunnelAPI: {
+    createTunnel: (port) => ipcRenderer.invoke('create-cloudflare-tunnel', port),
+    closeTunnel: () => ipcRenderer.invoke('close-cloudflare-tunnel')
+  }
+
 })
 
 // Expose minimal APIs if needed in future (IPC, fs, etc.)

@@ -85,14 +85,6 @@ const LibrariesInfo: React.FC = () => {
       url: 'https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices',
       licenseUrl: 'https://www.w3.org/Consortium/Legal/2015/copyright-software-and-document'
     },
-    {
-      name: 'WebRTC',
-      version: 'N/A',
-      license: 'W3C',
-      description: 'API per comunicazione peer-to-peer in tempo reale',
-      url: 'https://webrtc.org/',
-      licenseUrl: 'https://github.com/webrtc/samples/blob/gh-pages/LICENSE'
-    }
   ]
 
   const getLicenseColor = (license: string) => {

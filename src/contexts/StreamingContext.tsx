@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react'
+import React, { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react'
 import { ContinuousStreamingManager, StreamStatus } from '../audio/ContinuousStreamingManager'
 
 // ===== INTERFACCE =====
@@ -174,12 +174,12 @@ export const StreamingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     dispatch({ type: 'SET_ERROR_COUNT', payload: 0 })
   }
 
-  const updateErrorCount = () => {
+  const updateErrorCount = useCallback(() => {
     const errorMessages = state.debugMessages.filter(msg => 
       msg.includes('❌') || msg.includes('ERROR') || msg.includes('Errore')
     )
     dispatch({ type: 'SET_ERROR_COUNT', payload: errorMessages.length })
-  }
+  }, [state.debugMessages, dispatch])
 
   const restoreStateFromManager = () => {
     dispatch({ type: 'RESTORE_STATE_FROM_MANAGER' })

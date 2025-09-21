@@ -13,10 +13,10 @@ import { PlaylistProvider } from './contexts/PlaylistContext'
 import { SettingsProvider } from './contexts/SettingsContext'
 import { TimerProvider } from './contexts/TimerContext'
 import { StreamingProvider } from './contexts/StreamingContext'
-import { CollaborativeModeProvider } from './contexts/CollaborativeModeContext'
+import { CollaborationProvider } from './contexts/CollaborationContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import './styles/themes.css'
-import './styles/collaborative.css'
+import './styles/collaboration.css'
 
 function App() {
   // Debug: Monitor re-render dell'intero albero
@@ -77,7 +77,7 @@ function App() {
         <AudioProvider>
           <PlaylistProvider>
             <StreamingProvider>
-              <CollaborativeModeProvider>
+              <CollaborationProvider>
                 <ErrorBoundary>
               <div className="flex flex-col min-h-screen bg-dj-dark">
                 <TopNav />
@@ -109,7 +109,7 @@ function App() {
                 />
               </div>
                 </ErrorBoundary>
-              </CollaborativeModeProvider>
+              </CollaborationProvider>
             </StreamingProvider>
           </PlaylistProvider>
         </AudioProvider>
