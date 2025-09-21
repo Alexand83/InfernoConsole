@@ -1,8 +1,19 @@
+import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useTranslation } from '../i18n'
 
 const TopNav = () => {
   const { t } = useTranslation()
+  const [currentTime, setCurrentTime] = useState(new Date())
+  
+  // Aggiorna l'ora ogni secondo
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 1000)
+    
+    return () => clearInterval(timer)
+  }, [])
   
   const items = [
     { path: '/', label: t('nav.console') },
@@ -14,7 +25,16 @@ const TopNav = () => {
     <header className="w-full bg-dj-primary border-b border-dj-accent/30">
       <div className="max-w-screen-2xl mx-auto px-4">
         <div className="h-14 flex items-center justify-between">
-          <div className="text-white font-dj font-bold">Inferno Console</div>
+          <div className="flex items-center space-x-4">
+            <div className="text-white font-dj font-bold">Inferno Console</div>
+            <div className="text-dj-light/70 text-sm font-mono">
+              {currentTime.toLocaleTimeString('it-IT', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+              })}
+            </div>
+          </div>
           <nav className="flex items-center space-x-1">
             {items.map(item => (
               <NavLink
