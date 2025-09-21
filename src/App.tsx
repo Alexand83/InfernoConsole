@@ -13,10 +13,8 @@ import { PlaylistProvider } from './contexts/PlaylistContext'
 import { SettingsProvider } from './contexts/SettingsContext'
 import { TimerProvider } from './contexts/TimerContext'
 import { StreamingProvider } from './contexts/StreamingContext'
-import { CollaborationProvider } from './contexts/CollaborationContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import './styles/themes.css'
-import './styles/collaboration.css'
 
 function App() {
   // Debug: Monitor re-render dell'intero albero
@@ -77,8 +75,7 @@ function App() {
         <AudioProvider>
           <PlaylistProvider>
             <StreamingProvider>
-              <CollaborationProvider>
-                <ErrorBoundary>
+              <ErrorBoundary>
               <div className="flex flex-col min-h-screen bg-dj-dark">
                 <TopNav />
                 <main className="flex-1 overflow-y-auto transition-opacity duration-200 ease-in-out">
@@ -108,8 +105,7 @@ function App() {
                   onDuplicateTrackWarning={undefined} // Sarà gestito internamente
                 />
               </div>
-                </ErrorBoundary>
-              </CollaborationProvider>
+              </ErrorBoundary>
             </StreamingProvider>
           </PlaylistProvider>
         </AudioProvider>

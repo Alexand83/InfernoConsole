@@ -491,66 +491,6 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // ✅ CRITICAL FIX: Imposta il volume iniziale del mixer per lo streaming
         mixerGain.gain.setValueAtTime(1.0, mixContext.currentTime) // Streaming sempre al 100% inizialmente
         
-        let hasRealAudio = false
-        
-        // ✅ COLLABORATIVE AUDIO: Integra l'audio collaborativo nel sistema principale
-        let collaborativeGain: GainNode | null = null
-        try {
-          console.log('🤝 [COLLABORATIVE] Verifica disponibilità audio collaborativo...')
-          console.log('🤝 [COLLABORATIVE] getCollaborativeMediaStream disponibile:', !!(window as any).getCollaborativeMediaStream)
-          
-          // Verifica se c'è un audio collaborativo disponibile
-          const collaborativeStream = (window as any).getCollaborativeMediaStream?.()
-          console.log('🤝 [COLLABORATIVE] Stream collaborativo ottenuto:', !!collaborativeStream)
-          
-          if (collaborativeStream) {
-            console.log('🤝 [COLLABORATIVE] Audio collaborativo trovato, integrazione nel sistema principale...')
-            console.log('🤝 [COLLABORATIVE] Stream ID:', collaborativeStream.id)
-            console.log('🤝 [COLLABORATIVE] Stream attivo:', collaborativeStream.active)
-            console.log('🤝 [COLLABORATIVE] Audio tracks:', collaborativeStream.getAudioTracks().length)
-            
-            // Crea nodo per l'audio collaborativo
-            collaborativeGain = mixContext.createGain()
-            const collaborativeSource = mixContext.createMediaStreamSource(collaborativeStream)
-            collaborativeSource.connect(collaborativeGain)
-            console.log('🤝 [COLLABORATIVE] Source collaborativo creato e connesso al gain')
-            
-            // Connetto l'audio collaborativo al destination stream per lo streaming
-            if (collaborativeGain) {
-              collaborativeGain.connect(destinationStream)
-              console.log('🤝 [COLLABORATIVE] Audio collaborativo connesso al destination stream per streaming')
-              
-              // Connetto anche al mixer locale per il monitoring
-              collaborativeGain.connect(mixerGain)
-              console.log('🤝 [COLLABORATIVE] Audio collaborativo connesso al mixer locale per monitoring')
-              
-              // ✅ CRITICAL FIX: Connetto anche direttamente al destination per l'ascolto locale
-              collaborativeGain.connect(mixContext.destination)
-              console.log('🤝 [COLLABORATIVE] Audio collaborativo connesso al destination per ascolto locale')
-              console.log('🤝 [COLLABORATIVE] mixContext.destination:', mixContext.destination)
-              console.log('🤝 [COLLABORATIVE] collaborativeGain.gain.value:', collaborativeGain.gain.value)
-              
-              // Imposta volume iniziale per l'audio collaborativo
-              collaborativeGain.gain.setValueAtTime(0.8, mixContext.currentTime) // Volume al 80% per test
-              console.log('🤝 [COLLABORATIVE] Volume collaborativo impostato all\'80% per test')
-              
-              // Salva riferimento per controlli futuri
-              ;(window as any).currentCollaborativeGain = collaborativeGain
-              
-              console.log('🤝 [COLLABORATIVE] Audio collaborativo integrato con successo nel sistema principale')
-              hasRealAudio = true
-            }
-          } else {
-            console.log('🤝 [COLLABORATIVE] Nessun audio collaborativo disponibile')
-            console.log('🤝 [COLLABORATIVE] Possibili cause:')
-            console.log('🤝 [COLLABORATIVE] - Nessun DJ connesso')
-            console.log('🤝 [COLLABORATIVE] - Mixing non attivo')
-            console.log('🤝 [COLLABORATIVE] - AudioMixer non inizializzato')
-          }
-        } catch (error) {
-          console.error('❌ [COLLABORATIVE] Errore integrazione audio collaborativo:', error)
-        }
-        
         // ✅ FIX: Salva il riferimento al MediaStreamDestination per riconnessioni future
         ;(window as any).currentStreamDestination = destinationStream
         
@@ -581,54 +521,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             mixerGain.gain.setValueAtTime(volume, mixContext.currentTime)
           }
         }
-        
-        // Esponi funzione per aggiornare l'audio collaborativo
-        ;(window as any).updateCollaborativeAudio = () => {
-          try {
-            console.log('🤝 [COLLABORATIVE] updateCollaborativeAudio chiamato...')
-            const collaborativeStream = (window as any).getCollaborativeMediaStream?.()
-            console.log('🤝 [COLLABORATIVE] Stream ottenuto in updateCollaborativeAudio:', !!collaborativeStream)
-            
-            if (collaborativeStream && collaborativeGain) {
-              console.log('🤝 [COLLABORATIVE] Aggiornamento audio collaborativo...')
-              // L'audio collaborativo è già connesso, non serve riconnetterlo
-            } else if (collaborativeStream && !collaborativeGain) {
-              console.log('🤝 [COLLABORATIVE] Audio collaborativo disponibile, creazione connessione...')
-              // Crea nuova connessione
-              const newCollaborativeGain = mixContext.createGain()
-              const collaborativeSource = mixContext.createMediaStreamSource(collaborativeStream)
-              collaborativeSource.connect(newCollaborativeGain)
-              newCollaborativeGain.connect(destinationStream)
-              newCollaborativeGain.connect(mixerGain)
-              // ✅ CRITICAL FIX: Connetto anche direttamente al destination per l'ascolto locale
-              newCollaborativeGain.connect(mixContext.destination)
-              newCollaborativeGain.gain.setValueAtTime(0.8, mixContext.currentTime)
-              ;(window as any).currentCollaborativeGain = newCollaborativeGain
-              console.log('🤝 [COLLABORATIVE] Audio collaborativo connesso con successo')
-            } else {
-              console.log('🤝 [COLLABORATIVE] Nessun stream collaborativo disponibile per aggiornamento')
-            }
-          } catch (error) {
-            console.error('❌ [COLLABORATIVE] Errore aggiornamento audio collaborativo:', error)
-          }
-        }
-        
-        // Test immediato per verificare l'audio collaborativo
-        setTimeout(() => {
-          console.log('🤝 [COLLABORATIVE] Test audio collaborativo dopo 2 secondi...')
-          ;(window as any).updateCollaborativeAudio()
-          
-          // Test aggiuntivo per verificare che l'audio collaborativo sia effettivamente connesso
-          const collaborativeGain = (window as any).currentCollaborativeGain
-          if (collaborativeGain) {
-            console.log('🤝 [COLLABORATIVE] Test: collaborativeGain disponibile:', !!collaborativeGain)
-            console.log('🤝 [COLLABORATIVE] Test: collaborativeGain.gain.value:', collaborativeGain.gain.value)
-            console.log('🤝 [COLLABORATIVE] Test: collaborativeGain.numberOfInputs:', collaborativeGain.numberOfInputs)
-            console.log('🤝 [COLLABORATIVE] Test: collaborativeGain.numberOfOutputs:', collaborativeGain.numberOfOutputs)
-          } else {
-            console.log('🤝 [COLLABORATIVE] Test: collaborativeGain NON disponibile')
-          }
-        }, 2000)
+
+        let hasRealAudio = false
 
         // 🎵 CAPTURE AUDIO REALE DAI DECK - STREAMING SEPARATO DAL MONITORING
 

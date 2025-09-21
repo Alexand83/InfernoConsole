@@ -5,7 +5,6 @@ const { spawn } = require('child_process')
 const http = require('http')
 const https = require('https')
 const fs = require('fs')
-const DJWebSocketServer = require('./websocket-server')
 
 // Ottimizzazioni per performance e riduzione warning
 app.commandLine.appendSwitch('--disable-gpu-sandbox')
@@ -126,7 +125,6 @@ async function resolveDevServerUrl() {
 }
 
 let mainWindow
-let webSocketServer = null
 
 // Funzione per ottenere la finestra principale (per l'updater)
 function getMainWindow() {
@@ -1023,159 +1021,8 @@ ipcMain.handle('force-check-updates', async () => {
   }
 })
 
-// ===== WEBSOCKET SERVER HANDLERS =====
-ipcMain.handle('start-websocket-server', async (event, sessionCode, port = 8080) => {
-  try {
-    // Se sessionCode è null, generiamo un codice automatico
-    const finalSessionCode = sessionCode || null
-    console.log(`🚀 [MAIN] Avvio server WebSocket su porta ${port} con codice ${finalSessionCode || 'auto-generato'}`)
-    
-    if (webSocketServer) {
-      await webSocketServer.stop()
-    }
-    
-    webSocketServer = new DJWebSocketServer()
-    await webSocketServer.start(port, finalSessionCode)
-    
-    // Eventi del server WebSocket
-    webSocketServer.on('clientConnected', (client) => {
-      console.log(`🔗 [MAIN] Client connesso: ${client.id}`)
-      console.log(`🔧 [MAIN] mainWindow exists:`, !!mainWindow)
-      if (mainWindow) {
-        console.log(`📡 [MAIN] Sending websocket-client-connected event`)
-        mainWindow.webContents.send('websocket-client-connected', {
-          id: client.id,
-          ip: client.ip,
-          connectedAt: client.connectedAt
-        })
-      } else {
-        console.log(`❌ [MAIN] mainWindow is null, cannot send event`)
-      }
-    })
-    
-    webSocketServer.on('clientAuthenticated', (client) => {
-      console.log(`✅ [MAIN] Client autenticato: ${client.djName}`)
-      console.log(`🔧 [MAIN] mainWindow exists:`, !!mainWindow)
-      if (mainWindow) {
-        console.log(`📡 [MAIN] Sending websocket-client-authenticated event`)
-        mainWindow.webContents.send('websocket-client-authenticated', {
-          id: client.id,
-          djName: client.djName,
-          ip: client.ip,
-          connectedAt: client.connectedAt,
-          authenticatedAt: client.authenticatedAt
-        })
-      } else {
-        console.log(`❌ [MAIN] mainWindow is null, cannot send event`)
-      }
-    })
-    
-    webSocketServer.on('clientDisconnected', (client) => {
-      console.log(`🔌 [MAIN] Client disconnesso: ${client.id}`)
-      if (mainWindow) {
-        mainWindow.webContents.send('websocket-client-disconnected', {
-          id: client.id,
-          djName: client.djName || 'Unknown'
-        })
-      }
-    })
-    
-    webSocketServer.on('audioDataReceived', (data) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('websocket-audio-data', data)
-      }
-    })
-    
-    webSocketServer.on('microphoneStatusChanged', (data) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('websocket-microphone-status', data)
-      }
-    })
-    
-    return { success: true, port: webSocketServer.port, sessionCode: webSocketServer.sessionCode }
-  } catch (error) {
-    console.error('❌ [MAIN] Errore avvio server WebSocket:', error)
-    return { success: false, error: error.message }
-  }
-})
 
-ipcMain.handle('stop-websocket-server', async () => {
-  try {
-    if (webSocketServer) {
-      await webSocketServer.stop()
-      webSocketServer = null
-      console.log('✅ [MAIN] Server WebSocket fermato')
-    }
-    return { success: true }
-  } catch (error) {
-    console.error('❌ [MAIN] Errore fermata server WebSocket:', error)
-    return { success: false, error: error.message }
-  }
-})
 
-ipcMain.handle('get-websocket-clients', async () => {
-  try {
-    if (webSocketServer) {
-      const clients = webSocketServer.getConnectedClients()
-      return { success: true, clients: clients }
-    }
-    return { success: true, clients: [] }
-  } catch (error) {
-    console.error('❌ [MAIN] Errore recupero client WebSocket:', error)
-    return { success: false, error: error.message }
-  }
-})
-
-ipcMain.handle('get-websocket-server-info', async () => {
-  try {
-    if (webSocketServer) {
-      const info = webSocketServer.getServerInfo()
-      return { success: true, info: info }
-    }
-    return { success: true, info: null }
-  } catch (error) {
-    console.error('❌ [MAIN] Errore recupero info server WebSocket:', error)
-    return { success: false, error: error.message }
-  }
-})
-
-// ===== CLOUDFLARE TUNNEL HANDLERS =====
-ipcMain.handle('create-cloudflare-tunnel', async (event, port) => {
-  try {
-    console.log(`🚇 [MAIN] Creazione tunnel Cloudflare per porta ${port}`)
-    
-    // TODO: Implementare creazione tunnel Cloudflare
-    // Per ora restituiamo un mock
-    const mockTunnelInfo = {
-      id: 'tunnel_' + Math.random().toString(36).substr(2, 9),
-      name: `dj-console-${Date.now()}`,
-      publicUrl: `https://tunnel-${Math.random().toString(36).substr(2, 8)}.trycloudflare.com`,
-      status: 'connected',
-      createdAt: new Date(),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 ore
-    }
-    
-    console.log(`✅ [MAIN] Tunnel Cloudflare creato: ${mockTunnelInfo.publicUrl}`)
-    return { success: true, tunnelInfo: mockTunnelInfo }
-  } catch (error) {
-    console.error('❌ [MAIN] Errore creazione tunnel Cloudflare:', error)
-    return { success: false, error: error.message }
-  }
-})
-
-ipcMain.handle('close-cloudflare-tunnel', async () => {
-  try {
-    console.log('🔌 [MAIN] Chiusura tunnel Cloudflare')
-    
-    // TODO: Implementare chiusura tunnel Cloudflare
-    
-    console.log('✅ [MAIN] Tunnel Cloudflare chiuso')
-    return { success: true }
-  } catch (error) {
-    console.error('❌ [MAIN] Errore chiusura tunnel Cloudflare:', error)
-    return { success: false, error: error.message }
-  }
-})
 
 // ✅ NGROK RIMOSSO - SOLO CLOUDFLARE
 
