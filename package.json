@@ -37,12 +37,14 @@
     "react-hook-form": "^7.45.4",
     "react-router-dom": "^6.8.0",
     "tailwind-merge": "^1.14.0",
+    "ws": "^8.18.3",
     "zustand": "^4.4.1"
   },
   "devDependencies": {
     "@electron/notarize": "^2.3.2",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "@vitejs/plugin-react": "^4.0.3",
