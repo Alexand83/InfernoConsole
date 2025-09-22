@@ -148,7 +148,7 @@ class LocalDatabase {
             name: 'RadioBoss Server',
             host: '82.145.63.6',
             port: 5040,
-            mount: '/stream:1',
+            mount: '/stream',
             username: 'source',
             password: '811126864dj',
             useSSL: false,
