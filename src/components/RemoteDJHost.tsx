@@ -703,37 +703,46 @@ const RemoteDJHost: React.FC = () => {
           ;(window as any).__lastAudioLevel__ = maxAudioLevel
         }
 
-        // Soglia per attivare il ducking
-        const threshold = 25 // 25% di livello audio
-        const shouldDuck = maxAudioLevel > threshold
-
-        // Attiva ducking se necessario
-        if (shouldDuck && !isAutoDuckingActive) {
-          setIsAutoDuckingActive(true)
-          setActiveSpeaker(activeSpeaker)
-          applyAutoDucking(true)
-          console.log(`🎤 [AutoDucking] Attivato da ${activeSpeaker} - livello audio: ${maxAudioLevel.toFixed(1)}%`)
-        }
+        // ✅ FIX: Soglie unificate e logica semplificata per ducking
+        const activationThreshold = 20 // 20% per attivazione (più sensibile)
+        const deactivationThreshold = 8  // 8% per disattivazione (più responsiva)
         
-        // Disattiva ducking se il livello audio è troppo basso
-        if (isAutoDuckingActive && maxAudioLevel < 5) {
-          setIsAutoDuckingActive(false)
-          setActiveSpeaker('')
-          applyAutoDucking(false)
-          console.log(`🎤 [AutoDucking] Disattivato - livello audio troppo basso: ${maxAudioLevel.toFixed(1)}%`)
-        }
-
-
         // Controlla i flag globali per i microfoni mutati
         const isMicMuted = (window as any).__isMicMuted__ || false
         const isHostMicMuted = (window as any).__isHostMicMuted__ || false
+        const allMicsMuted = isMicMuted && isHostMicMuted
         
-        // Se tutti i microfoni sono mutati tramite flag, disattiva il ducking
-        if ((isMicMuted && isHostMicMuted) && isAutoDuckingActive) {
+        // ✅ FIX: Logica unificata per attivazione/disattivazione
+        const shouldActivate = maxAudioLevel > activationThreshold && !allMicsMuted
+        const shouldDeactivate = maxAudioLevel < deactivationThreshold || allMicsMuted
+        
+        // ✅ FIX: Meccanismo di sicurezza - forza disattivazione se necessario
+        if (allMicsMuted && isAutoDuckingActive) {
+          // Forza disattivazione immediata se tutti i microfoni sono mutati
           setIsAutoDuckingActive(false)
           setActiveSpeaker('')
           applyAutoDucking(false)
-          console.log(`🎤 [AutoDucking] Disattivato - tutti i microfoni sono mutati`)
+          console.log(`🎤 [AutoDucking] 🚫 FORZATO DISATTIVAZIONE - tutti i microfoni sono mutati`)
+        } else {
+          // Attiva ducking se necessario
+          if (shouldActivate && !isAutoDuckingActive) {
+            setIsAutoDuckingActive(true)
+            setActiveSpeaker(activeSpeaker)
+            applyAutoDucking(true)
+            console.log(`🎤 [AutoDucking] ✅ ATTIVATO da ${activeSpeaker} - livello: ${maxAudioLevel.toFixed(1)}%`)
+          }
+          
+          // Disattiva ducking se necessario
+          if (shouldDeactivate && isAutoDuckingActive) {
+            setIsAutoDuckingActive(false)
+            setActiveSpeaker('')
+            applyAutoDucking(false)
+            if (allMicsMuted) {
+              console.log(`🎤 [AutoDucking] ❌ DISATTIVATO - tutti i microfoni sono mutati`)
+            } else {
+              console.log(`🎤 [AutoDucking] ❌ DISATTIVATO - livello audio basso: ${maxAudioLevel.toFixed(1)}%`)
+            }
+          }
         }
 
         hostAnimationFrameRef.current = requestAnimationFrame(monitor)
@@ -747,24 +756,31 @@ const RemoteDJHost: React.FC = () => {
     }
   }
 
-  // Funzione per applicare/rimuovere il ducking automatico
+  // ✅ FIX: Funzione per applicare/rimuovere il ducking automatico
   const applyAutoDucking = (active: boolean) => {
-    // ✅ FIX: Log solo quando cambia stato per evitare spam
-    const lastAutoDuckingState = (window as any).__lastAutoDuckingState__
-    if (lastAutoDuckingState !== active) {
-      if (active) {
-        console.log(`🎤 [AutoDucking] Attivato - Ducking: ${settings?.microphone?.duckingPercent ?? 75}%`)
-      } else {
-        console.log(`🎤 [AutoDucking] Disattivato`)
+    try {
+      // ✅ FIX: Log solo quando cambia stato per evitare spam
+      const lastAutoDuckingState = (window as any).__lastAutoDuckingState__
+      if (lastAutoDuckingState !== active) {
+        if (active) {
+          console.log(`🎤 [AutoDucking] ✅ APPLICATO - Ducking: ${settings?.microphone?.duckingPercent ?? 75}%`)
+        } else {
+          console.log(`🎤 [AutoDucking] ❌ RIMOSSO`)
+        }
+        ;(window as any).__lastAutoDuckingState__ = active
       }
-      ;(window as any).__lastAutoDuckingState__ = active
-    }
-    
-    // Usa la funzione di ducking dell'AudioContext
-    if (setStreamDucking) {
-      setStreamDucking(active)
-    } else {
-      console.warn('⚠️ [AutoDucking] Funzione setStreamDucking non disponibile')
+      
+      // ✅ FIX: Usa la funzione di ducking dell'AudioContext con timeout di sicurezza
+      if (setStreamDucking) {
+        // Aggiungi un piccolo delay per evitare race conditions
+        setTimeout(() => {
+          setStreamDucking(active)
+        }, 10)
+      } else {
+        console.warn('⚠️ [AutoDucking] Funzione setStreamDucking non disponibile')
+      }
+    } catch (error) {
+      console.error('❌ [AutoDucking] Errore durante applicazione ducking:', error)
     }
   }
 

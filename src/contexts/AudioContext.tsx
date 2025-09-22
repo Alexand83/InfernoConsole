@@ -1950,6 +1950,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // ✅ FIX: Log deactivation solo quando cambia stato
         const lastDuckingState = (window as any).__lastDuckingState__
         if (lastDuckingState !== 'inactive') {
+          console.log(`🎤 [PTT UPDATE] ❌ DISATTIVAZIONE - Ripristino volumi originali`)
           ;(window as any).__lastDuckingState__ = 'inactive'
         }
         
@@ -1970,16 +1971,20 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // ✅ CRITICAL FIX: Ripristina il volume originale del LiveStream usando setLiveStreamVolume
         if (typeof (window as any).setLiveStreamVolume === 'function') {
           ;(window as any).setLiveStreamVolume(originalStreamVolume)
-          console.log(`🎤 [PTT UPDATE] LiveStream ripristinato al volume originale: ${Math.round(originalStreamVolume * 100)}%`)
-          } else {
+          if (lastDuckingState !== 'inactive') {
+            console.log(`🎤 [PTT UPDATE] LiveStream ripristinato al volume originale: ${Math.round(originalStreamVolume * 100)}%`)
+          }
+        } else {
           console.warn('⚠️ [PTT] Funzione setLiveStreamVolume non disponibile')
         }
         
         // ✅ CRITICAL FIX: Ripristina ANCHE il mixer WebAudio al volume originale
         if (mixerGain && mixerGain.gain) {
           mixerGain.gain.setValueAtTime(originalStreamVolume, context.currentTime)
-          console.log(`🎤 [PTT UPDATE] Mixer WebAudio ripristinato a ${Math.round(originalStreamVolume * 100)}%`)
-          } else {
+          if (lastDuckingState !== 'inactive') {
+            console.log(`🎤 [PTT UPDATE] Mixer WebAudio ripristinato a ${Math.round(originalStreamVolume * 100)}%`)
+          }
+        } else {
           console.warn('⚠️ [PTT] Mixer WebAudio non disponibile per ripristino')
         }
         
@@ -2504,32 +2509,38 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // ✅ FIX: Funzione per il ducking dello streaming
   const setStreamDucking = useCallback((active: boolean) => {
-    // ✅ FIX: Log solo quando cambia stato per evitare spam
-    const lastStreamDuckingState = (window as any).__lastStreamDuckingState__
-    if (lastStreamDuckingState !== active) {
-      if (active) {
-        console.log(`🎤 [STREAMING] Ducking attivato - ${settings?.microphone?.duckingPercent ?? 75}%`)
-      } else {
-        console.log(`🎤 [STREAMING] Ducking disattivato`)
+    try {
+      // ✅ FIX: Log solo quando cambia stato per evitare spam
+      const lastStreamDuckingState = (window as any).__lastStreamDuckingState__
+      if (lastStreamDuckingState !== active) {
+        if (active) {
+          console.log(`🎤 [STREAMING] ✅ Ducking ATTIVATO - ${settings?.microphone?.duckingPercent ?? 75}%`)
+        } else {
+          console.log(`🎤 [STREAMING] ❌ Ducking DISATTIVATO`)
+        }
+        ;(window as any).__lastStreamDuckingState__ = active
       }
-      ;(window as any).__lastStreamDuckingState__ = active
-    }
-    
-    // ✅ CRITICAL FIX: Aggiorna i volumi PTT dinamicamente
-    if (typeof (window as any).updatePTTVolumesOnly === 'function') {
-      // ✅ CRITICAL FIX: Imposta il livello di ducking dalle impostazioni
-      const duckingPercent = settings?.microphone?.duckingPercent ?? 75
-      const pttDuckingLevel = duckingPercent / 100 // Converte da percentuale a decimale
-      ;(window as any).__pttDuckingLevel__ = pttDuckingLevel
       
-      // ✅ CRITICAL FIX: Aggiorna i volumi PTT
-      try {
-        ;(window as any).updatePTTVolumesOnly(active)
-      } catch (error) {
-        console.error('❌ [PTT] Errore aggiornamento volumi PTT:', error)
+      // ✅ CRITICAL FIX: Aggiorna i volumi PTT dinamicamente
+      if (typeof (window as any).updatePTTVolumesOnly === 'function') {
+        // ✅ CRITICAL FIX: Imposta il livello di ducking dalle impostazioni
+        const duckingPercent = settings?.microphone?.duckingPercent ?? 75
+        const pttDuckingLevel = duckingPercent / 100 // Converte da percentuale a decimale
+        ;(window as any).__pttDuckingLevel__ = pttDuckingLevel
+        
+        // ✅ CRITICAL FIX: Aggiorna i volumi PTT con timeout di sicurezza
+        setTimeout(() => {
+          try {
+            ;(window as any).updatePTTVolumesOnly(active)
+          } catch (error) {
+            console.error('❌ [PTT] Errore aggiornamento volumi PTT:', error)
+          }
+        }, 5) // Piccolo delay per evitare race conditions
+      } else {
+        console.warn('⚠️ [PTT] Funzione updatePTTVolumesOnly non disponibile')
       }
-    } else {
-      console.warn('⚠️ [PTT] Funzione updatePTTVolumesOnly non disponibile')
+    } catch (error) {
+      console.error('❌ [STREAMING] Errore durante setStreamDucking:', error)
     }
   }, [settings?.microphone?.duckingPercent])
 
