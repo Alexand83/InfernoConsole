@@ -277,24 +277,120 @@ const Settings = () => {
       
       // ✅ FIX: Test manuale per verificare se il microfono riceve audio
       setTimeout(() => {
-        console.log('🎤 [SETTINGS] Test manuale microfono dopo 1 secondo...')
+        console.log('🎤 [SETTINGS] ===== TEST AVANZATO MICROFONO macOS =====')
+        
+        // Test 1: Frequency data
         analyser.getByteFrequencyData(dataArray)
         let testSum = 0
         for (let i = 0; i < bufferLength; i++) {
           testSum += dataArray[i]
         }
         const testAverage = testSum / bufferLength
-        console.log('🎤 [SETTINGS] Test manuale - Sum:', testSum, 'Average:', testAverage, 'Max:', Math.max(...dataArray))
+        const testMax = Math.max(...dataArray)
+        console.log('🎤 [SETTINGS] Test 1 - Frequency: Sum:', testSum, 'Average:', testAverage, 'Max:', testMax)
         
-        // Test anche con time domain
+        // Test 2: Time domain data
         analyser.getByteTimeDomainData(dataArray)
         let testSumTime = 0
+        let testMaxTime = 0
         for (let i = 0; i < bufferLength; i++) {
           const sample = (dataArray[i] - 128) / 128
           testSumTime += Math.abs(sample)
+          testMaxTime = Math.max(testMaxTime, Math.abs(sample))
         }
         const testAverageTime = testSumTime / bufferLength
-        console.log('🎤 [SETTINGS] Test time domain - Average:', testAverageTime, 'Max:', Math.max(...dataArray))
+        console.log('🎤 [SETTINGS] Test 2 - Time Domain: Average:', testAverageTime, 'Max:', testMaxTime)
+        
+        // Test 3: Raw data analysis
+        console.log('🎤 [SETTINGS] Test 3 - Raw Data Analysis:')
+        console.log('🎤 [SETTINGS] - Buffer length:', bufferLength)
+        console.log('🎤 [SETTINGS] - First 10 frequency values:', Array.from(dataArray.slice(0, 10)))
+        console.log('🎤 [SETTINGS] - First 10 time domain values:', Array.from(dataArray.slice(0, 10)))
+        
+        // Test 4: Stream analysis
+        const audioTracks = testStream.getAudioTracks()
+        if (audioTracks.length > 0) {
+          const track = audioTracks[0]
+          const settings = track.getSettings()
+          const constraints = track.getConstraints()
+          const capabilities = track.getCapabilities()
+          
+          console.log('🎤 [SETTINGS] Test 4 - Stream Analysis:')
+          console.log('🎤 [SETTINGS] - Track enabled:', track.enabled)
+          console.log('🎤 [SETTINGS] - Track muted:', track.muted)
+          console.log('🎤 [SETTINGS] - Track readyState:', track.readyState)
+          console.log('🎤 [SETTINGS] - Track settings:', settings)
+          console.log('🎤 [SETTINGS] - Track constraints:', constraints)
+          console.log('🎤 [SETTINGS] - Track capabilities:', capabilities)
+        }
+        
+        // Test 5: AudioContext analysis
+        console.log('🎤 [SETTINGS] Test 5 - AudioContext Analysis:')
+        console.log('🎤 [SETTINGS] - AudioContext state:', testAudioContext.state)
+        console.log('🎤 [SETTINGS] - AudioContext sampleRate:', testAudioContext.sampleRate)
+        console.log('🎤 [SETTINGS] - Analyser fftSize:', analyser.fftSize)
+        console.log('🎤 [SETTINGS] - Analyser frequencyBinCount:', analyser.frequencyBinCount)
+        console.log('🎤 [SETTINGS] - Analyser smoothingTimeConstant:', analyser.smoothingTimeConstant)
+        
+        // Test 6: macOS specific check
+        if (navigator.userAgent.includes('Mac')) {
+          console.log('🎤 [SETTINGS] Test 6 - macOS Specific:')
+          console.log('🎤 [SETTINGS] - User Agent:', navigator.userAgent)
+          console.log('🎤 [SETTINGS] - MediaDevices supported:', !!navigator.mediaDevices)
+          console.log('🎤 [SETTINGS] - getUserMedia supported:', !!navigator.mediaDevices?.getUserMedia)
+          
+          // Check if we can get device info
+          navigator.mediaDevices.enumerateDevices().then(devices => {
+            const audioInputs = devices.filter(d => d.kind === 'audioinput')
+            console.log('🎤 [SETTINGS] - Available audio inputs:', audioInputs.length)
+            audioInputs.forEach((device, index) => {
+              console.log(`🎤 [SETTINGS] - Input ${index}:`, {
+                deviceId: device.deviceId,
+                label: device.label,
+                groupId: device.groupId
+              })
+            })
+          }).catch(e => {
+            console.log('🎤 [SETTINGS] - Error enumerating devices:', e)
+          })
+        }
+        
+        console.log('🎤 [SETTINGS] ===== FINE TEST AVANZATO =====')
+        
+        // Test 7: Prova diversi constraint per macOS
+        console.log('🎤 [SETTINGS] Test 7 - Prova constraint alternativi per macOS...')
+        
+        // Prova con constraint più permissivi
+        navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: { exact: deviceId },
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 44100,
+            channelCount: 1
+          }
+        }).then(altStream => {
+          console.log('🎤 [SETTINGS] ✅ Constraint alternativi funzionano!')
+          console.log('🎤 [SETTINGS] - Alt stream tracks:', altStream.getAudioTracks().length)
+          altStream.getTracks().forEach(track => track.stop())
+        }).catch(e => {
+          console.log('🎤 [SETTINGS] ❌ Constraint alternativi falliti:', e.message)
+        })
+        
+        // Prova con constraint minimi
+        navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: { exact: deviceId }
+          }
+        }).then(minStream => {
+          console.log('🎤 [SETTINGS] ✅ Constraint minimi funzionano!')
+          console.log('🎤 [SETTINGS] - Min stream tracks:', minStream.getAudioTracks().length)
+          minStream.getTracks().forEach(track => track.stop())
+        }).catch(e => {
+          console.log('🎤 [SETTINGS] ❌ Constraint minimi falliti:', e.message)
+        })
+        
       }, 1000)
       
       // Avvia il loop di aggiornamento

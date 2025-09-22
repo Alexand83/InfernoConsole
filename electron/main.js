@@ -310,7 +310,12 @@ function buildFfmpegArgs(opts) {
     host: host,
     port: port,
     username: username,
-    password: password ? `[${password.length} chars]` : '[empty]'
+    password: password ? `[${password.length} chars]` : '[empty]',
+    useSSL: useSSL,
+    bitrateKbps: bitrateKbps,
+    format: format,
+    channels: channels,
+    sampleRate: sampleRate
   })
   
   const scheme = useSSL ? 'icecast+ssl' : 'icecast'
@@ -318,6 +323,11 @@ function buildFfmpegArgs(opts) {
   
   // ✅ DEBUG: Log final URL (without password)
   console.log('🔍 [FFMPEG] Final Icecast URL:', outUrl.replace(/:([^@]+)@/, ':[HIDDEN]@'))
+  
+  // ✅ DEBUG: Test connection to Icecast server
+  console.log('🔍 [FFMPEG] Testing Icecast server connection...')
+  const testUrl = `http://${host}:${port}${mountWithExt}`
+  console.log('🔍 [FFMPEG] Test URL:', testUrl)
 
   // ✅ CORREZIONE: Input WebM da MediaRecorder invece di raw audio
   const args = [
@@ -437,6 +447,13 @@ function buildFfmpegArgs(opts) {
   args.push('-legacy_icecast', '1')
   args.push('-f', containerFmt)
   args.push(outUrl)
+  
+  // ✅ DEBUG: Log final FFmpeg arguments
+  console.log('🔍 [FFMPEG] Final FFmpeg arguments:', args)
+  console.log('🔍 [FFMPEG] Arguments count:', args.length)
+  console.log('🔍 [FFMPEG] Container format:', containerFmt)
+  console.log('🔍 [FFMPEG] Content type:', contentType)
+  
   return args
 }
 
@@ -518,6 +535,11 @@ ipcMain.handle('icecast-start', async (_evt, options) => {
         if (errorMsg.includes('400') || errorMsg.includes('Bad Request')) {
           console.error('❌ [FFMPEG] 400 Bad Request detected - possible mount point or authentication issue')
           console.error('❌ [FFMPEG] Check mount point format and server configuration')
+          console.error('❌ [FFMPEG] Current mount point:', lastStartOptions?.mount || '/stream')
+          console.error('❌ [FFMPEG] Server host:', lastStartOptions?.host)
+          console.error('❌ [FFMPEG] Server port:', lastStartOptions?.port)
+          console.error('❌ [FFMPEG] Username:', lastStartOptions?.username)
+          console.error('❌ [FFMPEG] Password length:', lastStartOptions?.password?.length || 0)
           criticalError = {
             type: 'bad_request',
             message: '400 Bad Request - Check mount point or authentication',
