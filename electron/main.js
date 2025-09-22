@@ -56,11 +56,48 @@ try {
       const resourcesPath = app.getPath('resources')
       ffmpegPathResolved = path.join(resourcesPath, `ffmpeg-mac-${arch}`)
       
+      console.log('🔍 [FFMPEG] macOS FFmpeg path resolution:')
+      console.log('🔍 [FFMPEG] Architecture:', arch)
+      console.log('🔍 [FFMPEG] Resources path:', resourcesPath)
+      console.log('🔍 [FFMPEG] Resolved path:', ffmpegPathResolved)
+      console.log('🔍 [FFMPEG] File exists:', fs.existsSync(ffmpegPathResolved))
+      
+      if (fs.existsSync(ffmpegPathResolved)) {
+        const stats = fs.statSync(ffmpegPathResolved)
+        console.log('🔍 [FFMPEG] File size:', stats.size, 'bytes')
+        console.log('🔍 [FFMPEG] File permissions:', stats.mode.toString(8))
+      } else {
+        console.log('🔍 [FFMPEG] File does not exist, checking resources directory:')
+        try {
+          const files = fs.readdirSync(resourcesPath)
+          console.log('🔍 [FFMPEG] Files in resources:', files)
+        } catch (e) {
+          console.log('🔍 [FFMPEG] Cannot read resources directory:', e.message)
+        }
+      }
+      
       // Make sure the binary is executable
       try {
-        fs.chmodSync(ffmpegPathResolved, '755')
+        if (fs.existsSync(ffmpegPathResolved)) {
+          fs.chmodSync(ffmpegPathResolved, '755')
+          console.log('🔍 [FFMPEG] Executable permissions set successfully')
+        } else {
+          console.log('🔍 [FFMPEG] Cannot set permissions - file does not exist')
+        }
       } catch (e) {
         console.warn('⚠️ [FFMPEG] Could not set executable permissions:', e.message)
+      }
+      
+      // Fallback: if custom FFmpeg doesn't exist, try the original one
+      if (!fs.existsSync(ffmpegPathResolved)) {
+        console.log('🔍 [FFMPEG] Custom FFmpeg not found, trying original path:', ff.path)
+        if (fs.existsSync(ff.path)) {
+          ffmpegPathResolved = ff.path
+          console.log('🔍 [FFMPEG] Using original FFmpeg path:', ffmpegPathResolved)
+        } else {
+          console.log('🔍 [FFMPEG] Original FFmpeg also not found, will try system FFmpeg')
+          ffmpegPathResolved = 'ffmpeg' // Fallback to system FFmpeg
+        }
       }
     } else {
       // Linux: Use the original path

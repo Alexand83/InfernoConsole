@@ -120,9 +120,24 @@ const Settings = () => {
       
       console.log('🎤 [SETTINGS] Test microfono locale avviato per:', deviceId)
       
+      // ✅ FIX: Verifica permessi prima di tutto
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+        console.log('🎤 [SETTINGS] Stato permessi microfono:', permissionStatus.state)
+        
+        if (permissionStatus.state === 'denied') {
+          console.log('🎤 [SETTINGS] ❌ Permessi microfono negati')
+          alert('❌ Accesso al microfono negato!\n\nSu macOS:\n1. Vai su Preferenze di Sistema > Sicurezza e Privacy > Privacy\n2. Seleziona "Microfono" dal menu laterale\n3. Assicurati che "Safari" o il tuo browser sia selezionato\n4. Riavvia l\'applicazione')
+          throw new Error('Permessi microfono negati')
+        }
+      } catch (e) {
+        console.log('🎤 [SETTINGS] ⚠️ Impossibile verificare permessi:', e)
+      }
+      
       // ✅ FIX: Fallback robusto per macOS - prova prima il dispositivo specifico, poi default
       let testStream: MediaStream
       let actualDeviceUsed = 'unknown'
+      let permissionError = false
       
       try {
         // Prova prima con il dispositivo specifico
@@ -140,28 +155,47 @@ const Settings = () => {
         } else {
           throw new Error('Device ID is default or empty')
         }
-      } catch (error) {
-        console.warn('⚠️ [SETTINGS] Dispositivo specifico fallito, provo con default:', error.message)
+      } catch (error: any) {
+        console.warn('⚠️ [SETTINGS] Dispositivo specifico fallito:', error.name, error.message)
         
-        try {
-          // Fallback 1: Prova con default senza constraints specifici
-          testStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false
-            }
-          })
-          actualDeviceUsed = 'default'
-        } catch (error2) {
-          console.warn('⚠️ [SETTINGS] Default fallback fallito, provo con constraints minimi:', error2.message)
-          
-          // Fallback 2: Prova con constraints minimi
-          testStream = await navigator.mediaDevices.getUserMedia({
-            audio: true
-          })
-          actualDeviceUsed = 'fallback'
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          permissionError = true
         }
+        
+        if (!permissionError) {
+          try {
+            // Fallback 1: Prova con default senza constraints specifici
+            testStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false
+              }
+            })
+            actualDeviceUsed = 'default'
+          } catch (error2: any) {
+            console.warn('⚠️ [SETTINGS] Default fallback fallito:', error2.name, error2.message)
+            
+            if (error2.name === 'NotAllowedError' || error2.name === 'PermissionDeniedError') {
+              permissionError = true
+            }
+            
+            if (!permissionError) {
+              // Fallback 2: Prova con constraints minimi
+              testStream = await navigator.mediaDevices.getUserMedia({
+                audio: true
+              })
+              actualDeviceUsed = 'fallback'
+            }
+          }
+        }
+      }
+      
+      // Gestione errori di permessi
+      if (permissionError) {
+        console.log('🎤 [SETTINGS] ❌ ERRORE PERMESSI: Il microfono è bloccato')
+        alert('❌ Accesso al microfono negato!\n\nSu macOS:\n1. Vai su Preferenze di Sistema > Sicurezza e Privacy > Privacy\n2. Seleziona "Microfono" dal menu laterale\n3. Assicurati che "Safari" o il tuo browser sia selezionato\n4. Riavvia l\'applicazione')
+        throw new Error('Permessi microfono negati')
       }
       
       console.log('🎤 [SETTINGS] Stream ottenuto con dispositivo:', actualDeviceUsed)
@@ -271,10 +305,20 @@ const Settings = () => {
         stopVisualMicrophoneTest()
       }, 10000)
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ [SETTINGS] Errore test microfono:', error)
-      alert('Errore nel test del microfono: ' + error.message)
       setIsMicTestActive(false)
+      
+      // Mostra messaggio di errore specifico per macOS
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        alert('❌ Accesso al microfono negato!\n\nSu macOS:\n1. Vai su Preferenze di Sistema > Sicurezza e Privacy > Privacy\n2. Seleziona "Microfono" dal menu laterale\n3. Assicurati che "Safari" o il tuo browser sia selezionato\n4. Riavvia l\'applicazione')
+      } else if (error.name === 'NotFoundError') {
+        alert('❌ Nessun microfono trovato!\n\nVerifica che:\n1. Un microfono sia collegato\n2. Il microfono sia abilitato nelle Preferenze di Sistema\n3. Nessun\'altra applicazione stia usando il microfono')
+      } else if (error.name === 'NotReadableError') {
+        alert('❌ Microfono non leggibile!\n\nIl microfono potrebbe essere utilizzato da un\'altra applicazione.\nChiudi altre app che potrebbero usare il microfono e riprova.')
+      } else {
+        alert(`❌ Errore microfono: ${error.message}`)
+      }
     }
   }
   
