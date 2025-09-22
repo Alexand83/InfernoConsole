@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useTranslation } from '../i18n'
+import RemoteDJClient from './RemoteDJClient'
 
 const TopNav = () => {
   const { t } = useTranslation()
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [showRemoteDJ, setShowRemoteDJ] = useState(false)
   
   // Aggiorna l'ora ogni secondo
   useEffect(() => {
@@ -49,9 +51,23 @@ const TopNav = () => {
                 <span className="font-medium">{item.label}</span>
               </NavLink>
             ))}
+            
+            {/* Pulsante DJ Remoto */}
+            <button
+              onClick={() => setShowRemoteDJ(true)}
+              className="flex items-center space-x-2 px-3 py-2 rounded-md text-sm transition-colors text-dj-light/80 hover:bg-dj-accent/20 hover:text-white"
+              title="DJ Remoto"
+            >
+              <span className="font-medium">🎤 DJ Remoto</span>
+            </button>
           </nav>
         </div>
       </div>
+      
+      {/* Client DJ Remoto */}
+      {showRemoteDJ && (
+        <RemoteDJClient onClose={() => setShowRemoteDJ(false)} />
+      )}
     </header>
   )
 }

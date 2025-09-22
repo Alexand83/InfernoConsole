@@ -32,8 +32,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ✅ NUOVO: Listener per progresso download aggiornamenti
   on: (event, callback) => ipcRenderer.on(event, callback),
   removeListener: (event, callback) => ipcRenderer.removeListener(event, callback),
-  // ✅ NGROK RIMOSSO - SOLO CLOUDFLARE
-
+  // ===== WEBRTC SERVER API =====
+  webrtcServerAPI: {
+    startServer: (options) => ipcRenderer.invoke('start-webrtc-server', options),
+    stopServer: () => ipcRenderer.invoke('stop-webrtc-server'),
+            getClients: () => ipcRenderer.invoke('get-webrtc-clients'),
+            getServerInfo: () => ipcRenderer.invoke('get-webrtc-server-info'),
+            checkServerStatus: () => ipcRenderer.invoke('check-webrtc-server-status'),
+            sendHostMessage: (message) => ipcRenderer.invoke('send-host-chat-message', message),
+            sendWebRTCAnswer: (data) => ipcRenderer.invoke('send-webrtc-answer', data),
+            sendICECandidate: (data) => ipcRenderer.invoke('send-ice-candidate', data),
+    // Event listeners
+    onClientAuthenticated: (callback) => ipcRenderer.on('webrtc-client-authenticated', callback),
+    onClientDisconnected: (callback) => ipcRenderer.on('webrtc-client-disconnected', callback),
+    onAudioLevel: (callback) => ipcRenderer.on('webrtc-audio-level', callback),
+            onWebRTCOffer: (callback) => ipcRenderer.on('webrtc-offer', callback),
+            onWebRTCAnswer: (callback) => ipcRenderer.on('webrtc-answer', callback),
+            onICECandidate: (callback) => ipcRenderer.on('webrtc-ice-candidate', callback),
+            onChatMessage: (callback) => ipcRenderer.on('webrtc-chat-message', callback),
+            onHostChatMessage: (callback) => ipcRenderer.on('webrtc-host-chat-message', callback),
+            onServerRestored: (callback) => ipcRenderer.on('webrtc-server-restored', callback),
+            removeAllListeners: () => {
+              ipcRenderer.removeAllListeners('webrtc-client-authenticated')
+              ipcRenderer.removeAllListeners('webrtc-client-disconnected')
+              ipcRenderer.removeAllListeners('webrtc-audio-level')
+              ipcRenderer.removeAllListeners('webrtc-offer')
+              ipcRenderer.removeAllListeners('webrtc-answer')
+              ipcRenderer.removeAllListeners('webrtc-ice-candidate')
+              ipcRenderer.removeAllListeners('webrtc-chat-message')
+            }
+  }
 
 })
 

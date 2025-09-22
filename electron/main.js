@@ -5,6 +5,7 @@ const { spawn } = require('child_process')
 const http = require('http')
 const https = require('https')
 const fs = require('fs')
+const WebRTCServer = require('./webrtc-server')
 
 // Ottimizzazioni per performance e riduzione warning
 app.commandLine.appendSwitch('--disable-gpu-sandbox')
@@ -125,6 +126,7 @@ async function resolveDevServerUrl() {
 }
 
 let mainWindow
+let webrtcServer = null
 
 // Funzione per ottenere la finestra principale (per l'updater)
 function getMainWindow() {
@@ -1024,7 +1026,211 @@ ipcMain.handle('force-check-updates', async () => {
 
 
 
-// ✅ NGROK RIMOSSO - SOLO CLOUDFLARE
+// ===== WEBRTC SERVER HANDLERS =====
+ipcMain.handle('start-webrtc-server', async (event, options = {}) => {
+  try {
+    console.log(`🚀 [MAIN] Avvio server WebRTC con opzioni:`, options)
+    
+    if (webrtcServer) {
+      console.log('⚠️ [MAIN] Server WebRTC già attivo, ripristino stato')
+      // Ripristina lo stato del server per la nuova pagina
+      if (mainWindow) {
+        const clients = webrtcServer.getConnectedClients()
+        const serverInfo = webrtcServer.getServerInfo()
+        
+        // Invia lo stato attuale alla nuova pagina
+        mainWindow.webContents.send('webrtc-server-restored', {
+          serverInfo,
+          clients,
+          isRunning: true
+        })
+      }
+      return { success: true, ...webrtcServer.getServerInfo() }
+    }
+    
+    webrtcServer = new WebRTCServer({
+      port: options.port || 8080,
+      maxConnections: options.maxConnections || 5
+    })
+    
+    // Eventi del server WebRTC
+    webrtcServer.on('clientAuthenticated', (client) => {
+      console.log(`✅ [MAIN] Client WebRTC autenticato: ${client.djName}`)
+      if (mainWindow) {
+        mainWindow.webContents.send('webrtc-client-authenticated', {
+          id: client.id,
+          djName: client.djName,
+          ip: client.ip,
+          connectedAt: client.connectedAt,
+          authenticatedAt: client.authenticatedAt
+        })
+      }
+    })
+    
+    webrtcServer.on('clientDisconnected', (client) => {
+      console.log(`🔌 [MAIN] Client WebRTC disconnesso: ${client.id}`)
+      if (mainWindow) {
+        mainWindow.webContents.send('webrtc-client-disconnected', {
+          id: client.id,
+          djName: client.djName
+        })
+      }
+    })
+    
+    webrtcServer.on('audioLevel', (data) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('webrtc-audio-level', data)
+      }
+    })
+    
+    webrtcServer.on('webrtcOffer', (data) => {
+      console.log(`🎵 [MAIN] WebRTC Offer da ${data.djName}`)
+      if (mainWindow) {
+        mainWindow.webContents.send('webrtc-offer', data)
+      }
+    })
+    
+    webrtcServer.on('webrtcAnswer', (data) => {
+      console.log(`🎵 [MAIN] WebRTC Answer da ${data.djName}`)
+      if (mainWindow) {
+        mainWindow.webContents.send('webrtc-answer', data)
+      }
+    })
+    
+            webrtcServer.on('iceCandidate', (data) => {
+              console.log(`🧊 [MAIN] ICE Candidate da ${data.djName}`)
+              if (mainWindow) {
+                mainWindow.webContents.send('webrtc-ice-candidate', data)
+              }
+            })
+            
+            webrtcServer.on('chatMessage', (data) => {
+              console.log(`💬 [MAIN] Chat message da ${data.djName}`)
+              if (mainWindow) {
+                mainWindow.webContents.send('webrtc-chat-message', data)
+              }
+            })
+            
+            // Gestione messaggi di chat per l'host
+            webrtcServer.on('hostChatMessage', (data) => {
+              console.log(`💬 [MAIN] Host chat message:`, data)
+              if (mainWindow) {
+                mainWindow.webContents.send('webrtc-host-chat-message', data)
+              }
+            })
+    
+    const result = await webrtcServer.start()
+    console.log(`✅ [MAIN] Server WebRTC avviato:`, result)
+    
+    return { success: true, ...result }
+  } catch (error) {
+    console.error('❌ [MAIN] Errore avvio server WebRTC:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('stop-webrtc-server', async () => {
+  try {
+    if (webrtcServer) {
+      await webrtcServer.stop()
+      webrtcServer = null
+      console.log('✅ [MAIN] Server WebRTC fermato')
+    }
+    return { success: true }
+  } catch (error) {
+    console.error('❌ [MAIN] Errore fermata server WebRTC:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('get-webrtc-clients', async () => {
+  try {
+    if (webrtcServer) {
+      const clients = webrtcServer.getConnectedClients()
+      return { success: true, clients: clients }
+    }
+    return { success: true, clients: [] }
+  } catch (error) {
+    console.error('❌ [MAIN] Errore recupero client WebRTC:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+        ipcMain.handle('get-webrtc-server-info', async () => {
+          try {
+            if (webrtcServer) {
+              const info = webrtcServer.getServerInfo()
+              return { success: true, info: info }
+            }
+            return { success: true, info: null }
+          } catch (error) {
+            console.error('❌ [MAIN] Errore recupero info server WebRTC:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('check-webrtc-server-status', async () => {
+          try {
+            if (webrtcServer) {
+              const info = webrtcServer.getServerInfo()
+              const clients = webrtcServer.getConnectedClients()
+              return { 
+                success: true, 
+                isRunning: true,
+                serverInfo: info,
+                clients: clients
+              }
+            }
+            return { 
+              success: true, 
+              isRunning: false,
+              serverInfo: null,
+              clients: []
+            }
+          } catch (error) {
+            console.error('❌ [MAIN] Errore controllo stato server WebRTC:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('send-host-chat-message', async (event, message) => {
+          try {
+            if (webrtcServer) {
+              webrtcServer.sendHostMessage(message)
+              return { success: true }
+            }
+            return { success: false, error: 'Server non attivo' }
+          } catch (error) {
+            console.error('❌ [MAIN] Errore invio messaggio host:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('send-webrtc-answer', async (event, data) => {
+          try {
+            if (webrtcServer) {
+              webrtcServer.sendWebRTCAnswer(data)
+              return { success: true }
+            }
+            return { success: false, error: 'Server non attivo' }
+          } catch (error) {
+            console.error('❌ [MAIN] Errore invio WebRTC answer:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('send-ice-candidate', async (event, data) => {
+          try {
+            if (webrtcServer) {
+              webrtcServer.sendICECandidate(data)
+              return { success: true }
+            }
+            return { success: false, error: 'Server non attivo' }
+          } catch (error) {
+            console.error('❌ [MAIN] Errore invio ICE candidate:', error)
+            return { success: false, error: error.message }
+          }
+        })
 
 // Esporta la funzione per l'updater
 module.exports = { getMainWindow }

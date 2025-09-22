@@ -171,7 +171,7 @@ export const usePTT = (onPTTActivate: (active: boolean) => void) => {
   }, [settings.microphone.pushToTalkKey, onPTTActivate])
 
   useEffect(() => {
-    console.log(`🎹 [PTT] Hook initialized with key: ${settings.microphone.pushToTalkKey}`)
+    // console.log(`🎹 [PTT] Hook initialized with key: ${settings.microphone.pushToTalkKey}`)
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
     

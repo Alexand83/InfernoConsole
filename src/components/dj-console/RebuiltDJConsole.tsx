@@ -17,6 +17,7 @@ import DuplicateTrackDialog from './DuplicateTrackDialog'
 import StreamingDebugPanel from './StreamingDebugPanel'
 import ConfirmationDialog from '../ConfirmationDialog'
 import { DeckEffects } from '../DeckEffects'
+import RemoteDJHost from '../RemoteDJHost'
 
 const RebuiltDJConsole: React.FC = () => {
   // ✅ NUOVO: CSS per animazione contatore ascoltatori
@@ -1246,6 +1247,10 @@ const RebuiltDJConsole: React.FC = () => {
         debugMessages={debugMessages}
       />
 
+      {/* Pannello DJ Remoti */}
+      <div className="mt-6">
+        <RemoteDJHost />
+      </div>
 
       {/* Footer informativo */}
       <footer className="bg-dj-primary border-t border-dj-accent/30 p-4 mt-8">

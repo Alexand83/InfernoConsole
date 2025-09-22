@@ -29,12 +29,18 @@ interface MicrophoneState {
   isMuted: boolean
 }
 
+interface RemoteDJsState {
+  streams: Map<string, MediaStream>
+  volumes: Map<string, number>
+}
+
 interface AudioState {
   leftDeck: DeckState
   rightDeck: DeckState
   masterVolume: number
   crossfader: number
   microphone: MicrophoneState
+  remoteDJs: RemoteDJsState
   soundEffectsManager: SoundEffectsManager | null
   microphoneEffectsManager: MicrophoneEffectsManager | null
   audioContext: AudioContext | null
@@ -48,6 +54,9 @@ type AudioAction =
   | { type: 'SET_RIGHT_DECK_PLAYING'; payload: boolean }
   | { type: 'SET_LEFT_DECK_TIME'; payload: number }
   | { type: 'SET_RIGHT_DECK_TIME'; payload: number }
+  | { type: 'ADD_REMOTE_DJ_STREAM'; payload: { id: string; stream: MediaStream } }
+  | { type: 'REMOVE_REMOTE_DJ_STREAM'; payload: string }
+  | { type: 'SET_REMOTE_DJ_VOLUME'; payload: { id: string; volume: number } }
   | { type: 'SET_LEFT_DECK_DURATION'; payload: number }
   | { type: 'SET_RIGHT_DECK_DURATION'; payload: number }
   | { type: 'SET_LEFT_DECK_VOLUME'; payload: number }
@@ -97,6 +106,40 @@ const audioReducer = (state: AudioState, action: AudioAction): AudioState => {
       return { ...state, microphone: { ...state.microphone, isEnabled: action.payload } }
     case 'SET_MICROPHONE_MUTED':
       return { ...state, microphone: { ...state.microphone, isMuted: action.payload } }
+    case 'ADD_REMOTE_DJ_STREAM':
+      const newStreams = new Map(state.remoteDJs.streams)
+      const newVolumes = new Map(state.remoteDJs.volumes)
+      newStreams.set(action.payload.id, action.payload.stream)
+      newVolumes.set(action.payload.id, 0.5) // Volume iniziale 50%
+      return { 
+        ...state, 
+        remoteDJs: { 
+          streams: newStreams, 
+          volumes: newVolumes 
+        } 
+      }
+    case 'REMOVE_REMOTE_DJ_STREAM':
+      const updatedStreams = new Map(state.remoteDJs.streams)
+      const updatedVolumes = new Map(state.remoteDJs.volumes)
+      updatedStreams.delete(action.payload)
+      updatedVolumes.delete(action.payload)
+      return { 
+        ...state, 
+        remoteDJs: { 
+          streams: updatedStreams, 
+          volumes: updatedVolumes 
+        } 
+      }
+    case 'SET_REMOTE_DJ_VOLUME':
+      const volumeMap = new Map(state.remoteDJs.volumes)
+      volumeMap.set(action.payload.id, action.payload.volume)
+      return { 
+        ...state, 
+        remoteDJs: { 
+          ...state.remoteDJs, 
+          volumes: volumeMap 
+        } 
+      }
     case 'SET_SOUND_EFFECTS_MANAGER':
       return { ...state, soundEffectsManager: action.payload }
     case 'SET_MICROPHONE_EFFECTS_MANAGER':
@@ -132,6 +175,10 @@ const initialState: AudioState = {
     isEnabled: false,
     isMuted: true
   },
+  remoteDJs: {
+    streams: new Map(),
+    volumes: new Map()
+  },
   soundEffectsManager: null,
   microphoneEffectsManager: null,
   audioContext: null
@@ -144,13 +191,14 @@ const AudioContext = createContext<{
   leftAudioRef: React.RefObject<HTMLAudioElement>
   rightAudioRef: React.RefObject<HTMLAudioElement>
   micStreamRef: React.RefObject<MediaStream | null>
-  soundEffectsManagerRef: React.RefObject<SoundEffectsManager | null>
-  microphoneEffectsManagerRef: React.RefObject<MicrophoneEffectsManager | null>
-  getMixedStream: (leftElement?: HTMLAudioElement | null, rightElement?: HTMLAudioElement | null, pttActive?: boolean) => Promise<MediaStream | null>
-  createMicrophoneStream: () => Promise<MediaStream | null>
-  createSmartMicrophoneControl: () => { enable: () => Promise<boolean>; disable: () => void; getStream: () => MediaStream | null; isActive: () => boolean }
-  getAvailableAudioOutputDevices: () => Promise<MediaDeviceInfo[]>
-  ensureMainAudioContext: () => AudioContext | null
+  addRemoteDJStream: (id: string, stream: MediaStream) => void
+  removeRemoteDJStream: (id: string) => void
+  setRemoteDJVolume: (id: string, volume: number) => void
+  setStreamDucking: (active: boolean) => void
+  setStreamMasterVolume: (volume: number) => void
+  setMasterVolume: (volume: number) => void
+  setCrossfader: (value: number) => void
+  addToDeck: (track: AudioTrack, deck: 'left' | 'right') => Promise<void>
   playLeftTrack: (track: AudioTrack) => void
   playRightTrack: (track: AudioTrack) => void
   pauseLeftTrack: () => void
@@ -164,11 +212,13 @@ const AudioContext = createContext<{
   setRightLocalVolume: (volume: number) => void
   seekLeftTo: (time: number) => void
   seekRightTo: (time: number) => void
-  setStreamDucking: (active: boolean) => void
-  setStreamMasterVolume: (volume: number) => void
-  setMasterVolume: (volume: number) => void
-  setCrossfader: (value: number) => void
-  addToDeck: (track: any, deck: 'left' | 'right') => Promise<void>
+  soundEffectsManagerRef: React.RefObject<SoundEffectsManager | null>
+  microphoneEffectsManagerRef: React.RefObject<MicrophoneEffectsManager | null>
+  getMixedStream: (leftElement?: HTMLAudioElement | null, rightElement?: HTMLAudioElement | null, pttActive?: boolean) => Promise<MediaStream | null>
+  createMicrophoneStream: () => Promise<MediaStream | null>
+  createSmartMicrophoneControl: () => { enable: () => Promise<boolean>; disable: () => void; getStream: () => MediaStream | null; isActive: () => boolean }
+  getAvailableAudioOutputDevices: () => Promise<MediaDeviceInfo[]>
+  ensureMainAudioContext: () => AudioContext | null
   incrementPlayCount: (trackId: string) => Promise<void>
   clearLeftDeck: () => void
   clearRightDeck: () => void
@@ -985,6 +1035,35 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             
             hasRealAudio = true
             console.log('✅ [MIC] Microfono creato e connesso con successo per streaming e PTT')
+            
+            // ✅ NUOVO: Aggiungi audio dei DJ remoti allo streaming
+            if (state.remoteDJs.streams.size > 0) {
+              console.log(`🎤 [REMOTE DJ] Aggiungendo ${state.remoteDJs.streams.size} DJ remoti allo streaming...`)
+              
+              state.remoteDJs.streams.forEach((stream, clientId) => {
+                try {
+                  const remoteVolume = state.remoteDJs.volumes.get(clientId) || 0.5
+                  
+                  // Crea MediaStreamSource per il DJ remoto
+                  const remoteSource = mixContext.createMediaStreamSource(stream)
+                  const remoteGain = mixContext.createGain()
+                  remoteSource.connect(remoteGain)
+                  
+                  // Connetti al destination per lo streaming
+                  remoteGain.connect(destinationStream)
+                  
+                  // Imposta il volume del DJ remoto
+                  remoteGain.gain.setValueAtTime(remoteVolume, mixContext.currentTime)
+                  
+                  console.log(`🎤 [REMOTE DJ] DJ ${clientId} connesso allo streaming con volume ${Math.round(remoteVolume * 100)}%`)
+                  hasRealAudio = true
+                } catch (error) {
+                  console.error(`❌ [REMOTE DJ] Errore connessione DJ ${clientId} allo streaming:`, error)
+                }
+              })
+              
+              console.log('✅ [REMOTE DJ] Tutti i DJ remoti connessi allo streaming')
+            }
         
         console.log('🔄 [GETMIXEDSTREAM] Passaggio critico - prima del return...')
             
@@ -1759,12 +1838,48 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // ✅ FIX: Funzione globale per aggiornare i volumi PTT dinamicamente
   ;(window as any).updatePTTVolumesOnly = (pttActive: boolean) => {
     try {
-      console.log(`🎤 [PTT UPDATE] Tentativo aggiornamento volumi PTT: ${pttActive ? 'ON' : 'OFF'}`)
+      // ✅ FIX: Riduci i log per evitare spam - solo quando cambia stato
+      const lastPTTState = (window as any).__lastPTTState__
+      if (lastPTTState !== pttActive) {
+        console.log(`🎤 [PTT UPDATE] Stato cambiato: ${pttActive ? 'ON' : 'OFF'}`)
+        ;(window as any).__lastPTTState__ = pttActive
+      }
+      
+      // ✅ CRITICAL FIX: Controlla se il microfono è effettivamente mutato
+      const isMicMuted = (window as any).__isMicMuted__ || false
+      const isHostMicMuted = (window as any).__isHostMicMuted__ || false
+      
+      // ✅ FIX: Log stato microfoni solo quando cambia
+      const lastMicState = (window as any).__lastMicState__
+      const currentMicState = `${isMicMuted}-${isHostMicMuted}`
+      if (lastMicState !== currentMicState) {
+        console.log(`🎤 [PTT UPDATE] Stato microfoni - Mic: ${isMicMuted ? 'MUTATO' : 'ATTIVO'}, Host: ${isHostMicMuted ? 'MUTATO' : 'ATTIVO'}`)
+        ;(window as any).__lastMicState__ = currentMicState
+      }
+      
+      // Se entrambi i microfoni sono mutati, non inviare audio in streaming
+      if (isMicMuted && isHostMicMuted) {
+        if (pttActive) { // Solo log se stava per attivarsi
+          console.log(`🎤 [PTT UPDATE] 🚫 Streaming bloccato: entrambi i microfoni sono mutati.`)
+        }
+        pttActive = false // Forza PTT a OFF
+      }
       
       // ✅ CRITICAL FIX: Usa i riferimenti globali del mixer per il PTT
       const micGain = (window as any).currentPTTMicGain
       const mixerGain = (window as any).currentPTTMixerGain
       const context = (window as any).currentPTTContext
+      
+      // ✅ FIX: Verifica che i riferimenti siano disponibili
+      if (!micGain || !mixerGain || !context) {
+        // ✅ FIX: Log warning solo una volta per evitare spam
+        const lastMissingRefsWarning = (window as any).__lastMissingRefsWarning__
+        if (!lastMissingRefsWarning) {
+          console.warn('⚠️ [PTT] Riferimenti WebAudio non disponibili per ducking - sistema PTT non inizializzato')
+          ;(window as any).__lastMissingRefsWarning__ = true
+        }
+        return // Esci se i riferimenti non sono disponibili
+      }
       
       // ✅ CRITICAL FIX: PTT Ducking dalle impostazioni (default 75% = musica abbassata del 75% del volume corrente)
       const pttDuckingLevel = (window as any).__pttDuckingLevel__ || 0.75 // Default 75% di abbassamento
@@ -1783,12 +1898,20 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const originalStreamVolume = (window as any).__pttOriginalStreamVolume__ || 1.0
         const duckedStreamVolume = Math.max(0, originalStreamVolume * (1.0 - pttDuckingLevel))
         
-        console.log(`🎤 [PTT DEBUG] Volume originale LiveStream: ${Math.round(originalStreamVolume * 100)}%, Ducking: ${Math.round(pttDuckingLevel * 100)}%, Volume finale: ${Math.round(duckedStreamVolume * 100)}%`)
+        // ✅ FIX: Log dettagliato solo quando cambia stato
+        const lastDuckingState = (window as any).__lastDuckingState__
+        if (lastDuckingState !== 'active') {
+          console.log(`🎤 [PTT DEBUG] Volume originale LiveStream: ${Math.round(originalStreamVolume * 100)}%, Ducking: ${Math.round(pttDuckingLevel * 100)}%, Volume finale: ${Math.round(duckedStreamVolume * 100)}%`)
+          ;(window as any).__lastDuckingState__ = 'active'
+        }
         
         // ✅ PTT: Aggiorna il microfono per lo streaming
         if (micGain && context) {
           micGain.gain.setValueAtTime(1.0, context.currentTime) // Microfono al 100%
-          console.log(`🎤 [PTT UPDATE] Microfono attivato al 100% per streaming`)
+          // ✅ FIX: Log microfono solo quando cambia stato
+          if (lastDuckingState !== 'active') {
+            console.log(`🎤 [PTT UPDATE] Microfono attivato al 100% per streaming`)
+          }
           
           // ✅ CRITICAL FIX: Notifica di successo
           if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
@@ -1799,27 +1922,44 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // ✅ CRITICAL FIX: Abbassa SOLO il volume del LiveStream usando setLiveStreamVolume (controlla SOLO l'interfaccia Live Stream)
         if (typeof (window as any).setLiveStreamVolume === 'function') {
           ;(window as any).setLiveStreamVolume(duckedStreamVolume)
-          console.log(`🎤 [PTT UPDATE] LiveStream abbassato del ${Math.round(pttDuckingLevel * 100)}% (da ${Math.round(originalStreamVolume * 100)}% a ${Math.round(duckedStreamVolume * 100)}%)`)
-      } else {
-          console.warn('⚠️ [PTT] Funzione setLiveStreamVolume non disponibile')
+          // ✅ FIX: Log LiveStream solo quando cambia stato
+          if (lastDuckingState !== 'active') {
+            console.log(`🎤 [PTT UPDATE] LiveStream abbassato del ${Math.round(pttDuckingLevel * 100)}% (da ${Math.round(originalStreamVolume * 100)}% a ${Math.round(duckedStreamVolume * 100)}%)`)
+          }
+        } else {
+          // ✅ FIX: Log warning solo una volta
+          if (lastDuckingState !== 'active') {
+            console.warn('⚠️ [PTT] Funzione setLiveStreamVolume non disponibile')
+          }
         }
         
         // ✅ CRITICAL FIX: Aggiorna ANCHE il mixer WebAudio per abbassare realmente la musica
         if (mixerGain && mixerGain.gain) {
           mixerGain.gain.setValueAtTime(duckedStreamVolume, context.currentTime)
-          console.log(`🎤 [PTT UPDATE] Mixer WebAudio abbassato a ${Math.round(duckedStreamVolume * 100)}% per ducking reale`)
-        } else {
-          console.warn('⚠️ [PTT] Mixer WebAudio non disponibile per ducking')
+          // ✅ FIX: Log mixer solo quando cambia stato
+          if (lastDuckingState !== 'active') {
+            console.log(`🎤 [PTT UPDATE] Mixer WebAudio abbassato a ${Math.round(duckedStreamVolume * 100)}% per ducking reale`)
+          }
         }
+        // ✅ FIX: Rimosso warning ridondante - già gestito sopra
         
       } else {
         // ✅ RESTORE: Ripristina il volume originale del LiveStream (NON al 100%!)
         const originalStreamVolume = (window as any).__pttOriginalStreamVolume__ || 1.0
         
+        // ✅ FIX: Log deactivation solo quando cambia stato
+        const lastDuckingState = (window as any).__lastDuckingState__
+        if (lastDuckingState !== 'inactive') {
+          ;(window as any).__lastDuckingState__ = 'inactive'
+        }
+        
         // ✅ PTT: Disattiva il microfono per lo streaming
         if (micGain && context) {
           micGain.gain.setValueAtTime(0.0, context.currentTime) // Microfono al 0%
-          console.log(`🎤 [PTT UPDATE] Microfono disattivato per streaming`)
+          // ✅ FIX: Log microfono solo quando cambia stato
+          if (lastDuckingState !== 'inactive') {
+            console.log(`🎤 [PTT UPDATE] Microfono disattivato per streaming`)
+          }
           
           // ✅ CRITICAL FIX: Notifica di successo
           if (typeof window !== 'undefined' && (window as any).addStreamingNotification) {
@@ -2364,7 +2504,16 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // ✅ FIX: Funzione per il ducking dello streaming
   const setStreamDucking = useCallback((active: boolean) => {
-    console.log(`🎤 [STREAMING] Ducking ${active ? 'attivato' : 'disattivato'}`)
+    // ✅ FIX: Log solo quando cambia stato per evitare spam
+    const lastStreamDuckingState = (window as any).__lastStreamDuckingState__
+    if (lastStreamDuckingState !== active) {
+      if (active) {
+        console.log(`🎤 [STREAMING] Ducking attivato - ${settings?.microphone?.duckingPercent ?? 75}%`)
+      } else {
+        console.log(`🎤 [STREAMING] Ducking disattivato`)
+      }
+      ;(window as any).__lastStreamDuckingState__ = active
+    }
     
     // ✅ CRITICAL FIX: Aggiorna i volumi PTT dinamicamente
     if (typeof (window as any).updatePTTVolumesOnly === 'function') {
@@ -2373,14 +2522,13 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const pttDuckingLevel = duckingPercent / 100 // Converte da percentuale a decimale
       ;(window as any).__pttDuckingLevel__ = pttDuckingLevel
       
-      // ✅ CRITICAL FIX: Log sicuro per evitare errori
-      if (typeof console !== 'undefined' && console.log) {
-        console.log(`🎤 [PTT] Ducking level impostato dalle impostazioni: ${duckingPercent}% (${pttDuckingLevel})`)
-      }
-      
       // ✅ CRITICAL FIX: Aggiorna i volumi PTT
-      (window as any).updatePTTVolumesOnly(active)
-          } else {
+      try {
+        ;(window as any).updatePTTVolumesOnly(active)
+      } catch (error) {
+        console.error('❌ [PTT] Errore aggiornamento volumi PTT:', error)
+      }
+    } else {
       console.warn('⚠️ [PTT] Funzione updatePTTVolumesOnly non disponibile')
     }
   }, [settings?.microphone?.duckingPercent])
@@ -3519,6 +3667,24 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setRightLocalVolume,
       seekLeftTo,
       seekRightTo,
+      
+      // Funzioni per DJ remoti
+      addRemoteDJStream: (id: string, stream: MediaStream) => {
+        console.log(`🎵 [AudioContext] Aggiungendo stream DJ remoto: ${id}`)
+        dispatch({ type: 'ADD_REMOTE_DJ_STREAM', payload: { id, stream } })
+        
+        // L'audio viene gestito direttamente dall'elemento audio nel RemoteDJHost
+        // Questo è solo per il tracking dello stato
+        console.log(`✅ [AudioContext] Stream DJ remoto ${id} aggiunto al tracking`)
+      },
+      removeRemoteDJStream: (id: string) => {
+        console.log(`🎵 [AudioContext] Rimuovendo stream DJ remoto: ${id}`)
+        dispatch({ type: 'REMOVE_REMOTE_DJ_STREAM', payload: id })
+      },
+      setRemoteDJVolume: (id: string, volume: number) => {
+        console.log(`🎵 [AudioContext] Impostando volume DJ remoto ${id}: ${volume}`)
+        dispatch({ type: 'SET_REMOTE_DJ_VOLUME', payload: { id, volume } })
+      },
       setStreamDucking,
       setStreamMasterVolume,
       setMasterVolume,

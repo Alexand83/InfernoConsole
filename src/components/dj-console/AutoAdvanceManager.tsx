@@ -25,8 +25,8 @@ const AutoAdvanceManager: React.FC<AutoAdvanceManagerProps> = ({
   // ✅ FIX AUTOPLAY: Gestione interna della playlist attiva
   const activePlaylistId = propActivePlaylistId || playlistState.currentPlaylist?.id
   
-  // ✅ DEBUG: Log per monitorare la playlist attiva
-  console.log(`🔄 [AUTOPLAY] Playlist attiva:`, playlistState.currentPlaylist?.name || 'Nessuna')
+  // ✅ DEBUG: Log per monitorare la playlist attiva (ridotto)
+  // console.log(`🔄 [AUTOPLAY] Playlist attiva:`, playlistState.currentPlaylist?.name || 'Nessuna')
   
   // ✅ FIX AUTOPLAY: Gestione interna del caricamento tracce
   const handleTrackLoadInternal = useCallback((deck: 'left' | 'right', track: any) => {
@@ -268,7 +268,7 @@ const AutoAdvanceManager: React.FC<AutoAdvanceManagerProps> = ({
       return
     }
     
-    console.log('🔄 [AUTOPLAY] Auto-advance abilitato, monitoraggio attivo')
+    // console.log('🔄 [AUTOPLAY] Auto-advance abilitato, monitoraggio attivo')
 
     const checkAutoAdvance = () => {
       const now = Date.now()
