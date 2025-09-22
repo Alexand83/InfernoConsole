@@ -59,6 +59,10 @@ asarUnpack:
 extraResources:
   - from: node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe
     to: ffmpeg.exe
+  - from: node_modules/@ffmpeg-installer/darwin-x64/ffmpeg
+    to: ffmpeg-mac-x64
+  - from: node_modules/@ffmpeg-installer/darwin-arm64/ffmpeg
+    to: ffmpeg-mac-arm64
 
 # Compressione (configurata per target specifici)
 

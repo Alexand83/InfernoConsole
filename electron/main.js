@@ -45,10 +45,30 @@ process.on('unhandledRejection', (reason, promise) => {
 let ffmpegPathResolved = null
 try {
   // Prefer packaged ffmpeg when available
-  // Replace app.asar path to the unpacked folder to allow executing the binary
   const ff = require('@ffmpeg-installer/ffmpeg')
-  ffmpegPathResolved = ff && ff.path ? ff.path.replace('app.asar', 'app.asar.unpacked') : null
-} catch (_) {
+  if (ff && ff.path) {
+    if (process.platform === 'win32') {
+      // Windows: Replace app.asar path to the unpacked folder
+      ffmpegPathResolved = ff.path.replace('app.asar', 'app.asar.unpacked')
+    } else if (process.platform === 'darwin') {
+      // macOS: Use the correct path for macOS binaries
+      const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
+      const resourcesPath = app.getPath('resources')
+      ffmpegPathResolved = path.join(resourcesPath, `ffmpeg-mac-${arch}`)
+      
+      // Make sure the binary is executable
+      try {
+        fs.chmodSync(ffmpegPathResolved, '755')
+      } catch (e) {
+        console.warn('⚠️ [FFMPEG] Could not set executable permissions:', e.message)
+      }
+    } else {
+      // Linux: Use the original path
+      ffmpegPathResolved = ff.path
+    }
+  }
+} catch (e) {
+  console.warn('⚠️ [FFMPEG] Could not resolve FFmpeg path:', e.message)
   ffmpegPathResolved = null
 }
 
@@ -695,7 +715,26 @@ ipcMain.handle('start-streaming', async (_evt, config) => {
     const ffmpegPath = process.env.FFMPEG_PATH || ffmpegPathResolved || 'ffmpeg'
     const args = buildFfmpegArgs(icecastOptions)
     
+    // ✅ DEBUG: Log dettagliato per macOS
+    console.log('🔍 [MAIN] Platform:', process.platform, 'Arch:', process.arch)
+    console.log('🔍 [MAIN] FFmpeg path resolved:', ffmpegPathResolved)
+    console.log('🔍 [MAIN] FFmpeg path used:', ffmpegPath)
     console.log('🔍 [MAIN] Comando FFmpeg completo:', `${ffmpegPath} ${args.join(' ')}`)
+    
+    // ✅ DEBUG: Verifica esistenza file su macOS
+    if (process.platform === 'darwin') {
+      try {
+        const exists = fs.existsSync(ffmpegPath)
+        const stats = exists ? fs.statSync(ffmpegPath) : null
+        console.log('🔍 [MAIN] FFmpeg file exists:', exists)
+        if (stats) {
+          console.log('🔍 [MAIN] FFmpeg file size:', stats.size, 'bytes')
+          console.log('🔍 [MAIN] FFmpeg file permissions:', stats.mode.toString(8))
+        }
+      } catch (e) {
+        console.warn('⚠️ [MAIN] Could not check FFmpeg file:', e.message)
+      }
+    }
     
     writeLog('info', `Starting ffmpeg: ${ffmpegPath} ${args.join(' ')}`)
     ffmpegProc = spawn(ffmpegPath, args, { stdio: ['pipe', 'pipe', 'pipe'] })
@@ -705,12 +744,18 @@ ipcMain.handle('start-streaming', async (_evt, config) => {
     ffmpegProc.on('error', (err) => {
       writeLog('error', `ffmpeg spawn error: ${err.message}`)
       console.log('🔍 [MAIN] Errore spawn FFmpeg:', err.message)
+      console.error('❌ [FFMPEG] Error code:', err.code)
+      console.error('❌ [FFMPEG] Error path:', err.path)
+      console.error('❌ [FFMPEG] Error syscall:', err.syscall)
       
       // ✅ FIX: Notifica al renderer che FFmpeg ha fallito
       if (BrowserWindow.getAllWindows().length > 0) {
         BrowserWindow.getAllWindows()[0].webContents.send('ffmpeg-error', {
           type: 'spawn_error',
-          message: err.message
+          message: err.message,
+          code: err.code,
+          path: err.path,
+          syscall: err.syscall
         })
       }
       
