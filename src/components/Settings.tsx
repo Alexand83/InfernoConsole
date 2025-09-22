@@ -120,10 +120,51 @@ const Settings = () => {
       
       console.log('🎤 [SETTINGS] Test microfono locale avviato per:', deviceId)
       
-      // ✅ SEMPLICE: Crea sempre un stream temporaneo per il test
-      const testStream = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: { exact: deviceId } }
-      })
+      // ✅ FIX: Fallback robusto per macOS - prova prima il dispositivo specifico, poi default
+      let testStream: MediaStream
+      let actualDeviceUsed = 'unknown'
+      
+      try {
+        // Prova prima con il dispositivo specifico
+        if (deviceId && deviceId !== 'default') {
+          console.log('🎤 [SETTINGS] Tentativo con dispositivo specifico:', deviceId)
+          testStream = await navigator.mediaDevices.getUserMedia({
+            audio: { 
+              deviceId: { exact: deviceId },
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false
+            }
+          })
+          actualDeviceUsed = deviceId
+        } else {
+          throw new Error('Device ID is default or empty')
+        }
+      } catch (error) {
+        console.warn('⚠️ [SETTINGS] Dispositivo specifico fallito, provo con default:', error.message)
+        
+        try {
+          // Fallback 1: Prova con default senza constraints specifici
+          testStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false
+            }
+          })
+          actualDeviceUsed = 'default'
+        } catch (error2) {
+          console.warn('⚠️ [SETTINGS] Default fallback fallito, provo con constraints minimi:', error2.message)
+          
+          // Fallback 2: Prova con constraints minimi
+          testStream = await navigator.mediaDevices.getUserMedia({
+            audio: true
+          })
+          actualDeviceUsed = 'fallback'
+        }
+      }
+      
+      console.log('🎤 [SETTINGS] Stream ottenuto con dispositivo:', actualDeviceUsed)
       
       const testAudioContext = new AudioContext()
       const analyser = testAudioContext.createAnalyser()
@@ -137,10 +178,14 @@ const Settings = () => {
       const dataArray = new Uint8Array(bufferLength)
       
       console.log('🎤 [SETTINGS] Test microfono configurato:', {
-        deviceId,
+        requestedDeviceId: deviceId,
+        actualDeviceUsed: actualDeviceUsed,
         audioTracks: testStream.getAudioTracks().length,
         readyState: testStream.getAudioTracks()[0]?.readyState,
-        enabled: testStream.getAudioTracks()[0]?.enabled
+        enabled: testStream.getAudioTracks()[0]?.enabled,
+        trackLabel: testStream.getAudioTracks()[0]?.label,
+        trackId: testStream.getAudioTracks()[0]?.id,
+        trackSettings: testStream.getAudioTracks()[0]?.getSettings()
       })
       
       const updateLevel = () => {

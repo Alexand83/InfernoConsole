@@ -268,18 +268,35 @@ const RemoteDJHost: React.FC = () => {
               console.error(`🎤 [RemoteDJHost] ❌ Messaggio errore: ${specificDeviceError.message}`)
               console.error(`🎤 [RemoteDJHost] ❌ Constraint che ha fallito:`, specificDeviceError.constraint)
               console.warn(`🎤 [RemoteDJHost] ⚠️ Dispositivo specifico non disponibile, fallback a default`)
-              // Fallback to default device
-              hostMicStreamRef.current = await navigator.mediaDevices.getUserMedia({ 
-                audio: {
-                  echoCancellation: currentSettings.microphone?.echoCancellation ?? true,
-                  noiseSuppression: currentSettings.microphone?.noiseSuppression ?? true,
-                  autoGainControl: currentSettings.microphone?.autoGainControl ?? true,
-                  sampleRate: 44100,
-                  channelCount: 1
-                } 
-              })
-              actualDeviceUsed = 'default (fallback)'
-              console.log(`🎤 [RemoteDJHost] ✅ Fallback a dispositivo default completato`)
+              
+              try {
+                // Fallback 1: Prova con default senza constraints specifici
+                hostMicStreamRef.current = await navigator.mediaDevices.getUserMedia({ 
+                  audio: {
+                    echoCancellation: currentSettings.microphone?.echoCancellation ?? true,
+                    noiseSuppression: currentSettings.microphone?.noiseSuppression ?? true,
+                    autoGainControl: currentSettings.microphone?.autoGainControl ?? true,
+                    sampleRate: 44100,
+                    channelCount: 1
+                  } 
+                })
+                actualDeviceUsed = 'default (fallback)'
+                console.log(`🎤 [RemoteDJHost] ✅ Fallback a dispositivo default completato`)
+              } catch (defaultError) {
+                console.error(`🎤 [RemoteDJHost] ❌ ERRORE DISPOSITIVO DEFAULT:`, defaultError)
+                console.warn(`🎤 [RemoteDJHost] ⚠️ Default fallback fallito, provo con constraints minimi`)
+                
+                // Fallback 2: Prova con constraints minimi per macOS
+                hostMicStreamRef.current = await navigator.mediaDevices.getUserMedia({ 
+                  audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
+                  } 
+                })
+                actualDeviceUsed = 'minimal constraints (fallback)'
+                console.log(`🎤 [RemoteDJHost] ✅ Fallback a constraints minimi completato`)
+              }
             }
           } else {
             console.log(`🎤 [RemoteDJHost] Utilizzo dispositivo default`)

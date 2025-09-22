@@ -137,8 +137,41 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose }) => {
           actualDeviceUsed = 'specific device'
           console.log(`🎤 [RemoteDJClient] ✅ Dispositivo specifico utilizzato con successo`)
         } catch (specificDeviceError) {
-          console.warn(`🎤 [RemoteDJClient] ⚠️ Dispositivo specifico non disponibile, fallback a default:`, specificDeviceError)
-          // Fallback to default device
+          console.error(`🎤 [RemoteDJClient] ❌ ERRORE DISPOSITIVO SPECIFICO:`, specificDeviceError)
+          console.warn(`🎤 [RemoteDJClient] ⚠️ Dispositivo specifico non disponibile, fallback a default`)
+          
+          try {
+            // Fallback 1: Prova con default senza constraints specifici
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                echoCancellation: settings.microphone?.echoCancellation ?? true,
+                noiseSuppression: settings.microphone?.noiseSuppression ?? true,
+                autoGainControl: settings.microphone?.autoGainControl ?? true,
+                sampleRate: 44100,
+                channelCount: 1
+              }
+            })
+            actualDeviceUsed = 'default (fallback)'
+            console.log(`🎤 [RemoteDJClient] ✅ Fallback a dispositivo default completato`)
+          } catch (defaultError) {
+            console.error(`🎤 [RemoteDJClient] ❌ ERRORE DISPOSITIVO DEFAULT:`, defaultError)
+            console.warn(`🎤 [RemoteDJClient] ⚠️ Default fallback fallito, provo con constraints minimi`)
+            
+            // Fallback 2: Prova con constraints minimi per macOS
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false
+              }
+            })
+            actualDeviceUsed = 'minimal constraints (fallback)'
+            console.log(`🎤 [RemoteDJClient] ✅ Fallback a constraints minimi completato`)
+          }
+        }
+      } else {
+        console.log(`🎤 [RemoteDJClient] Utilizzo dispositivo default`)
+        try {
           stream = await navigator.mediaDevices.getUserMedia({
             audio: {
               echoCancellation: settings.microphone?.echoCancellation ?? true,
@@ -148,21 +181,22 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose }) => {
               channelCount: 1
             }
           })
-          actualDeviceUsed = 'default (fallback)'
-          console.log(`🎤 [RemoteDJClient] ✅ Fallback a dispositivo default completato`)
+          actualDeviceUsed = 'default'
+        } catch (defaultError) {
+          console.error(`🎤 [RemoteDJClient] ❌ ERRORE DISPOSITIVO DEFAULT:`, defaultError)
+          console.warn(`🎤 [RemoteDJClient] ⚠️ Default fallback fallito, provo con constraints minimi`)
+          
+          // Fallback: Prova con constraints minimi per macOS
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false
+            }
+          })
+          actualDeviceUsed = 'minimal constraints (fallback)'
+          console.log(`🎤 [RemoteDJClient] ✅ Fallback a constraints minimi completato`)
         }
-      } else {
-        console.log(`🎤 [RemoteDJClient] Utilizzo dispositivo default`)
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: settings.microphone?.echoCancellation ?? true,
-            noiseSuppression: settings.microphone?.noiseSuppression ?? true,
-            autoGainControl: settings.microphone?.autoGainControl ?? true,
-            sampleRate: 44100,
-            channelCount: 1
-          }
-        })
-        actualDeviceUsed = 'default'
       }
       
       // Log dettagliato del stream creato
