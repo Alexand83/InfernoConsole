@@ -171,8 +171,20 @@ const Settings = () => {
       const microphone = testAudioContext.createMediaStreamSource(testStream)
       
       microphone.connect(analyser)
+      
+      // ✅ FIX: Configurazione ottimizzata per macOS
       analyser.fftSize = 256
-      analyser.smoothingTimeConstant = 0.8
+      analyser.smoothingTimeConstant = 0.3  // Meno smoothing per risposta più veloce
+      analyser.minDecibels = -90
+      analyser.maxDecibels = -10
+      
+      console.log('🎤 [SETTINGS] Analyser configurato:', {
+        fftSize: analyser.fftSize,
+        smoothingTimeConstant: analyser.smoothingTimeConstant,
+        minDecibels: analyser.minDecibels,
+        maxDecibels: analyser.maxDecibels,
+        frequencyBinCount: analyser.frequencyBinCount
+      })
       
       const bufferLength = analyser.frequencyBinCount
       const dataArray = new Uint8Array(bufferLength)
@@ -191,15 +203,33 @@ const Settings = () => {
       const updateLevel = () => {
         if (!(window as any).__micTestActive) return
         
+        // ✅ FIX: Prova entrambi i metodi per compatibilità macOS
         analyser.getByteFrequencyData(dataArray)
         
-        // Calcola il livello audio
+        // Calcola il livello audio con getByteFrequencyData
         let sum = 0
         for (let i = 0; i < bufferLength; i++) {
           sum += dataArray[i]
         }
         const average = sum / bufferLength
-        const level = Math.round((average / 255) * 100)
+        let level = Math.round((average / 255) * 100)
+        
+        // ✅ FIX: Se il livello è 0, prova con getByteTimeDomainData (più affidabile su macOS)
+        if (level === 0) {
+          analyser.getByteTimeDomainData(dataArray)
+          let sumTime = 0
+          for (let i = 0; i < bufferLength; i++) {
+            const sample = (dataArray[i] - 128) / 128
+            sumTime += Math.abs(sample)
+          }
+          const averageTime = sumTime / bufferLength
+          level = Math.round(averageTime * 100)
+        }
+        
+        // ✅ DEBUG: Log ogni 30 frame per debug
+        if (Math.random() < 0.033) { // ~1% di probabilità (30fps)
+          console.log('🎤 [SETTINGS] Test microfono - Livello:', level, 'Average:', average, 'Sum:', sum)
+        }
         
         setMicTestLevel(level)
         requestAnimationFrame(updateLevel)
@@ -210,6 +240,28 @@ const Settings = () => {
       ;(window as any).__micTestAudioContext = testAudioContext
       ;(window as any).__micTestAnalyser = analyser
       ;(window as any).__micTestActive = true
+      
+      // ✅ FIX: Test manuale per verificare se il microfono riceve audio
+      setTimeout(() => {
+        console.log('🎤 [SETTINGS] Test manuale microfono dopo 1 secondo...')
+        analyser.getByteFrequencyData(dataArray)
+        let testSum = 0
+        for (let i = 0; i < bufferLength; i++) {
+          testSum += dataArray[i]
+        }
+        const testAverage = testSum / bufferLength
+        console.log('🎤 [SETTINGS] Test manuale - Sum:', testSum, 'Average:', testAverage, 'Max:', Math.max(...dataArray))
+        
+        // Test anche con time domain
+        analyser.getByteTimeDomainData(dataArray)
+        let testSumTime = 0
+        for (let i = 0; i < bufferLength; i++) {
+          const sample = (dataArray[i] - 128) / 128
+          testSumTime += Math.abs(sample)
+        }
+        const testAverageTime = testSumTime / bufferLength
+        console.log('🎤 [SETTINGS] Test time domain - Average:', testAverageTime, 'Max:', Math.max(...dataArray))
+      }, 1000)
       
       // Avvia il loop di aggiornamento
       updateLevel()
