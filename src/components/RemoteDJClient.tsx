@@ -4,6 +4,7 @@ import { useSettings } from '../contexts/SettingsContext'
 
 interface RemoteDJClientProps {
   onClose?: () => void
+  onMinimize?: () => void
 }
 
 interface ChatMessage {
@@ -14,7 +15,7 @@ interface ChatMessage {
   isSystem: boolean
 }
 
-const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose }) => {
+const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) => {
   const { settings } = useSettings()
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
@@ -81,7 +82,16 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose }) => {
 
   useEffect(() => {
     return () => {
-      // Cleanup
+      // ✅ CRITICAL FIX: Cleanup solo se non è minimizzato (per mantenere connessione)
+      const isMinimized = (window as any).__remoteDJMinimized__
+      if (isMinimized) {
+        console.log('🎤 [RemoteDJClient] Pannello minimizzato - mantengo connessione attiva')
+        return
+      }
+      
+      console.log('🎤 [RemoteDJClient] Cleanup completo - disconnessione')
+      
+      // Cleanup completo solo se non minimizzato
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
       }
@@ -556,14 +566,26 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose }) => {
       <div className="bg-dj-dark border border-dj-accent rounded-lg p-6 w-full max-w-md">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold text-white">🎤 DJ Remoto</h2>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="text-dj-light hover:text-white"
-            >
-              ✕
-            </button>
-          )}
+          <div className="flex space-x-2">
+            {onMinimize && (
+              <button
+                onClick={onMinimize}
+                className="text-dj-light hover:text-white"
+                title="Minimizza"
+              >
+                −
+              </button>
+            )}
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="text-dj-light hover:text-white"
+                title="Chiudi"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
 
         {!isConnected ? (

@@ -558,14 +558,35 @@ const RemoteDJHost: React.FC = () => {
     // Imposta il flag globale per il controllo dello streaming
     ;(window as any).__isHostMicMuted__ = newMutedState
     
-    // Muta il stream del microfono dell'host condiviso
+    // ✅ CRITICAL FIX: Muta il stream del microfono dell'host condiviso (WebRTC)
     if (hostMicStreamRef.current) {
       hostMicStreamRef.current.getAudioTracks().forEach(track => {
         track.enabled = !newMutedState // Inverti: se muted=true, track.enabled=false
       })
     }
     
-    console.log(`🎤 [RemoteDJHost] Host microfono ${newMutedState ? 'mutato' : 'attivato'}`)
+    // ✅ CRITICAL FIX: Muta anche il microfono principale per lo streaming live
+    if ((window as any).micStreamRef && (window as any).micStreamRef.current) {
+      (window as any).micStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = !newMutedState // Inverti: se muted=true, track.enabled=false
+      })
+      console.log(`🎤 [RemoteDJHost] Microfono principale ${newMutedState ? 'mutato' : 'attivato'} per streaming live`)
+    }
+    
+    // ✅ CRITICAL FIX: Forza aggiornamento del mixed stream se lo streaming è attivo
+    if ((window as any).isCurrentlyStreaming && (window as any).getMixedStream) {
+      console.log(`🎤 [RemoteDJHost] Forzando aggiornamento mixed stream per muting host...`)
+      ;(window as any).getMixedStream().then((newStream: MediaStream | null) => {
+        if (newStream && (window as any).streamingManager) {
+          (window as any).streamingManager.updateStream(newStream)
+          console.log(`🎤 [RemoteDJHost] Mixed stream aggiornato per muting host`)
+        }
+      }).catch((error: any) => {
+        console.error(`❌ [RemoteDJHost] Errore aggiornamento mixed stream:`, error)
+      })
+    }
+    
+    console.log(`🎤 [RemoteDJHost] Host microfono ${newMutedState ? 'mutato' : 'attivato'} (WebRTC + Streaming Live)`)
   }
 
   // Funzione per monitorare l'audio dell'host e applicare ducking automatico
@@ -623,8 +644,8 @@ const RemoteDJHost: React.FC = () => {
           const average = sum / count
           const audioLevel = (average / 255) * 100
 
-          // ✅ FIX: Aggiorna sempre il livello audio massimo (non solo se più alto)
-          if (audioLevel > maxAudioLevel) {
+          // ✅ CRITICAL FIX: Aggiorna il livello audio massimo solo se sopra soglia minima
+          if (audioLevel > 5 && audioLevel > maxAudioLevel) {
             maxAudioLevel = audioLevel
             activeSpeaker = 'Host'
           }
@@ -670,19 +691,22 @@ const RemoteDJHost: React.FC = () => {
             const average = sum / count
             const audioLevel = (average / 255) * 100
 
-            // Aggiorna il livello audio massimo se necessario (soglia più alta per DJ remoti)
-            if (audioLevel > 20 && audioLevel > maxAudioLevel) {
+            // ✅ CRITICAL FIX: Soglia più bassa per DJ remoti per rilevare meglio il silenzio
+            if (audioLevel > 5 && audioLevel > maxAudioLevel) {
               maxAudioLevel = audioLevel
               activeSpeaker = dj.djName
             }
           }
         })
 
-        // ✅ FIX: Debug ridotto - mostra i livelli audio solo quando cambia significativamente
+        // ✅ CRITICAL FIX: Debug migliorato per rilevamento silenzio
         const lastAudioLevel = (window as any).__lastAudioLevel__ || 0
-        const levelChanged = Math.abs(maxAudioLevel - lastAudioLevel) > 5 // Cambio significativo di 5%
-        if (maxAudioLevel > 5 && levelChanged) { // Solo se c'è attività audio e cambia significativamente
-          console.log(`🎤 [AudioLevels] Host: ${hostAnalyserRef.current && !isHostMuted ? 'attivo' : 'inattivo'}, DJ Remoti: ${remoteAudioAnalysersRef.current.size}, Max: ${maxAudioLevel.toFixed(1)}%, Speaker: ${activeSpeaker}`)
+        const levelChanged = Math.abs(maxAudioLevel - lastAudioLevel) > 2 // Cambio significativo di 2%
+        
+        // Mostra debug per livelli bassi (silenzio) e alti (attività)
+        if ((maxAudioLevel < 2 && levelChanged) || (maxAudioLevel > 5 && levelChanged)) {
+          const silenceStatus = maxAudioLevel < 2 ? '🔇 SILENZIO' : '🔊 ATTIVITÀ'
+          console.log(`🎤 [AudioLevels] ${silenceStatus} - Host: ${hostAnalyserRef.current && !isHostMuted ? 'attivo' : 'inattivo'}, DJ Remoti: ${remoteAudioAnalysersRef.current.size}, Max: ${maxAudioLevel.toFixed(1)}%, Speaker: ${activeSpeaker}`)
           ;(window as any).__lastAudioLevel__ = maxAudioLevel
         }
 
@@ -702,24 +726,50 @@ const RemoteDJHost: React.FC = () => {
           console.log(`🎤 [AutoDucking] Attivato da ${activeSpeaker} - livello audio: ${maxAudioLevel.toFixed(1)}%`)
         }
         
-        // Disattiva ducking se il livello audio è troppo basso
-        if (isAutoDuckingActive && maxAudioLevel < 5) {
+        // ✅ CRITICAL FIX: Sistema di rilevamento silenzio migliorato
+        const silenceThreshold = 2 // Soglia molto bassa per rilevare silenzio (2%)
+        const silenceDuration = 1000 // 1 secondo di silenzio per disattivare ducking
+        
+        // Inizializza il timer di silenzio se non esiste
+        if (!(window as any).__silenceStartTime__) {
+          ;(window as any).__silenceStartTime__ = null
+        }
+        
+        // Se il livello audio è sotto la soglia di silenzio
+        if (maxAudioLevel < silenceThreshold) {
+          if (!(window as any).__silenceStartTime__) {
+            ;(window as any).__silenceStartTime__ = Date.now()
+            console.log(`🎤 [SilenceDetection] Inizio rilevamento silenzio - livello: ${maxAudioLevel.toFixed(1)}%`)
+          } else {
+            const silenceDuration_ms = Date.now() - (window as any).__silenceStartTime__
+            if (silenceDuration_ms >= silenceDuration && isAutoDuckingActive) {
+              setIsAutoDuckingActive(false)
+              setActiveSpeaker('')
+              applyAutoDucking(false)
+              console.log(`🎤 [AutoDucking] 🚫 Disattivato - silenzio rilevato per ${silenceDuration_ms}ms (livello: ${maxAudioLevel.toFixed(1)}%)`)
+              ;(window as any).__silenceStartTime__ = null
+            }
+          }
+        } else {
+          // Reset timer silenzio se c'è attività audio
+          if ((window as any).__silenceStartTime__) {
+            console.log(`🎤 [SilenceDetection] Silenzio interrotto - livello: ${maxAudioLevel.toFixed(1)}%`)
+            ;(window as any).__silenceStartTime__ = null
+          }
+        }
+        
+        // ✅ CRITICAL FIX: Disattiva ducking se i microfoni sono mutati
+        if (isMicMuted && isHostMicMuted && isAutoDuckingActive) {
           setIsAutoDuckingActive(false)
           setActiveSpeaker('')
           applyAutoDucking(false)
-          console.log(`🎤 [AutoDucking] Disattivato - livello audio troppo basso: ${maxAudioLevel.toFixed(1)}%`)
+          console.log(`🎤 [AutoDucking] 🚫 Disattivato - entrambi i microfoni sono mutati`)
+          ;(window as any).__silenceStartTime__ = null
         }
 
 
-        // ✅ CRITICAL FIX: Se tutti i microfoni sono mutati tramite flag, disattiva immediatamente il ducking
+        // ✅ CRITICAL FIX: Forza il livello audio a 0 quando i microfoni sono mutati per evitare falsi positivi
         if (isMicMuted && isHostMicMuted) {
-          if (isAutoDuckingActive) {
-            setIsAutoDuckingActive(false)
-            setActiveSpeaker('')
-            applyAutoDucking(false)
-            console.log(`🎤 [AutoDucking] 🚫 Disattivato immediatamente - tutti i microfoni sono mutati`)
-          }
-          // ✅ CRITICAL FIX: Forza il livello audio a 0 quando i microfoni sono mutati
           maxAudioLevel = 0
         }
 

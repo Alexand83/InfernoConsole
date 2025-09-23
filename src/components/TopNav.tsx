@@ -7,6 +7,7 @@ const TopNav = () => {
   const { t } = useTranslation()
   const [currentTime, setCurrentTime] = useState(new Date())
   const [showRemoteDJ, setShowRemoteDJ] = useState(false)
+  const [isRemoteDJMinimized, setIsRemoteDJMinimized] = useState(false)
   
   // Aggiorna l'ora ogni secondo
   useEffect(() => {
@@ -54,11 +55,19 @@ const TopNav = () => {
             
             {/* Pulsante DJ Remoto */}
             <button
-              onClick={() => setShowRemoteDJ(true)}
+              onClick={() => {
+                if (isRemoteDJMinimized) {
+                  setIsRemoteDJMinimized(false)
+                  setShowRemoteDJ(true)
+                } else {
+                  setShowRemoteDJ(true)
+                }
+              }}
               className="flex items-center space-x-2 px-3 py-2 rounded-md text-sm transition-colors text-dj-light/80 hover:bg-dj-accent/20 hover:text-white"
               title="DJ Remoto"
             >
               <span className="font-medium">🎤 DJ Remoto</span>
+              {isRemoteDJMinimized && <span className="text-xs text-dj-accent">●</span>}
             </button>
           </nav>
         </div>
@@ -66,7 +75,18 @@ const TopNav = () => {
       
       {/* Client DJ Remoto */}
       {showRemoteDJ && (
-        <RemoteDJClient onClose={() => setShowRemoteDJ(false)} />
+        <RemoteDJClient 
+          onClose={() => {
+            ;(window as any).__remoteDJMinimized__ = false // Reset flag per cleanup completo
+            setIsRemoteDJMinimized(false)
+            setShowRemoteDJ(false)
+          }}
+          onMinimize={() => {
+            ;(window as any).__remoteDJMinimized__ = true // Imposta flag per mantenere connessione
+            setIsRemoteDJMinimized(true)
+            setShowRemoteDJ(false)
+          }}
+        />
       )}
     </header>
   )
