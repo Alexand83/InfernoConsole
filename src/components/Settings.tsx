@@ -120,150 +120,41 @@ const Settings = () => {
       
       console.log('🎤 [SETTINGS] Test microfono locale avviato per:', deviceId)
       
-      // ✅ FIX: Verifica permessi prima di tutto
-      try {
-        const permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName })
-        console.log('🎤 [SETTINGS] Stato permessi microfono:', permissionStatus.state)
-        
-        if (permissionStatus.state === 'denied') {
-          console.log('🎤 [SETTINGS] ❌ Permessi microfono negati')
-          alert('❌ Accesso al microfono negato!\n\nSu macOS:\n1. Vai su Preferenze di Sistema > Sicurezza e Privacy > Privacy\n2. Seleziona "Microfono" dal menu laterale\n3. Assicurati che "Safari" o il tuo browser sia selezionato\n4. Riavvia l\'applicazione')
-          throw new Error('Permessi microfono negati')
-        }
-      } catch (e) {
-        console.log('🎤 [SETTINGS] ⚠️ Impossibile verificare permessi:', e)
-      }
-      
-      // ✅ FIX: Fallback robusto per macOS - prova prima il dispositivo specifico, poi default
-      let testStream: MediaStream
-      let actualDeviceUsed = 'unknown'
-      let permissionError = false
-      
-      try {
-        // Prova prima con il dispositivo specifico
-        if (deviceId && deviceId !== 'default') {
-          console.log('🎤 [SETTINGS] Tentativo con dispositivo specifico:', deviceId)
-          testStream = await navigator.mediaDevices.getUserMedia({
-            audio: { 
-              deviceId: { exact: deviceId },
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false
-            }
-          })
-          actualDeviceUsed = deviceId
-        } else {
-          throw new Error('Device ID is default or empty')
-        }
-      } catch (error: any) {
-        console.warn('⚠️ [SETTINGS] Dispositivo specifico fallito:', error.name, error.message)
-        
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          permissionError = true
-        }
-        
-        if (!permissionError) {
-          try {
-            // Fallback 1: Prova con default senza constraints specifici
-            testStream = await navigator.mediaDevices.getUserMedia({
-              audio: {
-                echoCancellation: false,
-                noiseSuppression: false,
-                autoGainControl: false
-              }
-            })
-            actualDeviceUsed = 'default'
-          } catch (error2: any) {
-            console.warn('⚠️ [SETTINGS] Default fallback fallito:', error2.name, error2.message)
-            
-            if (error2.name === 'NotAllowedError' || error2.name === 'PermissionDeniedError') {
-              permissionError = true
-            }
-            
-            if (!permissionError) {
-              // Fallback 2: Prova con constraints minimi
-              testStream = await navigator.mediaDevices.getUserMedia({
-                audio: true
-              })
-              actualDeviceUsed = 'fallback'
-            }
-          }
-        }
-      }
-      
-      // Gestione errori di permessi
-      if (permissionError) {
-        console.log('🎤 [SETTINGS] ❌ ERRORE PERMESSI: Il microfono è bloccato')
-        alert('❌ Accesso al microfono negato!\n\nSu macOS:\n1. Vai su Preferenze di Sistema > Sicurezza e Privacy > Privacy\n2. Seleziona "Microfono" dal menu laterale\n3. Assicurati che "Safari" o il tuo browser sia selezionato\n4. Riavvia l\'applicazione')
-        throw new Error('Permessi microfono negati')
-      }
-      
-      console.log('🎤 [SETTINGS] Stream ottenuto con dispositivo:', actualDeviceUsed)
+      // ✅ SEMPLICE: Crea sempre un stream temporaneo per il test
+      const testStream = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: { exact: deviceId } }
+      })
       
       const testAudioContext = new AudioContext()
       const analyser = testAudioContext.createAnalyser()
       const microphone = testAudioContext.createMediaStreamSource(testStream)
       
       microphone.connect(analyser)
-      
-      // ✅ FIX: Configurazione ottimizzata per macOS
       analyser.fftSize = 256
-      analyser.smoothingTimeConstant = 0.3  // Meno smoothing per risposta più veloce
-      analyser.minDecibels = -90
-      analyser.maxDecibels = -10
-      
-      console.log('🎤 [SETTINGS] Analyser configurato:', {
-        fftSize: analyser.fftSize,
-        smoothingTimeConstant: analyser.smoothingTimeConstant,
-        minDecibels: analyser.minDecibels,
-        maxDecibels: analyser.maxDecibels,
-        frequencyBinCount: analyser.frequencyBinCount
-      })
+      analyser.smoothingTimeConstant = 0.8
       
       const bufferLength = analyser.frequencyBinCount
       const dataArray = new Uint8Array(bufferLength)
       
       console.log('🎤 [SETTINGS] Test microfono configurato:', {
-        requestedDeviceId: deviceId,
-        actualDeviceUsed: actualDeviceUsed,
+        deviceId,
         audioTracks: testStream.getAudioTracks().length,
         readyState: testStream.getAudioTracks()[0]?.readyState,
-        enabled: testStream.getAudioTracks()[0]?.enabled,
-        trackLabel: testStream.getAudioTracks()[0]?.label,
-        trackId: testStream.getAudioTracks()[0]?.id,
-        trackSettings: testStream.getAudioTracks()[0]?.getSettings()
+        enabled: testStream.getAudioTracks()[0]?.enabled
       })
       
       const updateLevel = () => {
         if (!(window as any).__micTestActive) return
         
-        // ✅ FIX: Prova entrambi i metodi per compatibilità macOS
         analyser.getByteFrequencyData(dataArray)
         
-        // Calcola il livello audio con getByteFrequencyData
+        // Calcola il livello audio
         let sum = 0
         for (let i = 0; i < bufferLength; i++) {
           sum += dataArray[i]
         }
         const average = sum / bufferLength
-        let level = Math.round((average / 255) * 100)
-        
-        // ✅ FIX: Se il livello è 0, prova con getByteTimeDomainData (più affidabile su macOS)
-        if (level === 0) {
-          analyser.getByteTimeDomainData(dataArray)
-          let sumTime = 0
-          for (let i = 0; i < bufferLength; i++) {
-            const sample = (dataArray[i] - 128) / 128
-            sumTime += Math.abs(sample)
-          }
-          const averageTime = sumTime / bufferLength
-          level = Math.round(averageTime * 100)
-        }
-        
-        // ✅ DEBUG: Log ogni 30 frame per debug
-        if (Math.random() < 0.033) { // ~1% di probabilità (30fps)
-          console.log('🎤 [SETTINGS] Test microfono - Livello:', level, 'Average:', average, 'Sum:', sum)
-        }
+        const level = Math.round((average / 255) * 100)
         
         setMicTestLevel(level)
         requestAnimationFrame(updateLevel)
@@ -275,124 +166,6 @@ const Settings = () => {
       ;(window as any).__micTestAnalyser = analyser
       ;(window as any).__micTestActive = true
       
-      // ✅ FIX: Test manuale per verificare se il microfono riceve audio
-      setTimeout(() => {
-        console.log('🎤 [SETTINGS] ===== TEST AVANZATO MICROFONO macOS =====')
-        
-        // Test 1: Frequency data
-        analyser.getByteFrequencyData(dataArray)
-        let testSum = 0
-        for (let i = 0; i < bufferLength; i++) {
-          testSum += dataArray[i]
-        }
-        const testAverage = testSum / bufferLength
-        const testMax = Math.max(...dataArray)
-        console.log('🎤 [SETTINGS] Test 1 - Frequency: Sum:', testSum, 'Average:', testAverage, 'Max:', testMax)
-        
-        // Test 2: Time domain data
-        analyser.getByteTimeDomainData(dataArray)
-        let testSumTime = 0
-        let testMaxTime = 0
-        for (let i = 0; i < bufferLength; i++) {
-          const sample = (dataArray[i] - 128) / 128
-          testSumTime += Math.abs(sample)
-          testMaxTime = Math.max(testMaxTime, Math.abs(sample))
-        }
-        const testAverageTime = testSumTime / bufferLength
-        console.log('🎤 [SETTINGS] Test 2 - Time Domain: Average:', testAverageTime, 'Max:', testMaxTime)
-        
-        // Test 3: Raw data analysis
-        console.log('🎤 [SETTINGS] Test 3 - Raw Data Analysis:')
-        console.log('🎤 [SETTINGS] - Buffer length:', bufferLength)
-        console.log('🎤 [SETTINGS] - First 10 frequency values:', Array.from(dataArray.slice(0, 10)))
-        console.log('🎤 [SETTINGS] - First 10 time domain values:', Array.from(dataArray.slice(0, 10)))
-        
-        // Test 4: Stream analysis
-        const audioTracks = testStream.getAudioTracks()
-        if (audioTracks.length > 0) {
-          const track = audioTracks[0]
-          const settings = track.getSettings()
-          const constraints = track.getConstraints()
-          const capabilities = track.getCapabilities()
-          
-          console.log('🎤 [SETTINGS] Test 4 - Stream Analysis:')
-          console.log('🎤 [SETTINGS] - Track enabled:', track.enabled)
-          console.log('🎤 [SETTINGS] - Track muted:', track.muted)
-          console.log('🎤 [SETTINGS] - Track readyState:', track.readyState)
-          console.log('🎤 [SETTINGS] - Track settings:', settings)
-          console.log('🎤 [SETTINGS] - Track constraints:', constraints)
-          console.log('🎤 [SETTINGS] - Track capabilities:', capabilities)
-        }
-        
-        // Test 5: AudioContext analysis
-        console.log('🎤 [SETTINGS] Test 5 - AudioContext Analysis:')
-        console.log('🎤 [SETTINGS] - AudioContext state:', testAudioContext.state)
-        console.log('🎤 [SETTINGS] - AudioContext sampleRate:', testAudioContext.sampleRate)
-        console.log('🎤 [SETTINGS] - Analyser fftSize:', analyser.fftSize)
-        console.log('🎤 [SETTINGS] - Analyser frequencyBinCount:', analyser.frequencyBinCount)
-        console.log('🎤 [SETTINGS] - Analyser smoothingTimeConstant:', analyser.smoothingTimeConstant)
-        
-        // Test 6: macOS specific check
-        if (navigator.userAgent.includes('Mac')) {
-          console.log('🎤 [SETTINGS] Test 6 - macOS Specific:')
-          console.log('🎤 [SETTINGS] - User Agent:', navigator.userAgent)
-          console.log('🎤 [SETTINGS] - MediaDevices supported:', !!navigator.mediaDevices)
-          console.log('🎤 [SETTINGS] - getUserMedia supported:', !!navigator.mediaDevices?.getUserMedia)
-          
-          // Check if we can get device info
-          navigator.mediaDevices.enumerateDevices().then(devices => {
-            const audioInputs = devices.filter(d => d.kind === 'audioinput')
-            console.log('🎤 [SETTINGS] - Available audio inputs:', audioInputs.length)
-            audioInputs.forEach((device, index) => {
-              console.log(`🎤 [SETTINGS] - Input ${index}:`, {
-                deviceId: device.deviceId,
-                label: device.label,
-                groupId: device.groupId
-              })
-            })
-          }).catch(e => {
-            console.log('🎤 [SETTINGS] - Error enumerating devices:', e)
-          })
-        }
-        
-        console.log('🎤 [SETTINGS] ===== FINE TEST AVANZATO =====')
-        
-        // Test 7: Prova diversi constraint per macOS
-        console.log('🎤 [SETTINGS] Test 7 - Prova constraint alternativi per macOS...')
-        
-        // Prova con constraint più permissivi
-        navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: { exact: deviceId },
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            sampleRate: 44100,
-            channelCount: 1
-          }
-        }).then(altStream => {
-          console.log('🎤 [SETTINGS] ✅ Constraint alternativi funzionano!')
-          console.log('🎤 [SETTINGS] - Alt stream tracks:', altStream.getAudioTracks().length)
-          altStream.getTracks().forEach(track => track.stop())
-        }).catch(e => {
-          console.log('🎤 [SETTINGS] ❌ Constraint alternativi falliti:', e.message)
-        })
-        
-        // Prova con constraint minimi
-        navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: { exact: deviceId }
-          }
-        }).then(minStream => {
-          console.log('🎤 [SETTINGS] ✅ Constraint minimi funzionano!')
-          console.log('🎤 [SETTINGS] - Min stream tracks:', minStream.getAudioTracks().length)
-          minStream.getTracks().forEach(track => track.stop())
-        }).catch(e => {
-          console.log('🎤 [SETTINGS] ❌ Constraint minimi falliti:', e.message)
-        })
-        
-      }, 1000)
-      
       // Avvia il loop di aggiornamento
       updateLevel()
       
@@ -401,20 +174,10 @@ const Settings = () => {
         stopVisualMicrophoneTest()
       }, 10000)
       
-    } catch (error: any) {
+    } catch (error) {
       console.error('❌ [SETTINGS] Errore test microfono:', error)
+      alert('Errore nel test del microfono: ' + error.message)
       setIsMicTestActive(false)
-      
-      // Mostra messaggio di errore specifico per macOS
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        alert('❌ Accesso al microfono negato!\n\nSu macOS:\n1. Vai su Preferenze di Sistema > Sicurezza e Privacy > Privacy\n2. Seleziona "Microfono" dal menu laterale\n3. Assicurati che "Safari" o il tuo browser sia selezionato\n4. Riavvia l\'applicazione')
-      } else if (error.name === 'NotFoundError') {
-        alert('❌ Nessun microfono trovato!\n\nVerifica che:\n1. Un microfono sia collegato\n2. Il microfono sia abilitato nelle Preferenze di Sistema\n3. Nessun\'altra applicazione stia usando il microfono')
-      } else if (error.name === 'NotReadableError') {
-        alert('❌ Microfono non leggibile!\n\nIl microfono potrebbe essere utilizzato da un\'altra applicazione.\nChiudi altre app che potrebbero usare il microfono e riprova.')
-      } else {
-        alert(`❌ Errore microfono: ${error.message}`)
-      }
     }
   }
   

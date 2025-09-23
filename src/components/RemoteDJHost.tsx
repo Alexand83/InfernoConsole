@@ -268,35 +268,18 @@ const RemoteDJHost: React.FC = () => {
               console.error(`🎤 [RemoteDJHost] ❌ Messaggio errore: ${specificDeviceError.message}`)
               console.error(`🎤 [RemoteDJHost] ❌ Constraint che ha fallito:`, specificDeviceError.constraint)
               console.warn(`🎤 [RemoteDJHost] ⚠️ Dispositivo specifico non disponibile, fallback a default`)
-              
-              try {
-                // Fallback 1: Prova con default senza constraints specifici
-                hostMicStreamRef.current = await navigator.mediaDevices.getUserMedia({ 
-                  audio: {
-                    echoCancellation: currentSettings.microphone?.echoCancellation ?? true,
-                    noiseSuppression: currentSettings.microphone?.noiseSuppression ?? true,
-                    autoGainControl: currentSettings.microphone?.autoGainControl ?? true,
-                    sampleRate: 44100,
-                    channelCount: 1
-                  } 
-                })
-                actualDeviceUsed = 'default (fallback)'
-                console.log(`🎤 [RemoteDJHost] ✅ Fallback a dispositivo default completato`)
-              } catch (defaultError) {
-                console.error(`🎤 [RemoteDJHost] ❌ ERRORE DISPOSITIVO DEFAULT:`, defaultError)
-                console.warn(`🎤 [RemoteDJHost] ⚠️ Default fallback fallito, provo con constraints minimi`)
-                
-                // Fallback 2: Prova con constraints minimi per macOS
-                hostMicStreamRef.current = await navigator.mediaDevices.getUserMedia({ 
-                  audio: {
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false
-                  } 
-                })
-                actualDeviceUsed = 'minimal constraints (fallback)'
-                console.log(`🎤 [RemoteDJHost] ✅ Fallback a constraints minimi completato`)
-              }
+              // Fallback to default device
+              hostMicStreamRef.current = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                  echoCancellation: currentSettings.microphone?.echoCancellation ?? true,
+                  noiseSuppression: currentSettings.microphone?.noiseSuppression ?? true,
+                  autoGainControl: currentSettings.microphone?.autoGainControl ?? true,
+                  sampleRate: 44100,
+                  channelCount: 1
+                } 
+              })
+              actualDeviceUsed = 'default (fallback)'
+              console.log(`🎤 [RemoteDJHost] ✅ Fallback a dispositivo default completato`)
             }
           } else {
             console.log(`🎤 [RemoteDJHost] Utilizzo dispositivo default`)
@@ -703,46 +686,41 @@ const RemoteDJHost: React.FC = () => {
           ;(window as any).__lastAudioLevel__ = maxAudioLevel
         }
 
-        // ✅ FIX: Soglie unificate e logica semplificata per ducking
-        const activationThreshold = 20 // 20% per attivazione (più sensibile)
-        const deactivationThreshold = 8  // 8% per disattivazione (più responsiva)
-        
-        // Controlla i flag globali per i microfoni mutati
+        // ✅ CRITICAL FIX: Controlla se i microfoni sono mutati prima di attivare il ducking
         const isMicMuted = (window as any).__isMicMuted__ || false
         const isHostMicMuted = (window as any).__isHostMicMuted__ || false
-        const allMicsMuted = isMicMuted && isHostMicMuted
         
-        // ✅ FIX: Logica unificata per attivazione/disattivazione
-        const shouldActivate = maxAudioLevel > activationThreshold && !allMicsMuted
-        const shouldDeactivate = maxAudioLevel < deactivationThreshold || allMicsMuted
+        // Soglia per attivare il ducking
+        const threshold = 25 // 25% di livello audio
+        const shouldDuck = maxAudioLevel > threshold && !(isMicMuted && isHostMicMuted)
+
+        // Attiva ducking se necessario e se i microfoni non sono entrambi mutati
+        if (shouldDuck && !isAutoDuckingActive) {
+          setIsAutoDuckingActive(true)
+          setActiveSpeaker(activeSpeaker)
+          applyAutoDucking(true)
+          console.log(`🎤 [AutoDucking] Attivato da ${activeSpeaker} - livello audio: ${maxAudioLevel.toFixed(1)}%`)
+        }
         
-        // ✅ FIX: Meccanismo di sicurezza - forza disattivazione se necessario
-        if (allMicsMuted && isAutoDuckingActive) {
-          // Forza disattivazione immediata se tutti i microfoni sono mutati
+        // Disattiva ducking se il livello audio è troppo basso
+        if (isAutoDuckingActive && maxAudioLevel < 5) {
           setIsAutoDuckingActive(false)
           setActiveSpeaker('')
           applyAutoDucking(false)
-          console.log(`🎤 [AutoDucking] 🚫 FORZATO DISATTIVAZIONE - tutti i microfoni sono mutati`)
-        } else {
-          // Attiva ducking se necessario
-          if (shouldActivate && !isAutoDuckingActive) {
-            setIsAutoDuckingActive(true)
-            setActiveSpeaker(activeSpeaker)
-            applyAutoDucking(true)
-            console.log(`🎤 [AutoDucking] ✅ ATTIVATO da ${activeSpeaker} - livello: ${maxAudioLevel.toFixed(1)}%`)
-          }
-          
-          // Disattiva ducking se necessario
-          if (shouldDeactivate && isAutoDuckingActive) {
+          console.log(`🎤 [AutoDucking] Disattivato - livello audio troppo basso: ${maxAudioLevel.toFixed(1)}%`)
+        }
+
+
+        // ✅ CRITICAL FIX: Se tutti i microfoni sono mutati tramite flag, disattiva immediatamente il ducking
+        if (isMicMuted && isHostMicMuted) {
+          if (isAutoDuckingActive) {
             setIsAutoDuckingActive(false)
             setActiveSpeaker('')
             applyAutoDucking(false)
-            if (allMicsMuted) {
-              console.log(`🎤 [AutoDucking] ❌ DISATTIVATO - tutti i microfoni sono mutati`)
-            } else {
-              console.log(`🎤 [AutoDucking] ❌ DISATTIVATO - livello audio basso: ${maxAudioLevel.toFixed(1)}%`)
-            }
+            console.log(`🎤 [AutoDucking] 🚫 Disattivato immediatamente - tutti i microfoni sono mutati`)
           }
+          // ✅ CRITICAL FIX: Forza il livello audio a 0 quando i microfoni sono mutati
+          maxAudioLevel = 0
         }
 
         hostAnimationFrameRef.current = requestAnimationFrame(monitor)
@@ -756,31 +734,24 @@ const RemoteDJHost: React.FC = () => {
     }
   }
 
-  // ✅ FIX: Funzione per applicare/rimuovere il ducking automatico
+  // Funzione per applicare/rimuovere il ducking automatico
   const applyAutoDucking = (active: boolean) => {
-    try {
-      // ✅ FIX: Log solo quando cambia stato per evitare spam
-      const lastAutoDuckingState = (window as any).__lastAutoDuckingState__
-      if (lastAutoDuckingState !== active) {
-        if (active) {
-          console.log(`🎤 [AutoDucking] ✅ APPLICATO - Ducking: ${settings?.microphone?.duckingPercent ?? 75}%`)
-        } else {
-          console.log(`🎤 [AutoDucking] ❌ RIMOSSO`)
-        }
-        ;(window as any).__lastAutoDuckingState__ = active
-      }
-      
-      // ✅ FIX: Usa la funzione di ducking dell'AudioContext con timeout di sicurezza
-      if (setStreamDucking) {
-        // Aggiungi un piccolo delay per evitare race conditions
-        setTimeout(() => {
-          setStreamDucking(active)
-        }, 10)
+    // ✅ FIX: Log solo quando cambia stato per evitare spam
+    const lastAutoDuckingState = (window as any).__lastAutoDuckingState__
+    if (lastAutoDuckingState !== active) {
+      if (active) {
+        console.log(`🎤 [AutoDucking] Attivato - Ducking: ${settings?.microphone?.duckingPercent ?? 75}%`)
       } else {
-        console.warn('⚠️ [AutoDucking] Funzione setStreamDucking non disponibile')
+        console.log(`🎤 [AutoDucking] Disattivato`)
       }
-    } catch (error) {
-      console.error('❌ [AutoDucking] Errore durante applicazione ducking:', error)
+      ;(window as any).__lastAutoDuckingState__ = active
+    }
+    
+    // Usa la funzione di ducking dell'AudioContext
+    if (setStreamDucking) {
+      setStreamDucking(active)
+    } else {
+      console.warn('⚠️ [AutoDucking] Funzione setStreamDucking non disponibile')
     }
   }
 

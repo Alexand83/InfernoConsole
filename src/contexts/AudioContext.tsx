@@ -1018,8 +1018,15 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             ;(window as any).currentPTTMixerGain = mixerGain
             ;(window as any).currentPTTContext = mixContext
             
-            // ✅ CRITICAL FIX: Imposta il volume iniziale del microfono per lo streaming
-            if (pttActive) {
+            // ✅ CRITICAL FIX: Controlla se i microfoni sono mutati
+            const isMicMuted = (window as any).__isMicMuted__ || false
+            const isHostMicMuted = (window as any).__isHostMicMuted__ || false
+            
+            // ✅ CRITICAL FIX: Se entrambi i microfoni sono mutati, non inviare audio in streaming
+            if (isMicMuted && isHostMicMuted) {
+              micGain.gain.setValueAtTime(0.0, mixContext.currentTime) // Microfono completamente silenziato
+              console.log('🎤 [MIC] 🚫 Microfono silenziato per streaming - entrambi i microfoni sono mutati')
+            } else if (pttActive) {
               micGain.gain.setValueAtTime(1.0, mixContext.currentTime) // Microfono al 100%
               console.log('🎤 [PTT] Microfono attivato al 100% per PTT e streaming')
             } else {
@@ -1052,10 +1059,20 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                   // Connetti al destination per lo streaming
                   remoteGain.connect(destinationStream)
                   
-                  // Imposta il volume del DJ remoto
-                  remoteGain.gain.setValueAtTime(remoteVolume, mixContext.currentTime)
+                  // ✅ CRITICAL FIX: Controlla se i microfoni sono mutati per i DJ remoti
+                  const isMicMuted = (window as any).__isMicMuted__ || false
+                  const isHostMicMuted = (window as any).__isHostMicMuted__ || false
                   
-                  console.log(`🎤 [REMOTE DJ] DJ ${clientId} connesso allo streaming con volume ${Math.round(remoteVolume * 100)}%`)
+                  // Se entrambi i microfoni sono mutati, silenzia anche i DJ remoti
+                  if (isMicMuted && isHostMicMuted) {
+                    remoteGain.gain.setValueAtTime(0.0, mixContext.currentTime)
+                    console.log(`🎤 [REMOTE DJ] 🚫 DJ ${clientId} silenziato per streaming - entrambi i microfoni sono mutati`)
+                  } else {
+                    // Imposta il volume del DJ remoto
+                    remoteGain.gain.setValueAtTime(remoteVolume, mixContext.currentTime)
+                    console.log(`🎤 [REMOTE DJ] DJ ${clientId} connesso allo streaming con volume ${Math.round(remoteVolume * 100)}%`)
+                  }
+                  
                   hasRealAudio = true
                 } catch (error) {
                   console.error(`❌ [REMOTE DJ] Errore connessione DJ ${clientId} allo streaming:`, error)
@@ -1950,7 +1967,6 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // ✅ FIX: Log deactivation solo quando cambia stato
         const lastDuckingState = (window as any).__lastDuckingState__
         if (lastDuckingState !== 'inactive') {
-          console.log(`🎤 [PTT UPDATE] ❌ DISATTIVAZIONE - Ripristino volumi originali`)
           ;(window as any).__lastDuckingState__ = 'inactive'
         }
         
@@ -1971,20 +1987,16 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // ✅ CRITICAL FIX: Ripristina il volume originale del LiveStream usando setLiveStreamVolume
         if (typeof (window as any).setLiveStreamVolume === 'function') {
           ;(window as any).setLiveStreamVolume(originalStreamVolume)
-          if (lastDuckingState !== 'inactive') {
-            console.log(`🎤 [PTT UPDATE] LiveStream ripristinato al volume originale: ${Math.round(originalStreamVolume * 100)}%`)
-          }
-        } else {
+          console.log(`🎤 [PTT UPDATE] LiveStream ripristinato al volume originale: ${Math.round(originalStreamVolume * 100)}%`)
+          } else {
           console.warn('⚠️ [PTT] Funzione setLiveStreamVolume non disponibile')
         }
         
         // ✅ CRITICAL FIX: Ripristina ANCHE il mixer WebAudio al volume originale
         if (mixerGain && mixerGain.gain) {
           mixerGain.gain.setValueAtTime(originalStreamVolume, context.currentTime)
-          if (lastDuckingState !== 'inactive') {
-            console.log(`🎤 [PTT UPDATE] Mixer WebAudio ripristinato a ${Math.round(originalStreamVolume * 100)}%`)
-          }
-        } else {
+          console.log(`🎤 [PTT UPDATE] Mixer WebAudio ripristinato a ${Math.round(originalStreamVolume * 100)}%`)
+          } else {
           console.warn('⚠️ [PTT] Mixer WebAudio non disponibile per ripristino')
         }
         
@@ -2509,38 +2521,32 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // ✅ FIX: Funzione per il ducking dello streaming
   const setStreamDucking = useCallback((active: boolean) => {
-    try {
-      // ✅ FIX: Log solo quando cambia stato per evitare spam
-      const lastStreamDuckingState = (window as any).__lastStreamDuckingState__
-      if (lastStreamDuckingState !== active) {
-        if (active) {
-          console.log(`🎤 [STREAMING] ✅ Ducking ATTIVATO - ${settings?.microphone?.duckingPercent ?? 75}%`)
-        } else {
-          console.log(`🎤 [STREAMING] ❌ Ducking DISATTIVATO`)
-        }
-        ;(window as any).__lastStreamDuckingState__ = active
-      }
-      
-      // ✅ CRITICAL FIX: Aggiorna i volumi PTT dinamicamente
-      if (typeof (window as any).updatePTTVolumesOnly === 'function') {
-        // ✅ CRITICAL FIX: Imposta il livello di ducking dalle impostazioni
-        const duckingPercent = settings?.microphone?.duckingPercent ?? 75
-        const pttDuckingLevel = duckingPercent / 100 // Converte da percentuale a decimale
-        ;(window as any).__pttDuckingLevel__ = pttDuckingLevel
-        
-        // ✅ CRITICAL FIX: Aggiorna i volumi PTT con timeout di sicurezza
-        setTimeout(() => {
-          try {
-            ;(window as any).updatePTTVolumesOnly(active)
-          } catch (error) {
-            console.error('❌ [PTT] Errore aggiornamento volumi PTT:', error)
-          }
-        }, 5) // Piccolo delay per evitare race conditions
+    // ✅ FIX: Log solo quando cambia stato per evitare spam
+    const lastStreamDuckingState = (window as any).__lastStreamDuckingState__
+    if (lastStreamDuckingState !== active) {
+      if (active) {
+        console.log(`🎤 [STREAMING] Ducking attivato - ${settings?.microphone?.duckingPercent ?? 75}%`)
       } else {
-        console.warn('⚠️ [PTT] Funzione updatePTTVolumesOnly non disponibile')
+        console.log(`🎤 [STREAMING] Ducking disattivato`)
       }
-    } catch (error) {
-      console.error('❌ [STREAMING] Errore durante setStreamDucking:', error)
+      ;(window as any).__lastStreamDuckingState__ = active
+    }
+    
+    // ✅ CRITICAL FIX: Aggiorna i volumi PTT dinamicamente
+    if (typeof (window as any).updatePTTVolumesOnly === 'function') {
+      // ✅ CRITICAL FIX: Imposta il livello di ducking dalle impostazioni
+      const duckingPercent = settings?.microphone?.duckingPercent ?? 75
+      const pttDuckingLevel = duckingPercent / 100 // Converte da percentuale a decimale
+      ;(window as any).__pttDuckingLevel__ = pttDuckingLevel
+      
+      // ✅ CRITICAL FIX: Aggiorna i volumi PTT
+      try {
+        ;(window as any).updatePTTVolumesOnly(active)
+      } catch (error) {
+        console.error('❌ [PTT] Errore aggiornamento volumi PTT:', error)
+      }
+    } else {
+      console.warn('⚠️ [PTT] Funzione updatePTTVolumesOnly non disponibile')
     }
   }, [settings?.microphone?.duckingPercent])
 

@@ -45,32 +45,10 @@ process.on('unhandledRejection', (reason, promise) => {
 let ffmpegPathResolved = null
 try {
   // Prefer packaged ffmpeg when available
+  // Replace app.asar path to the unpacked folder to allow executing the binary
   const ff = require('@ffmpeg-installer/ffmpeg')
-  if (ff && ff.path) {
-    if (process.platform === 'win32') {
-      // Windows: Replace app.asar path to the unpacked folder
-      ffmpegPathResolved = ff.path.replace('app.asar', 'app.asar.unpacked')
-    } else if (process.platform === 'darwin') {
-      // macOS: Use the original FFmpeg path from @ffmpeg-installer/ffmpeg
-      ffmpegPathResolved = ff.path
-      console.log('🔍 [FFMPEG] macOS FFmpeg path:', ffmpegPathResolved)
-      
-      // Make sure the binary is executable
-      try {
-        if (fs.existsSync(ffmpegPathResolved)) {
-          fs.chmodSync(ffmpegPathResolved, '755')
-          console.log('🔍 [FFMPEG] Executable permissions set successfully')
-        }
-      } catch (e) {
-        console.warn('⚠️ [FFMPEG] Could not set executable permissions:', e.message)
-      }
-    } else {
-      // Linux: Use the original path
-      ffmpegPathResolved = ff.path
-    }
-  }
-} catch (e) {
-  console.warn('⚠️ [FFMPEG] Could not resolve FFmpeg path:', e.message)
+  ffmpegPathResolved = ff && ff.path ? ff.path.replace('app.asar', 'app.asar.unpacked') : null
+} catch (_) {
   ffmpegPathResolved = null
 }
 
@@ -275,12 +253,7 @@ function buildFfmpegArgs(opts) {
     host: host,
     port: port,
     username: username,
-    password: password ? `[${password.length} chars]` : '[empty]',
-    useSSL: useSSL,
-    bitrateKbps: bitrateKbps,
-    format: format,
-    channels: channels,
-    sampleRate: sampleRate
+    password: password ? `[${password.length} chars]` : '[empty]'
   })
   
   const scheme = useSSL ? 'icecast+ssl' : 'icecast'
@@ -288,11 +261,6 @@ function buildFfmpegArgs(opts) {
   
   // ✅ DEBUG: Log final URL (without password)
   console.log('🔍 [FFMPEG] Final Icecast URL:', outUrl.replace(/:([^@]+)@/, ':[HIDDEN]@'))
-  
-  // ✅ DEBUG: Test connection to Icecast server
-  console.log('🔍 [FFMPEG] Testing Icecast server connection...')
-  const testUrl = `http://${host}:${port}${mountWithExt}`
-  console.log('🔍 [FFMPEG] Test URL:', testUrl)
 
   // ✅ CORREZIONE: Input WebM da MediaRecorder invece di raw audio
   const args = [
@@ -412,13 +380,6 @@ function buildFfmpegArgs(opts) {
   args.push('-legacy_icecast', '1')
   args.push('-f', containerFmt)
   args.push(outUrl)
-  
-  // ✅ DEBUG: Log final FFmpeg arguments
-  console.log('🔍 [FFMPEG] Final FFmpeg arguments:', args)
-  console.log('🔍 [FFMPEG] Arguments count:', args.length)
-  console.log('🔍 [FFMPEG] Container format:', containerFmt)
-  console.log('🔍 [FFMPEG] Content type:', contentType)
-  
   return args
 }
 
@@ -500,11 +461,6 @@ ipcMain.handle('icecast-start', async (_evt, options) => {
         if (errorMsg.includes('400') || errorMsg.includes('Bad Request')) {
           console.error('❌ [FFMPEG] 400 Bad Request detected - possible mount point or authentication issue')
           console.error('❌ [FFMPEG] Check mount point format and server configuration')
-          console.error('❌ [FFMPEG] Current mount point:', lastStartOptions?.mount || '/stream')
-          console.error('❌ [FFMPEG] Server host:', lastStartOptions?.host)
-          console.error('❌ [FFMPEG] Server port:', lastStartOptions?.port)
-          console.error('❌ [FFMPEG] Username:', lastStartOptions?.username)
-          console.error('❌ [FFMPEG] Password length:', lastStartOptions?.password?.length || 0)
           criticalError = {
             type: 'bad_request',
             message: '400 Bad Request - Check mount point or authentication',
@@ -739,26 +695,7 @@ ipcMain.handle('start-streaming', async (_evt, config) => {
     const ffmpegPath = process.env.FFMPEG_PATH || ffmpegPathResolved || 'ffmpeg'
     const args = buildFfmpegArgs(icecastOptions)
     
-    // ✅ DEBUG: Log dettagliato per macOS
-    console.log('🔍 [MAIN] Platform:', process.platform, 'Arch:', process.arch)
-    console.log('🔍 [MAIN] FFmpeg path resolved:', ffmpegPathResolved)
-    console.log('🔍 [MAIN] FFmpeg path used:', ffmpegPath)
     console.log('🔍 [MAIN] Comando FFmpeg completo:', `${ffmpegPath} ${args.join(' ')}`)
-    
-    // ✅ DEBUG: Verifica esistenza file su macOS
-    if (process.platform === 'darwin') {
-      try {
-        const exists = fs.existsSync(ffmpegPath)
-        const stats = exists ? fs.statSync(ffmpegPath) : null
-        console.log('🔍 [MAIN] FFmpeg file exists:', exists)
-        if (stats) {
-          console.log('🔍 [MAIN] FFmpeg file size:', stats.size, 'bytes')
-          console.log('🔍 [MAIN] FFmpeg file permissions:', stats.mode.toString(8))
-        }
-      } catch (e) {
-        console.warn('⚠️ [MAIN] Could not check FFmpeg file:', e.message)
-      }
-    }
     
     writeLog('info', `Starting ffmpeg: ${ffmpegPath} ${args.join(' ')}`)
     ffmpegProc = spawn(ffmpegPath, args, { stdio: ['pipe', 'pipe', 'pipe'] })
@@ -768,18 +705,12 @@ ipcMain.handle('start-streaming', async (_evt, config) => {
     ffmpegProc.on('error', (err) => {
       writeLog('error', `ffmpeg spawn error: ${err.message}`)
       console.log('🔍 [MAIN] Errore spawn FFmpeg:', err.message)
-      console.error('❌ [FFMPEG] Error code:', err.code)
-      console.error('❌ [FFMPEG] Error path:', err.path)
-      console.error('❌ [FFMPEG] Error syscall:', err.syscall)
       
       // ✅ FIX: Notifica al renderer che FFmpeg ha fallito
       if (BrowserWindow.getAllWindows().length > 0) {
         BrowserWindow.getAllWindows()[0].webContents.send('ffmpeg-error', {
           type: 'spawn_error',
-          message: err.message,
-          code: err.code,
-          path: err.path,
-          syscall: err.syscall
+          message: err.message
         })
       }
       
