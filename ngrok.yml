@@ -1,0 +1,11 @@
+version: "2"
+authtoken: 2r3Zt8S3W8HerpCoPBUzYs7WLRB_84bBJRNmFn4JRontYVZ4w
+
+tunnels:
+  djremoto:
+    addr: 8081
+    proto: http
+    region: eu
+    bind_tls: true
+    inspect: false
+    metadata: "DJ Console Remote WebSocket Tunnel"

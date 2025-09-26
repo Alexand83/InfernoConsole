@@ -42,6 +42,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
             sendHostMessage: (message) => ipcRenderer.invoke('send-host-chat-message', message),
             sendWebRTCAnswer: (data) => ipcRenderer.invoke('send-webrtc-answer', data),
             sendICECandidate: (data) => ipcRenderer.invoke('send-ice-candidate', data),
+    // 🌐 NGROK TUNNEL API
+    startTunnel: (port) => ipcRenderer.invoke('start-ngrok-tunnel', port),
+    stopTunnel: () => ipcRenderer.invoke('stop-ngrok-tunnel'),
+    getTunnelUrl: () => ipcRenderer.invoke('get-tunnel-url'),
     // Event listeners
     onClientAuthenticated: (callback) => ipcRenderer.on('webrtc-client-authenticated', callback),
     onClientDisconnected: (callback) => ipcRenderer.on('webrtc-client-disconnected', callback),

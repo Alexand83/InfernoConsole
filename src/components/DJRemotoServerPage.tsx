@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
 import DJChat from './DJChat'
+import ConnectionCode from './ConnectionCode'
 import { useAudio } from '../contexts/AudioContext'
 import { useSettings } from '../contexts/SettingsContext'
 import { useDJRemotoServer } from '../contexts/DJRemotoServerContext'
+import { getDJColor, releaseDJColor } from '../utils/djColors'
 
 interface ConnectedDJ {
   id: string
@@ -12,6 +14,7 @@ interface ConnectedDJ {
   audioLevel: number
   isMuted: boolean
   volume: number
+  color?: string // ✅ NEW: Colore del DJ
   isPTTDJActive?: boolean
   isPTTLiveActive?: boolean
 }
@@ -74,6 +77,7 @@ const DJRemotoServerPage: React.FC = () => {
   const [serverInfo, setServerInfo] = useState<any>(null)
   const [connectedDJs, setConnectedDJs] = useState<ConnectedDJ[]>([])
   const [isStarting, setIsStarting] = useState(false)
+  const [tunnelUrl, setTunnelUrl] = useState<string | null>(null)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isPTTDJActive, setIsPTTDJActive] = useState(false)
   const [isPTTLiveActive, setIsPTTLiveActive] = useState(false)
@@ -1105,6 +1109,12 @@ const DJRemotoServerPage: React.FC = () => {
   }
 
   const disconnectDJ = (clientId: string) => {
+    // ✅ NEW: Trova il DJ per liberare il colore
+    const dj = connectedDJs.find(d => d.id === clientId)
+    if (dj) {
+      releaseDJColor(dj.djName)
+    }
+
     // Chiudi PeerConnection
     const peerConnection = peerConnectionsRef.current.get(clientId)
     if (peerConnection) {
@@ -1158,12 +1168,6 @@ const DJRemotoServerPage: React.FC = () => {
     console.log(`🔌 [RemoteDJHost] DJ ${clientId} disconnesso`)
   }
 
-  const copySessionCode = () => {
-    if (serverInfo?.sessionCode) {
-      navigator.clipboard.writeText(serverInfo.sessionCode)
-      alert('Codice sessione copiato!')
-    }
-  }
 
   const addChatMessage = (djName: string, message: string, isSystem: boolean = false) => {
     const newMessage: ChatMessage = {
@@ -1179,13 +1183,47 @@ const DJRemotoServerPage: React.FC = () => {
   const handleSendChatMessage = (message: string) => {
     if (!message.trim()) return
 
-    // Aggiungi il messaggio alla chat locale
-    addChatMessage('Host', message)
+    // ✅ FIX: NON aggiungere il messaggio localmente - verrà aggiunto dal WebSocket
+    // addChatMessage('Host', message) // RIMOSSO - causa duplicazione
 
     // Invia il messaggio a tutti i DJ connessi
     if ((window as any).electronAPI?.webrtcServerAPI) {
       ;(window as any).electronAPI.webrtcServerAPI.sendHostMessage(message)
       console.log('💬 [RemoteDJHost] Messaggio chat inviato:', message)
+    }
+  }
+
+  // 🌐 TUNNEL NGROK FUNCTIONS
+  const startNgrokTunnel = async (): Promise<string | null> => {
+    try {
+      console.log('🚀 [NGROK] Avvio tunnel per porta 8081...')
+      
+      // Avvia tunnel tramite API Electron
+      const result = await (window as any).electronAPI.webrtcServerAPI.startTunnel(8081)
+      
+      if (result.success && result.url) {
+        console.log(`✅ [NGROK] Tunnel attivo: ${result.url}`)
+        return result.url
+      } else {
+        console.error('❌ [NGROK] Errore avvio tunnel:', result.error)
+        return null
+      }
+    } catch (error) {
+      console.error('❌ [NGROK] Errore avvio tunnel:', error)
+      return null
+    }
+  }
+
+  const stopNgrokTunnel = async () => {
+    try {
+      console.log('🛑 [NGROK] Fermata tunnel...')
+      const result = await (window as any).electronAPI.webrtcServerAPI.stopTunnel()
+      if (result.success) {
+        setTunnelUrl(null)
+        console.log('✅ [NGROK] Tunnel fermato')
+      }
+    } catch (error) {
+      console.error('❌ [NGROK] Errore fermata tunnel:', error)
     }
   }
 
@@ -1197,7 +1235,11 @@ const DJRemotoServerPage: React.FC = () => {
       return
     }
 
-    try {
+        try {
+          // 🌐 FERMA TUNNEL NGROK
+          if (tunnelUrl) {
+            await stopNgrokTunnel()
+          }
       // 1. Disattiva PTT se attivo
       if (isPTTDJActive) {
         console.log('🔄 [RemoteDJHost] Disattivazione PTT DJ durante fermata server')
@@ -1297,6 +1339,10 @@ const DJRemotoServerPage: React.FC = () => {
       console.log('🔄 [RemoteDJHost] Fermata server esistente prima di riavviare')
       try {
         await (window as any).electronAPI.webrtcServerAPI.stopServer()
+        // Ferma anche tunnel se attivo
+        if (tunnelUrl) {
+          await stopNgrokTunnel()
+        }
         // Ridotto il delay per velocizzare l'avvio
         await new Promise(resolve => setTimeout(resolve, 200))
         console.log('✅ [RemoteDJHost] Server esistente fermato')
@@ -1307,7 +1353,17 @@ const DJRemotoServerPage: React.FC = () => {
 
     setIsStarting(true)
 
-    try {
+        try {
+          // 🌐 AVVIA TUNNEL NGROK (sempre Internet)
+          console.log('🌐 [RemoteDJHost] Avvio tunnel ngrok...')
+          const url = await startNgrokTunnel()
+          if (url) {
+            setTunnelUrl(url)
+            console.log(`✅ [RemoteDJHost] Tunnel pubblico attivo: ${url}`)
+          } else {
+            throw new Error('Impossibile avviare tunnel ngrok')
+          }
+
       const result = await (window as any).electronAPI.webrtcServerAPI.startServer({
         port: 8080,
         maxConnections: 5
@@ -1340,118 +1396,6 @@ const DJRemotoServerPage: React.FC = () => {
     }
   }
 
-  // ✅ SIMPLE: Funzione per aggiornare SOLO i track audio con offer gestito
-  const updateExistingWebRTCConnections_SIMPLE = async (websocket: WebSocket | null = null) => {
-    if (!hostMicStreamRef.current) {
-      console.warn('⚠️ [DJRemotoServerPage] Nessun stream microfono disponibile')
-      return
-    }
-
-    const connections = Array.from(peerConnectionsRef.current.entries())
-    console.log(`🔄 [DJRemotoServerPage] Aggiornamento SEMPLICE di ${connections.length} connessioni (solo track, senza rinegoziazione)`)
-
-    const newMicTrack = hostMicStreamRef.current.getAudioTracks()[0]
-    if (!newMicTrack) {
-      console.error('❌ [DJRemotoServerPage] Nessun track audio nel nuovo stream')
-      return
-    }
-
-    for (const [clientId, peerConnection] of connections) {
-      if (clientId.includes('_dataChannel')) continue
-
-      try {
-        console.log(`🔄 [DJRemotoServerPage] Aggiornamento semplice per ${clientId}`)
-
-        // Rimuovi il vecchio track audio
-        const senders = peerConnection.getSenders()
-        for (const sender of senders) {
-          if (sender.track && sender.track.kind === 'audio') {
-            console.log(`🗑️ [DJRemotoServerPage] Rimozione track esistente: ${sender.track.id}`)
-            await peerConnection.removeTrack(sender)
-          }
-        }
-
-        // Aggiungi il nuovo track (mutato di default)
-        newMicTrack.enabled = false // PTT mode
-        peerConnection.addTrack(newMicTrack, hostMicStreamRef.current)
-        console.log(`➕ [DJRemotoServerPage] Aggiunto nuovo track: ${newMicTrack.id}`)
-
-        // ✅ CRITICAL FIX: Controlla signalingState prima di createOffer
-        console.log(`🔍 [DJRemotoServerPage] Stato signaling per ${clientId}: ${peerConnection.signalingState}`)
-        
-        if (peerConnection.signalingState === 'stable') {
-          console.log(`🔄 [DJRemotoServerPage] Creazione offer per rinegoziazione ${clientId}`)
-          const offer = await peerConnection.createOffer()
-          await peerConnection.setLocalDescription(offer)
-          
-          // Invia l'offer al client via WebSocket
-          const ws = websocket || wsRef.current
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-              type: 'webrtc-offer',
-              offer: offer,
-              clientId: clientId
-            }))
-            console.log(`📡 [DJRemotoServerPage] Offer inviata per rinegoziazione ${clientId}`)
-          }
-        } else {
-          console.warn(`⚠️ [DJRemotoServerPage] Attesa stato stabile per ${clientId} - stato attuale: ${peerConnection.signalingState}`)
-          
-          // Aspetta che diventi stable
-          const waitForStable = () => {
-            return new Promise<void>((resolve) => {
-              if (peerConnection.signalingState === 'stable') {
-                resolve()
-                return
-              }
-              
-              const handler = () => {
-                if (peerConnection.signalingState === 'stable') {
-                  peerConnection.removeEventListener('signalingstatechange', handler)
-                  resolve()
-                }
-              }
-              
-              peerConnection.addEventListener('signalingstatechange', handler)
-              
-              // Timeout dopo 5 secondi
-              setTimeout(() => {
-                peerConnection.removeEventListener('signalingstatechange', handler)
-                console.warn(`⏰ [DJRemotoServerPage] Timeout attesa stable state per ${clientId}`)
-                resolve()
-              }, 5000)
-            })
-          }
-          
-          await waitForStable()
-          
-          // Ora riprova
-          if (peerConnection.signalingState === 'stable') {
-            console.log(`🔄 [DJRemotoServerPage] Stato ora stabile - creazione offer per ${clientId}`)
-            const offer = await peerConnection.createOffer()
-            await peerConnection.setLocalDescription(offer)
-            
-            const ws = websocket || wsRef.current
-            if (ws && ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({
-                type: 'webrtc-offer',
-                offer: offer,
-                clientId: clientId
-              }))
-              console.log(`📡 [DJRemotoServerPage] Offer ritardata inviata per ${clientId}`)
-            }
-          } else {
-            console.error(`❌ [DJRemotoServerPage] Stato ancora instabile per ${clientId}: ${peerConnection.signalingState}`)
-          }
-        }
-
-      } catch (error) {
-        console.error(`❌ [DJRemotoServerPage] Errore aggiornamento con offer ${clientId}:`, error)
-      }
-    }
-    
-    console.log('✅ [DJRemotoServerPage] Aggiornamento con offer completato - audio sincronizzato')
-  }
 
   // ✅ NEW: Funzione per aggiornare le connessioni WebRTC (SENZA doppia ricreazione)
   const updateExistingWebRTCConnections_PROPER = async () => {
@@ -1545,124 +1489,7 @@ const DJRemotoServerPage: React.FC = () => {
     console.log('✅ [DJRemotoServerPage] Connessioni WebRTC aggiornate - PTT mantiene latenza normale')
   }
 
-  // ✅ OLD: Funzione per disconnettere tutti i client per permettere riconnessione pulita (DEPRECATA)
-  const disconnectAllClientsForMicrophoneChange_OLD = async () => {
-    const connections = Array.from(peerConnectionsRef.current.entries())
-    console.log(`🔄 [DJRemotoServerPage] Disconnessione di ${connections.length} client per cambio microfono`)
 
-    for (const [clientId, connection] of connections) {
-      // Salta i DataChannel
-      if (clientId.includes('_dataChannel')) continue
-
-      try {
-        console.log(`🔌 [DJRemotoServerPage] Invio notifica cambio microfono a ${clientId}`)
-        
-        // ✅ CRITICAL FIX: Prima invia la notifica, poi disconnetti
-        const dataChannel = peerConnectionsRef.current.get(`${clientId}_dataChannel`) as unknown as RTCDataChannel
-        if (dataChannel && dataChannel.readyState === 'open') {
-          dataChannel.send(JSON.stringify({
-            type: 'hostMicrophoneChanged',
-            action: 'reconnect',
-            reason: 'Cambio microfono host - riconnessione necessaria',
-            timestamp: Date.now()
-          }))
-          console.log(`📡 [DJRemotoServerPage] Notifica cambio microfono inviata a ${clientId}`)
-          
-          // ✅ CRITICAL FIX: Aspetta un momento prima di chiudere per permettere al client di ricevere il messaggio
-          setTimeout(() => {
-            console.log(`🔌 [DJRemotoServerPage] Disconnessione client ${clientId} dopo notifica`)
-            connection.close()
-            console.log(`🔌 [DJRemotoServerPage] Connessione WebRTC chiusa per ${clientId}`)
-          }, 1000)
-        } else {
-          // Se non c'è DataChannel, disconnetti immediatamente
-          console.log(`🔌 [DJRemotoServerPage] Nessun DataChannel per ${clientId}, disconnessione immediata`)
-          connection.close()
-          console.log(`🔌 [DJRemotoServerPage] Connessione WebRTC chiusa per ${clientId}`)
-        }
-
-      } catch (error) {
-        console.error(`❌ [DJRemotoServerPage] Errore disconnessione ${clientId}:`, error)
-        // In caso di errore, disconnetti comunque
-        try {
-          connection.close()
-        } catch (e) {
-          console.error(`❌ [DJRemotoServerPage] Errore chiusura connessione ${clientId}:`, e)
-        }
-      }
-    }
-
-    // Pulisci tutte le connessioni dalla mappa
-    peerConnectionsRef.current.clear()
-    console.log('✅ [DJRemotoServerPage] Tutte le connessioni pulite per cambio microfono')
-  }
-
-  // ✅ OLD: Funzione per aggiornare tutte le connessioni WebRTC esistenti con il nuovo stream (DEPRECATA)
-  const updateExistingWebRTCConnections_OLD = async () => {
-    if (!hostMicStreamRef.current) {
-      console.warn('⚠️ [DJRemotoServerPage] Nessun stream microfono disponibile per aggiornare le connessioni')
-      return
-    }
-
-    const connections = Array.from(peerConnectionsRef.current.entries())
-    console.log(`🔄 [DJRemotoServerPage] Aggiornamento ${connections.length} connessioni WebRTC con nuovo stream microfono`)
-
-    for (const [clientId, peerConnection] of connections) {
-      // Salta i DataChannel (che hanno il suffisso "_dataChannel")
-      if (clientId.includes('_dataChannel')) continue
-
-      try {
-        console.log(`🔄 [DJRemotoServerPage] Aggiornamento connessione WebRTC per client: ${clientId}`)
-
-        // Rimuovi tutti i sender audio esistenti (microfono host)
-        const senders = peerConnection.getSenders()
-        for (const sender of senders) {
-          if (sender.track && sender.track.kind === 'audio') {
-            console.log(`🗑️ [DJRemotoServerPage] Rimozione track audio esistente: ${sender.track.id}`)
-            await peerConnection.removeTrack(sender)
-          }
-        }
-
-        // Aggiungi i nuovi track dal nuovo stream microfono
-        for (const track of hostMicStreamRef.current.getTracks()) {
-          console.log(`➕ [DJRemotoServerPage] Aggiunta nuovo track microfono: ${track.id} per client ${clientId}`)
-          
-          // Muta il track di default (PTT mode)
-          track.enabled = false
-          
-          peerConnection.addTrack(track, hostMicStreamRef.current)
-          console.log(`✅ [DJRemotoServerPage] Track ${track.id} aggiunto e mutato per client ${clientId}`)
-        }
-
-        // Crea e invia nuovo offer
-        console.log(`🔄 [DJRemotoServerPage] Creazione nuovo offer per client ${clientId}`)
-        const offer = await peerConnection.createOffer()
-        await peerConnection.setLocalDescription(offer)
-
-        // Notifica al client che deve rinegoziare la connessione per il nuovo stream
-        const clientSocketId = clientId.replace('client_', '').split('_')[1]
-        console.log(`🔄 [DJRemotoServerPage] Notifica rinegoziazione WebRTC a ${clientSocketId}`)
-        
-        // Invia comando per forzare rinegoziazione al client
-        const dataChannel = peerConnectionsRef.current.get(`${clientId}_dataChannel`) as unknown as RTCDataChannel
-        if (dataChannel && dataChannel.readyState === 'open') {
-          dataChannel.send(JSON.stringify({
-            type: 'microphoneChanged',
-            action: 'renegotiate',
-            timestamp: Date.now()
-          }))
-          console.log(`📡 [DJRemotoServerPage] Comando rinegoziazione inviato a ${clientId}`)
-        }
-        
-        console.log(`✅ [DJRemotoServerPage] Nuovo offer creato per ${clientId} - stream microfono aggiornato`)
-
-      } catch (error) {
-        console.error(`❌ [DJRemotoServerPage] Errore aggiornamento connessione WebRTC per ${clientId}:`, error)
-      }
-    }
-
-    console.log(`✅ [DJRemotoServerPage] Aggiornamento connessioni WebRTC completato`)
-  }
 
   // ✅ CRITICAL FIX: Funzione per creare il microfono host
   const createHostMicrophone = async () => {
@@ -1753,6 +1580,9 @@ const DJRemotoServerPage: React.FC = () => {
     // Event listener per client autenticato
     const onClientAuthenticated = (_event: any, client: any) => {
       console.log('✅ [RemoteDJHost] Client autenticato:', client)
+      // ✅ NEW: Assegna colore al DJ
+      const djColor = getDJColor(client.djName)
+      
       const newDJ: ConnectedDJ = {
         id: client.id,
         djName: client.djName,
@@ -1760,7 +1590,8 @@ const DJRemotoServerPage: React.FC = () => {
         connectedAt: new Date(),
         audioLevel: 0,
         volume: 0.5,
-        isMuted: false
+        isMuted: false,
+        color: djColor.color
       }
       // ✅ CRITICAL FIX: Use functional update to avoid stale closure
       updateConnectedDJs(prev => [...prev, newDJ])
@@ -1803,14 +1634,22 @@ const DJRemotoServerPage: React.FC = () => {
 
     // Event listener per messaggi chat
     const onChatMessage = (_event: any, data: any) => {
-      console.log('💬 [RemoteDJHost] Messaggio chat da:', data.djName)
+      console.log('💬 [RemoteDJHost] Messaggio chat ricevuto:', {
+        djName: data.djName,
+        message: data.message,
+        timestamp: data.timestamp
+      })
       addChatMessage(data.djName, data.message)
     }
 
     // Event listener per messaggi host
     const onHostChatMessage = (_event: any, data: any) => {
-      console.log('💬 [RemoteDJHost] Messaggio host ricevuto:', data.message)
-      addChatMessage('Host', data.message)
+      console.log('💬 [RemoteDJHost] Messaggio host ricevuto:', {
+        djName: data.djName,
+        message: data.message,
+        timestamp: data.timestamp
+      })
+      addChatMessage(data.djName, data.message)
     }
 
     // Event listener per ripristino server
@@ -2057,7 +1896,7 @@ const DJRemotoServerPage: React.FC = () => {
     <div className={`fixed bottom-4 right-4 bg-dj-primary border border-dj-accent rounded-lg shadow-2xl z-50 transition-all duration-300 ${
       isMinimized 
         ? 'w-12 h-12' 
-        : 'w-[500px] max-h-[600px] overflow-hidden'
+        : 'w-[700px] max-h-[700px] overflow-hidden'
     }`}>
       {isMinimized ? (
         // ✅ Minimized state - just icon
@@ -2155,27 +1994,26 @@ const DJRemotoServerPage: React.FC = () => {
 
       {/* Contenuto */}
       <div className="overflow-y-auto max-h-[500px] p-3">
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-white">Server Status</span>
-          </div>
+        {/* 🌐 MODALITÀ SERVER */}
+
+        <div className="flex justify-end items-center mb-4">
           <div className="flex space-x-2">
           {!isServerRunning ? (
             <button
               onClick={startServer}
               disabled={isStarting}
-              className="bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 text-white text-xs font-medium py-1.5 px-2 rounded transition-colors"
+              className="bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 text-white text-sm font-medium py-3 px-6 rounded transition-colors"
             >
-              {isStarting ? '🔄 Avvio...' : '🚀 Avvia'}
+              {isStarting ? '🌐 Avvio Internet...' : '🌐 Avvia Internet'}
             </button>
           ) : (
-            <div className="flex space-x-1">
+            <div className="flex space-x-2">
               {/* PTT DJ-to-DJ Button */}
               <button
                 onMouseDown={handlePTTDJPress}
                 onMouseUp={handlePTTDJRelease}
                 onMouseLeave={handlePTTDJRelease}
-                className={`flex-1 py-1.5 px-2 text-xs rounded font-medium transition-colors ${
+                className={`py-3 px-6 text-sm rounded font-medium transition-colors ${
                   isPTTDJActive ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
                 } text-white`}
               >
@@ -2187,7 +2025,7 @@ const DJRemotoServerPage: React.FC = () => {
                 onMouseDown={handlePTTLivePress}
                 onMouseUp={handlePTTLiveRelease}
                 onMouseLeave={handlePTTLiveRelease}
-                className={`flex-1 py-1.5 px-2 text-xs rounded font-medium transition-colors ${
+                className={`py-3 px-6 text-sm rounded font-medium transition-colors ${
                   isPTTLiveActive ? 'bg-orange-600 hover:bg-orange-700' : 'bg-red-600 hover:bg-red-700'
                 } text-white`}
               >
@@ -2196,7 +2034,7 @@ const DJRemotoServerPage: React.FC = () => {
               
               <button
                 onClick={stopServer}
-                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium py-1.5 px-2 rounded transition-colors"
+                className="bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium py-3 px-6 rounded transition-colors"
               >
                 🛑 Stop
               </button>
@@ -2205,34 +2043,15 @@ const DJRemotoServerPage: React.FC = () => {
         </div>
       </div>
 
+
+      {/* 🚀 CODICE CONNESSIONE */}
       {isServerRunning && serverInfo && (
-        <div className="mb-4 p-3 bg-dj-dark border border-dj-accent rounded-md">
-          <h3 className="text-sm font-semibold text-white mb-2">📡 Server Attivo</h3>
-          <div className="text-xs space-y-1">
-            <div className="flex justify-between">
-              <span className="text-dj-light">Porta:</span>
-              <span className="text-white">{serverInfo.port}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-dj-light">Max DJ:</span>
-              <span className="text-white">{serverInfo.maxConnections}</span>
-            </div>
-            <div>
-              <span className="text-dj-light">Codice:</span>
-              <div className="flex items-center space-x-1 mt-1">
-                <code className="bg-dj-primary px-1 py-0.5 rounded text-dj-accent font-mono text-xs">
-                  {serverInfo.sessionCode}
-                </code>
-                <button
-                  onClick={copySessionCode}
-                  className="text-dj-accent hover:text-white text-xs"
-                  title="Copia codice"
-                >
-                  📋
-                </button>
-              </div>
-            </div>
-          </div>
+        <div className="mb-4">
+          <ConnectionCode
+            serverUrl={tunnelUrl || `${serverInfo.host}:${serverInfo.port}`}
+            sessionCode={serverInfo.sessionCode}
+            serverMode="internet"
+          />
         </div>
       )}
 
@@ -2319,9 +2138,8 @@ const DJRemotoServerPage: React.FC = () => {
           <h4 className="text-blue-400 font-semibold mb-1 text-xs">📋 Istruzioni</h4>
           <div className="text-xs text-blue-300 space-y-1">
             <div>1. Apri client DJ Remoto</div>
-            <div>2. Codice: <code className="bg-blue-800 px-1 rounded">{serverInfo?.sessionCode}</code></div>
-            <div>3. Inserisci IP Host</div>
-            <div>4. Clicca "Connetti"</div>
+            <div>2. Usa il codice di connessione sopra</div>
+            <div>3. Clicca "Connetti"</div>
           </div>
         </div>
       )}

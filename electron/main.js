@@ -1115,7 +1115,7 @@ ipcMain.handle('start-webrtc-server', async (event, options = {}) => {
             })
             
             webrtcServer.on('chatMessage', (data) => {
-              console.log(`💬 [MAIN] Chat message da ${data.djName}`)
+              console.log(`💬 [MAIN] Chat message da client ${data.djName}`)
               if (mainWindow) {
                 mainWindow.webContents.send('webrtc-chat-message', data)
               }
@@ -1123,7 +1123,11 @@ ipcMain.handle('start-webrtc-server', async (event, options = {}) => {
             
             // Gestione messaggi di chat per l'host
             webrtcServer.on('hostChatMessage', (data) => {
-              console.log(`💬 [MAIN] Host chat message:`, data)
+              console.log(`💬 [MAIN] Host chat message ricevuto:`, {
+                djName: data.djName,
+                message: data.message,
+                timestamp: data.timestamp
+              })
               if (mainWindow) {
                 mainWindow.webContents.send('webrtc-host-chat-message', data)
               }
@@ -1250,6 +1254,108 @@ ipcMain.handle('get-webrtc-clients', async () => {
             console.error('❌ [MAIN] Errore invio ICE candidate:', error)
             return { success: false, error: error.message }
           }
+        })
+
+        // 🌐 NGROK TUNNEL HANDLERS
+        let ngrokProcess = null
+        let tunnelUrl = null
+
+        ipcMain.handle('start-ngrok-tunnel', async (event, port = 8081) => {
+          try {
+            console.log(`🚀 [NGROK] Avvio tunnel per porta ${port}...`)
+            
+            // Ferma processo esistente se attivo
+            if (ngrokProcess) {
+              ngrokProcess.kill()
+              ngrokProcess = null
+            }
+
+            // Avvia ngrok con percorso completo Windows
+            const ngrokPath = process.platform === 'win32' 
+              ? `${process.env.USERPROFILE}\\AppData\\Roaming\\npm\\node_modules\\ngrok\\bin\\ngrok.exe`
+              : 'ngrok'
+              
+            ngrokProcess = spawn(ngrokPath, ['http', port.toString(), '--region=eu'], {
+              stdio: 'pipe'
+            })
+
+            return new Promise((resolve, reject) => {
+              let resolved = false
+              
+              // Timeout dopo 10 secondi
+              const timeout = setTimeout(() => {
+                if (!resolved) {
+                  resolved = true
+                  reject(new Error('Timeout avvio tunnel'))
+                }
+              }, 10000)
+
+              // Aspetta che ngrok sia pronto
+              setTimeout(async () => {
+                if (resolved) return
+                
+                try {
+                  // Ottieni URL tunnel tramite API ngrok locale
+                  const response = await new Promise((resolve, reject) => {
+                    const req = http.get('http://localhost:4040/api/tunnels', (res) => {
+                      let data = ''
+                      res.on('data', chunk => data += chunk)
+                      res.on('end', () => resolve({ json: () => JSON.parse(data) }))
+                    })
+                    req.on('error', reject)
+                  })
+                  const data = await response.json()
+                  
+                  if (data.tunnels && data.tunnels.length > 0) {
+                    tunnelUrl = data.tunnels[0].public_url.replace('https://', '').replace('http://', '')
+                    console.log(`✅ [NGROK] Tunnel attivo: ${tunnelUrl}`)
+                    
+                    if (!resolved) {
+                      resolved = true
+                      clearTimeout(timeout)
+                      resolve({ success: true, url: tunnelUrl })
+                    }
+                  } else {
+                    if (!resolved) {
+                      resolved = true
+                      clearTimeout(timeout)
+                      reject(new Error('Nessun tunnel trovato'))
+                    }
+                  }
+                } catch (error) {
+                  if (!resolved) {
+                    resolved = true
+                    clearTimeout(timeout)
+                    reject(error)
+                  }
+                }
+              }, 3000)
+            })
+            
+          } catch (error) {
+            console.error('❌ [NGROK] Errore avvio tunnel:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('stop-ngrok-tunnel', async () => {
+          try {
+            if (ngrokProcess) {
+              ngrokProcess.kill()
+              ngrokProcess = null
+              tunnelUrl = null
+              console.log('✅ [NGROK] Tunnel fermato')
+              return { success: true }
+            }
+            return { success: true, message: 'Nessun tunnel attivo' }
+          } catch (error) {
+            console.error('❌ [NGROK] Errore fermata tunnel:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('get-tunnel-url', async () => {
+          return { success: true, url: tunnelUrl }
         })
 
 // Esporta la funzione per l'updater

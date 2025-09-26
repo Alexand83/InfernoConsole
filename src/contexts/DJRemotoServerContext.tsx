@@ -38,6 +38,8 @@ export const DJRemotoServerProvider: React.FC<DJRemotoServerProviderProps> = ({ 
 
   useEffect(() => {
     sessionStorage.setItem('djRemotoServer_minimized', isMinimized.toString())
+    // ✅ NEW: Set global flag for client positioning
+    ;(window as any).__djRemotoServerMinimized__ = isMinimized
   }, [isMinimized])
 
   // ✅ CRITICAL: Restore state when page becomes visible

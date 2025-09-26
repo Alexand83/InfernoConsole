@@ -49,6 +49,7 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
   const [hostIP, setHostIP] = useState(() => {
     return sessionStorage.getItem('remoteDJ_hostIP') || '192.168.1.100'
   })
+  const [connectionMode, setConnectionMode] = useState<'locale' | 'internet'>('locale')
   
   // ✅ NEW: Volume control for host audio
   const [hostVolume, setHostVolume] = useState(() => {
@@ -697,6 +698,41 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
     monitor()
   }
 
+  // ✅ NEW: Funzione per gestire l'incolla automatico del codice di connessione
+  const handlePasteConnectionCode = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      console.log('📋 [RemoteDJClient] Testo incollato:', text)
+      
+      // Verifica se è un codice di connessione valido
+      if (text.startsWith('DJCONNECT:')) {
+        const parts = text.replace('DJCONNECT:', '').split('|')
+        if (parts.length === 2) {
+          const [serverUrl, sessionCode] = parts
+          
+          console.log('🔗 [RemoteDJClient] Codice connessione rilevato:', { serverUrl, sessionCode })
+          
+          // Determina la modalità di connessione
+          const isInternet = serverUrl.includes('ngrok') || serverUrl.includes('http')
+          setConnectionMode(isInternet ? 'internet' : 'locale')
+          
+          // Aggiorna i campi
+          updateHostIP(serverUrl)
+          updateSessionCode(sessionCode)
+          
+          console.log('✅ [RemoteDJClient] Campi compilati automaticamente')
+          return true
+        }
+      }
+      
+      console.log('⚠️ [RemoteDJClient] Testo non riconosciuto come codice di connessione')
+      return false
+    } catch (error) {
+      console.error('❌ [RemoteDJClient] Errore lettura clipboard:', error)
+      return false
+    }
+  }
+
   const connectToHost = async () => {
     console.log(`🎤 [RemoteDJClient] ===== CONNESSIONE AL HOST =====`)
     console.log(`🎤 [RemoteDJClient] Timestamp: ${new Date().toISOString()}`)
@@ -740,9 +776,18 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
       // Inizializza audio capture
       await initializeAudioCapture()
 
-      // Connetti WebSocket
-      const wsUrl = `ws://${hostIP}:8081`
-      console.log(`🎤 [RemoteDJClient] 🔗 Connessione WebSocket a: ${wsUrl}`)
+      // Connetti WebSocket - Supporto TUNNEL NGROK
+      let wsUrl: string
+      
+      if (hostIP.includes('ngrok')) {
+        // URL tunnel pubblico ngrok (già completo)
+        wsUrl = hostIP.startsWith('ws') ? hostIP : `wss://${hostIP.replace('https://', '')}`
+        console.log(`🌐 [RemoteDJClient] 🔗 Connessione TUNNEL PUBBLICO: ${wsUrl}`)
+      } else {
+        // IP locale tradizionale
+        wsUrl = `ws://${hostIP}:8081`
+        console.log(`🏠 [RemoteDJClient] 🔗 Connessione LAN locale: ${wsUrl}`)
+      }
 
       wsRef.current = new WebSocket(wsUrl)
       console.log(`🎤 [RemoteDJClient] WebSocket creato, stato iniziale: ${wsRef.current.readyState}`)
@@ -1346,6 +1391,27 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
       <div className="max-h-[500px] overflow-y-auto">
         {!isConnected ? (
           <div className="p-3 space-y-3">
+            {/* 🚀 PULSANTE INCOLLA AUTOMATICO */}
+            <div className="p-2 bg-blue-900/30 border border-blue-500/50 rounded">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1 mr-4">
+                  <div className="text-blue-300 font-medium text-xs mb-1">
+                    🔗 Incolla Codice Connessione
+                  </div>
+                  <div className="text-blue-200 text-xs">
+                    Incolla il codice ricevuto dall'host per compilare automaticamente i campi
+                  </div>
+                </div>
+                <button
+                  onClick={handlePasteConnectionCode}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded transition-colors flex-shrink-0"
+                  title="Incolla codice connessione"
+                >
+                  📋 Incolla
+                </button>
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-medium text-gray-300 mb-1">
                 Nome DJ
@@ -1376,16 +1442,21 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
 
             <div>
               <label className="block text-xs font-medium text-gray-300 mb-1">
-                IP DJ Host
+                IP DJ Host {connectionMode === 'internet' && <span className="text-green-400">🌐 Internet</span>}
               </label>
               <input
                 type="text"
                 value={hostIP}
                 onChange={(e) => updateHostIP(e.target.value)}
-                placeholder="192.168.1.100"
+                placeholder={connectionMode === 'internet' ? 'ngrok-url.com' : '192.168.1.100'}
                 className="w-full px-2 py-1 text-sm bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400"
                 disabled={isConnecting}
               />
+              {connectionMode === 'internet' && (
+                <div className="text-xs text-green-400 mt-1">
+                  💡 Modalità Internet rilevata - URL tunnel ngrok
+                </div>
+              )}
             </div>
 
             {connectionError && (

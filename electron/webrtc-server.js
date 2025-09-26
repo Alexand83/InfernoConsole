@@ -52,6 +52,7 @@ class WebRTCServer extends EventEmitter {
         
         this.wss = new WebSocket.Server({ 
           port: this.port,
+          host: '0.0.0.0', // ✅ ACCEPT CONNECTIONS FROM ANY IP
           perMessageDeflate: false
         })
         
@@ -267,18 +268,29 @@ class WebRTCServer extends EventEmitter {
     const client = this.connections.get(clientId)
     if (!client || !client.isAuthenticated) return
 
-    console.log(`💬 [WebRTC Server] Chat message da ${client.djName}: ${message.message}`)
+    // ✅ DEBUG: Log dettagliato per debug nickname
+    console.log(`💬 [WebRTC Server] Chat message ricevuto:`, {
+      clientId: clientId,
+      clientDjName: client.djName,
+      messageDjName: message.djName,
+      message: message.message,
+      isAuthenticated: client.isAuthenticated
+    })
     
-    // Emetti evento per l'host
-    this.emit('hostChatMessage', {
-      djName: client.djName,
+    // ✅ FIX: Usa il djName del client autenticato, non quello del messaggio
+    const finalDjName = client.djName || message.djName || `DJ-${clientId.substring(0, 6)}`
+    console.log(`💬 [WebRTC Server] Usando djName finale: ${finalDjName}`)
+    
+    // Emetti evento per l'host (messaggio da client)
+    this.emit('chatMessage', {
+      djName: finalDjName,
       message: message.message,
       timestamp: message.timestamp || Date.now()
     })
     
     // Invia il messaggio a tutti i client connessi
     this.broadcastChatMessage({
-      djName: client.djName,
+      djName: finalDjName,
       message: message.message,
       timestamp: message.timestamp || Date.now()
     })
@@ -301,6 +313,13 @@ class WebRTCServer extends EventEmitter {
   // Metodo per inviare messaggi dall'host ai client
   sendHostMessage(message) {
     console.log(`📢 [WebRTC Server] Host message:`, message)
+    
+    // ✅ FIX: Emetti evento per l'host (per mostrare nella chat dell'host)
+    this.emit('hostChatMessage', {
+      djName: 'Host',
+      message: message,
+      timestamp: Date.now()
+    })
     
     // Invia a tutti i client autenticati
     this.connections.forEach((client, clientId) => {

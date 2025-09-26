@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Send, MessageCircle, Users } from 'lucide-react'
+import { Send, MessageCircle, Users, Smile } from 'lucide-react'
+import EmojiPicker from './EmojiPicker'
+import { getDJColorByName } from '../utils/djColors'
 
 interface ChatMessage {
   id: string
@@ -19,7 +21,19 @@ interface DJChatProps {
 const DJChat: React.FC<DJChatProps> = ({ connectedDJs, onSendMessage, messages = [], onMessagesChange }) => {
   const [newMessage, setNewMessage] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // ✅ DEBUG: Log dei messaggi per debug
+  useEffect(() => {
+    console.log('🐛 [DJChat] Messages received:', messages)
+    console.log('🐛 [DJChat] Messages type:', typeof messages)
+    console.log('🐛 [DJChat] Messages isArray:', Array.isArray(messages))
+    if (messages.length > 0) {
+      console.log('🐛 [DJChat] First message:', messages[0])
+      console.log('🐛 [DJChat] First message type:', typeof messages[0])
+    }
+  }, [messages])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -41,6 +55,11 @@ const DJChat: React.FC<DJChatProps> = ({ connectedDJs, onSendMessage, messages =
       e.preventDefault()
       handleSendMessage()
     }
+  }
+
+  const handleEmojiSelect = (emoji: string) => {
+    setNewMessage(prev => prev + emoji)
+    setShowEmojiPicker(false)
   }
 
   const removeMessage = (messageId: string) => {
@@ -84,42 +103,69 @@ const DJChat: React.FC<DJChatProps> = ({ connectedDJs, onSendMessage, messages =
               </div>
             ) : (
               <div className="space-y-1">
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`p-1 rounded text-xs ${
-                      msg.isSystem
-                        ? 'bg-blue-900/20 text-blue-300'
-                        : 'bg-gray-800 text-gray-200'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        {!msg.isSystem && (
-                          <span className="font-medium text-blue-400">
-                            {msg.djName}:
+                {Array.isArray(messages) ? messages
+                  .filter(msg => {
+                    // ✅ Filtra solo messaggi validi
+                    if (!msg || typeof msg !== 'object') {
+                      console.warn('🐛 [DJChat] Messaggio non valido filtrato:', msg)
+                      return false
+                    }
+                    if (!msg.id || !msg.djName) {
+                      console.warn('🐛 [DJChat] Messaggio malformato filtrato:', msg)
+                      return false
+                    }
+                    return true
+                  })
+                  .map((msg) => {
+                    // ✅ CRITICAL FIX: Assicurati che il message sia stringa
+                    const messageText = typeof msg.message === 'string' ? msg.message : 
+                                       typeof msg.message === 'object' ? JSON.stringify(msg.message) :
+                                       String(msg.message || '')
+
+                    // ✅ NEW: Ottieni colore del DJ
+                    const djColor = getDJColorByName(msg.djName)
+                    const djColorStyle = djColor ? { color: djColor.color } : {}
+
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`p-2 rounded text-xs mb-1 ${
+                          msg.isSystem
+                            ? 'bg-blue-900/20 text-blue-300'
+                            : 'bg-gray-800 text-gray-200'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            {!msg.isSystem && (
+                              <span 
+                                className="font-medium"
+                                style={djColorStyle}
+                              >
+                                {msg.djName}:
+                              </span>
+                            )}
+                            <span className="ml-1 text-sm">
+                              {messageText}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500 ml-2">
+                            {msg.timestamp ? (() => {
+                              try {
+                                const date = msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp)
+                                return date.toLocaleTimeString('it-IT', {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })
+                              } catch {
+                                return 'N/A'
+                              }
+                            })() : 'N/A'}
                           </span>
-                        )}
-                        <span className="ml-1">
-                          {msg.message}
-                        </span>
+                        </div>
                       </div>
-                      <span className="text-xs text-gray-500 ml-2">
-                        {msg.timestamp ? (() => {
-                          try {
-                            const date = msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp)
-                            return date.toLocaleTimeString('it-IT', {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })
-                          } catch {
-                            return 'N/A'
-                          }
-                        })() : 'N/A'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                    )
+                  }) : []}
                 <div ref={messagesEndRef} />
               </div>
             )}
@@ -137,6 +183,13 @@ const DJChat: React.FC<DJChatProps> = ({ connectedDJs, onSendMessage, messages =
               maxLength={200}
             />
             <button
+              onClick={() => setShowEmojiPicker(true)}
+              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors flex items-center"
+              title="Aggiungi emoji"
+            >
+              <Smile className="w-3 h-3" />
+            </button>
+            <button
               onClick={handleSendMessage}
               disabled={!newMessage.trim()}
               className="px-2 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white text-xs rounded transition-colors flex items-center space-x-1"
@@ -153,6 +206,13 @@ const DJChat: React.FC<DJChatProps> = ({ connectedDJs, onSendMessage, messages =
           {messages.length} messaggio{messages.length !== 1 ? 'i' : ''} - Clicca per espandere
         </div>
       )}
+
+      {/* Emoji Picker */}
+      <EmojiPicker
+        isOpen={showEmojiPicker}
+        onClose={() => setShowEmojiPicker(false)}
+        onEmojiSelect={handleEmojiSelect}
+      />
     </div>
   )
 }

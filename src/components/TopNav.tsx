@@ -70,7 +70,6 @@ const TopNav = () => {
               title="DJ Remoto Client"
             >
               <span className="font-medium">🎤 DJ Remoto</span>
-              {isRemoteDJMinimized && <span className="text-xs text-dj-accent">●</span>}
             </button>
 
             {/* Pulsante DJ Remoto Server */}
@@ -106,17 +105,26 @@ const TopNav = () => {
       </div>
       
       {/* Client DJ Remoto */}
-      {showRemoteDJ && (
+      {(showRemoteDJ || isRemoteDJMinimized) && (
         <RemoteDJClient 
+          isMinimized={isRemoteDJMinimized}
           onClose={() => {
             ;(window as any).__remoteDJMinimized__ = false // Reset flag per cleanup completo
+            ;(window as any).__remoteDJClientMinimized__ = false // Reset flag posizionamento
             setIsRemoteDJMinimized(false)
             setShowRemoteDJ(false)
           }}
           onMinimize={() => {
             ;(window as any).__remoteDJMinimized__ = true // Imposta flag per mantenere connessione
+            ;(window as any).__remoteDJClientMinimized__ = true // Flag per posizionamento
             setIsRemoteDJMinimized(true)
             setShowRemoteDJ(false)
+          }}
+          onExpand={() => {
+            ;(window as any).__remoteDJMinimized__ = false
+            ;(window as any).__remoteDJClientMinimized__ = false // Reset flag posizionamento
+            setIsRemoteDJMinimized(false)
+            setShowRemoteDJ(true)
           }}
         />
       )}
