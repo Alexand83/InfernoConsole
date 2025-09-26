@@ -40,6 +40,10 @@ class WebRTCServer extends EventEmitter {
   async start() {
     return new Promise(async (resolve, reject) => {
       try {
+        // ✅ CRITICAL FIX: Genera un nuovo codice sessione per ogni avvio
+        this.sessionCode = this.generateSessionCode()
+        console.log(`🔐 [WebRTC Server] Nuovo codice sessione generato: ${this.sessionCode}`)
+        
         // Trova una porta libera
         const freePort = await this.findFreePort(this.port)
         this.port = freePort
@@ -50,6 +54,9 @@ class WebRTCServer extends EventEmitter {
           port: this.port,
           perMessageDeflate: false
         })
+        
+        // ✅ CRITICAL FIX: Aumenta il limite di listener per evitare memory leak
+        this.wss.setMaxListeners(20)
 
         this.wss.on('connection', (ws, req) => {
           const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
@@ -383,11 +390,25 @@ class WebRTCServer extends EventEmitter {
   async stop() {
     return new Promise((resolve) => {
       if (this.wss) {
+        console.log('🔄 [WebRTC Server] Fermata server in corso...')
+        
+        // ✅ CRITICAL FIX: Chiudi tutte le connessioni WebSocket
+        this.connections.forEach((client, clientId) => {
+          if (client.ws && client.ws.readyState === WebSocket.OPEN) {
+            console.log(`🔌 [WebRTC Server] Chiusura connessione client: ${clientId}`)
+            client.ws.close()
+          }
+        })
+        this.connections.clear()
+        
+        // ✅ CRITICAL FIX: Chiudi il server WebSocket
         this.wss.close(() => {
-          console.log('✅ [WebRTC Server] Server fermato')
+          console.log('✅ [WebRTC Server] Server fermato completamente')
+          this.wss = null
           resolve()
         })
       } else {
+        console.log('ℹ️ [WebRTC Server] Nessun server da fermare')
         resolve()
       }
     })

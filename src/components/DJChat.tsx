@@ -13,9 +13,10 @@ interface DJChatProps {
   connectedDJs: Array<{ id: string; djName: string }>
   onSendMessage?: (message: string) => void
   messages?: ChatMessage[]
+  onMessagesChange?: (messages: ChatMessage[]) => void
 }
 
-const DJChat: React.FC<DJChatProps> = ({ connectedDJs, onSendMessage, messages = [] }) => {
+const DJChat: React.FC<DJChatProps> = ({ connectedDJs, onSendMessage, messages = [], onMessagesChange }) => {
   const [newMessage, setNewMessage] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -42,21 +43,28 @@ const DJChat: React.FC<DJChatProps> = ({ connectedDJs, onSendMessage, messages =
     }
   }
 
+  const removeMessage = (messageId: string) => {
+    if (onMessagesChange) {
+      const updatedMessages = messages.filter(msg => msg.id !== messageId)
+      onMessagesChange(updatedMessages)
+    }
+  }
+
   return (
-    <div className="bg-dj-primary border border-dj-accent rounded-lg p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
-          <MessageCircle className="w-5 h-5 text-dj-accent" />
+    <div className="bg-gray-800">
+      <div className="flex items-center justify-between p-2 border-b border-gray-700">
+        <h3 className="text-xs font-medium text-white flex items-center space-x-1">
+          <MessageCircle className="w-3 h-3 text-gray-400" />
           <span>Chat DJ</span>
         </h3>
         <div className="flex items-center space-x-2">
-          <span className="text-sm text-dj-light">
-            <Users className="w-4 h-4 inline mr-1" />
+          <span className="text-xs text-gray-400">
+            <Users className="w-3 h-3 inline mr-1" />
             {connectedDJs.length}
           </span>
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-dj-accent hover:text-white transition-colors"
+            className="text-gray-400 hover:text-white transition-colors text-xs"
             title={isExpanded ? 'Riduci chat' : 'Espandi chat'}
           >
             {isExpanded ? '📉' : '📈'}
@@ -67,40 +75,47 @@ const DJChat: React.FC<DJChatProps> = ({ connectedDJs, onSendMessage, messages =
       {isExpanded && (
         <>
           {/* Lista messaggi */}
-          <div className="bg-dj-dark rounded-md p-3 mb-3 h-48 overflow-y-auto border border-dj-accent/20">
+          <div className="bg-gray-900 p-2 mb-2 h-32 overflow-y-auto border-t border-gray-700">
             {messages.length === 0 ? (
-              <div className="text-center text-dj-light/70 py-8">
-                <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <div>Nessun messaggio</div>
+              <div className="text-center text-gray-400 py-4">
+                <MessageCircle className="w-4 h-4 mx-auto mb-1 opacity-50" />
+                <div className="text-xs">Nessun messaggio</div>
                 <div className="text-xs mt-1">Inizia una conversazione!</div>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`p-2 rounded-md ${
+                    className={`p-1 rounded text-xs ${
                       msg.isSystem
-                        ? 'bg-blue-900/20 text-blue-300 text-xs'
-                        : 'bg-dj-primary border border-dj-accent/20'
+                        ? 'bg-blue-900/20 text-blue-300'
+                        : 'bg-gray-800 text-gray-200'
                     }`}
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         {!msg.isSystem && (
-                          <span className="font-semibold text-dj-accent text-sm">
+                          <span className="font-medium text-blue-400">
                             {msg.djName}:
                           </span>
                         )}
-                        <span className={`ml-1 ${msg.isSystem ? 'text-xs' : 'text-sm'}`}>
+                        <span className="ml-1">
                           {msg.message}
                         </span>
                       </div>
-                      <span className="text-xs text-dj-light/50 ml-2">
-                        {msg.timestamp ? msg.timestamp.toLocaleTimeString('it-IT', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        }) : 'N/A'}
+                      <span className="text-xs text-gray-500 ml-2">
+                        {msg.timestamp ? (() => {
+                          try {
+                            const date = msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp)
+                            return date.toLocaleTimeString('it-IT', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })
+                          } catch {
+                            return 'N/A'
+                          }
+                        })() : 'N/A'}
                       </span>
                     </div>
                   </div>
@@ -111,22 +126,22 @@ const DJChat: React.FC<DJChatProps> = ({ connectedDJs, onSendMessage, messages =
           </div>
 
           {/* Input messaggio */}
-          <div className="flex space-x-2">
+          <div className="flex space-x-1 p-2">
             <input
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Scrivi un messaggio..."
-              className="flex-1 p-2 bg-dj-dark border border-dj-accent/50 rounded-md text-white placeholder-dj-light/50 focus:ring-2 focus:ring-dj-accent focus:border-transparent"
+              className="flex-1 px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-transparent"
               maxLength={200}
             />
             <button
               onClick={handleSendMessage}
               disabled={!newMessage.trim()}
-              className="px-4 py-2 bg-dj-accent hover:bg-dj-accent-dark disabled:bg-dj-accent/50 text-white rounded-md transition-colors flex items-center space-x-1"
+              className="px-2 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white text-xs rounded transition-colors flex items-center space-x-1"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-3 h-3" />
               <span>Invia</span>
             </button>
           </div>
@@ -134,7 +149,7 @@ const DJChat: React.FC<DJChatProps> = ({ connectedDJs, onSendMessage, messages =
       )}
 
       {!isExpanded && messages.length > 0 && (
-        <div className="text-sm text-dj-light/70">
+        <div className="text-xs text-gray-400 p-2 text-center">
           {messages.length} messaggio{messages.length !== 1 ? 'i' : ''} - Clicca per espandere
         </div>
       )}

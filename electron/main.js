@@ -1033,19 +1033,29 @@ ipcMain.handle('start-webrtc-server', async (event, options = {}) => {
     
     if (webrtcServer) {
       console.log('⚠️ [MAIN] Server WebRTC già attivo, ripristino stato')
-      // Ripristina lo stato del server per la nuova pagina
-      if (mainWindow) {
-        const clients = webrtcServer.getConnectedClients()
+      // ✅ CRITICAL FIX: Verifica che il server sia effettivamente attivo
+      try {
         const serverInfo = webrtcServer.getServerInfo()
-        
-        // Invia lo stato attuale alla nuova pagina
-        mainWindow.webContents.send('webrtc-server-restored', {
-          serverInfo,
-          clients,
-          isRunning: true
-        })
+        if (serverInfo && serverInfo.port) {
+          console.log('✅ [MAIN] Server WebRTC confermato attivo su porta:', serverInfo.port)
+          console.log('✅ [MAIN] Codice sessione attuale:', serverInfo.sessionCode)
+          // Ripristina lo stato del server per la nuova pagina
+          if (mainWindow) {
+            const clients = webrtcServer.getConnectedClients()
+            
+            // Invia lo stato attuale alla nuova pagina
+            mainWindow.webContents.send('webrtc-server-restored', {
+              serverInfo,
+              clients,
+              isRunning: true
+            })
+          }
+          return { success: true, ...serverInfo }
+        }
+      } catch (error) {
+        console.log('⚠️ [MAIN] Server WebRTC non risponde, ricreazione...')
+        webrtcServer = null
       }
-      return { success: true, ...webrtcServer.getServerInfo() }
     }
     
     webrtcServer = new WebRTCServer({
@@ -1132,13 +1142,23 @@ ipcMain.handle('start-webrtc-server', async (event, options = {}) => {
 ipcMain.handle('stop-webrtc-server', async () => {
   try {
     if (webrtcServer) {
+      console.log('🔄 [MAIN] Fermata server WebRTC in corso...')
       await webrtcServer.stop()
       webrtcServer = null
-      console.log('✅ [MAIN] Server WebRTC fermato')
+      console.log('✅ [MAIN] Server WebRTC fermato completamente')
+    } else {
+      console.log('ℹ️ [MAIN] Nessun server WebRTC da fermare')
     }
+    
+    // ✅ CRITICAL FIX: Forza la pulizia completa per evitare sessioni persistenti
+    webrtcServer = null
+    console.log('✅ [MAIN] Pulizia completa server WebRTC completata')
+    
     return { success: true }
   } catch (error) {
     console.error('❌ [MAIN] Errore fermata server WebRTC:', error)
+    // ✅ CRITICAL FIX: Forza la pulizia anche in caso di errore
+    webrtcServer = null
     return { success: false, error: error.message }
   }
 })

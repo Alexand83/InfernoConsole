@@ -4,6 +4,7 @@ import TopNav from './components/TopNav'
 import DJConsole from './components/DJConsole'
 import NewDJConsole from './components/NewDJConsole'
 import { RebuiltDJConsole, AutoAdvanceManager } from './components/dj-console'
+// import DJRemotoServerPage from './components/DJRemotoServerPage' // Ora è un pannello nel TopNav
 // Rimossi import diretti per lazy loading
 // import LibraryManager from './components/LibraryManager'
 // import Settings from './components/Settings'
@@ -13,6 +14,7 @@ import { PlaylistProvider } from './contexts/PlaylistContext'
 import { SettingsProvider } from './contexts/SettingsContext'
 import { TimerProvider } from './contexts/TimerContext'
 import { StreamingProvider } from './contexts/StreamingContext'
+import { DJRemotoServerProvider } from './contexts/DJRemotoServerContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import './styles/themes.css'
 
@@ -67,6 +69,7 @@ function App() {
   }, [])
   
   const memoizedTestConsole = useMemo(() => <TestConsole key="test-stable" />, [stableRef.current])
+  // const memoizedDJRemotoServerPage = useMemo(() => <DJRemotoServerPage key="dj-remoto-server-stable" />, [stableRef.current]) // Ora è un pannello
 
   // MEMOIZZA anche i provider per evitare re-creazione
   const memoizedProviders = useMemo(() => (
@@ -75,7 +78,8 @@ function App() {
         <AudioProvider>
           <PlaylistProvider>
             <StreamingProvider>
-              <ErrorBoundary>
+              <DJRemotoServerProvider>
+                <ErrorBoundary>
               <div className="flex flex-col min-h-screen bg-dj-dark">
                 <TopNav />
                 <main className="flex-1 overflow-y-auto transition-opacity duration-200 ease-in-out">
@@ -106,6 +110,7 @@ function App() {
                 />
               </div>
               </ErrorBoundary>
+              </DJRemotoServerProvider>
             </StreamingProvider>
           </PlaylistProvider>
         </AudioProvider>

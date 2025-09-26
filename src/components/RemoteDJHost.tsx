@@ -11,6 +11,8 @@ interface ConnectedDJ {
   audioLevel: number
   isMuted: boolean
   volume: number
+  isPTTDJActive?: boolean
+  isPTTLiveActive?: boolean
 }
 
 interface ChatMessage {
@@ -36,22 +38,289 @@ const RemoteDJHost: React.FC = () => {
   const [isStarting, setIsStarting] = useState(false)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isHostMuted, setIsHostMuted] = useState(false)
-  const [isAutoDuckingActive, setIsAutoDuckingActive] = useState(false)
-  const [activeSpeaker, setActiveSpeaker] = useState<string>('')
+  
+  // ✅ NEW: PTT Button States
+  const [isPTTDJActive, setIsPTTDJActive] = useState(false)
+  const [isPTTLiveActive, setIsPTTLiveActive] = useState(false)
 
-  const { addRemoteDJStream, removeRemoteDJStream, setRemoteDJVolume, setStreamDucking } = useAudio()
+  // ✅ NEW: Track which clients have PTT Live active
+  const [clientsWithPTTLive, setClientsWithPTTLive] = useState<Set<string>>(new Set())
+
+  const { addRemoteDJStream, removeRemoteDJStream, setRemoteDJVolume } = useAudio()
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map())
   const remoteAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
   const hostMicStreamRef = useRef<MediaStream | null>(null)
-  const hostAudioContextRef = useRef<AudioContext | null>(null)
-  const hostAnalyserRef = useRef<AnalyserNode | null>(null)
-  const hostAnimationFrameRef = useRef<number | null>(null)
-  const remoteAudioAnalysersRef = useRef<Map<string, AnalyserNode>>(new Map())
+  
+  // ✅ NEW: Host microphone restoration state
+  const [isRestoringHostMic, setIsRestoringHostMic] = useState(false)
+  
+  // ✅ NEW: Navigation state to prevent PTT disconnection during page changes
+  const [isNavigating, setIsNavigating] = useState(false)
 
   const iceServers = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' }
   ]
+
+  // ✅ REMOVED: Listener duplicato rimosso - gestito solo da DJRemotoServerPage.tsx
+  // Non serve listener qui perché DJRemotoServerPage.tsx gestisce già tutto:
+  // 1. Ricrea hostMicStreamRef.current con createHostMicrophone()  
+  // 2. Aggiorna connessioni WebRTC con updateExistingWebRTCConnections_PROPER()
+  // Questo evita ricreazioni doppie del microfono che causano ritardi PTT
+
+  // ✅ NEW: Funzione per aggiornare le connessioni WebRTC (STRATEGIA CORRETTA)
+  const updateExistingWebRTCConnections_PROPER = async () => {
+    console.log('🔄 [RemoteDJHost] STRATEGIA CORRETTA: Ricreare hostMicStreamRef e aggiornare tutte le connessioni')
+    
+    // Prima ricreiamo completamente il microfono host con le nuove settings
+    // Questo aggiorna automaticamente hostMicStreamRef.current
+    // (la funzione createNewMicrophoneStreamForceUpdate fa già questo)
+    
+    if (!hostMicStreamRef.current) {
+      console.warn('⚠️ [RemoteDJHost] Nessun stream microfono disponibile per aggiornare le connessioni')
+      return
+    }
+
+    const connections = Array.from(peerConnectionsRef.current.entries())
+    console.log(`🔄 [RemoteDJHost] Aggiornamento di ${connections.length} connessioni WebRTC con stream ricreato`)
+
+    const newMicTrack = hostMicStreamRef.current.getAudioTracks()[0]
+    if (!newMicTrack) {
+      console.error('❌ [RemoteDJHost] Nessun track audio nel stream ricreato')
+      return
+    }
+
+    for (const [clientId, peerConnection] of connections) {
+      // Salta i DataChannel
+      if (clientId.includes('_dataChannel')) continue
+
+      try {
+        console.log(`🔄 [RemoteDJHost] Aggiornamento connessione per ${clientId}`)
+
+        // Trova il sender del microfono host esistente
+        const senders = peerConnection.getSenders()
+        let micSender = null
+        
+        for (const sender of senders) {
+          if (sender.track && sender.track.kind === 'audio') {
+            micSender = sender
+            break
+          }
+        }
+
+        if (micSender) {
+          // ✅ STRATEGIA CORRETTA: Usa replaceTrack con il track del stream principale
+          console.log(`🔄 [RemoteDJHost] Sostituzione track con quello del stream principale per ${clientId}`)
+          await micSender.replaceTrack(newMicTrack)
+          console.log(`✅ [RemoteDJHost] Track sostituito per ${clientId}`)
+        } else {
+          // Se non c'è un sender esistente, aggiungi il track
+          console.log(`➕ [RemoteDJHost] Aggiunta nuovo track per ${clientId}`)
+          peerConnection.addTrack(newMicTrack, hostMicStreamRef.current)
+          console.log(`✅ [RemoteDJHost] Nuovo track aggiunto per ${clientId}`)
+        }
+
+      } catch (error) {
+        console.error(`❌ [RemoteDJHost] Errore aggiornamento ${clientId}:`, error)
+      }
+    }
+    
+    console.log('✅ [RemoteDJHost] Aggiornamento completato - PTT ora funziona con stream aggiornato')
+  }
+
+  // ✅ OLD: Funzione per aggiornare tutte le connessioni WebRTC esistenti con il nuovo stream (DEPRECATA)
+  const updateExistingWebRTCConnections_OLD = async () => {
+    if (!hostMicStreamRef.current) {
+      console.warn('⚠️ [RemoteDJHost] Nessun stream microfono disponibile per aggiornare le connessioni')
+      return
+    }
+
+    const connections = Array.from(peerConnectionsRef.current.entries())
+    console.log(`🔄 [RemoteDJHost] Aggiornamento ${connections.length} connessioni WebRTC con nuovo stream microfono`)
+
+    for (const [clientId, peerConnection] of connections) {
+      // Salta i DataChannel (che hanno il suffisso "_dataChannel")
+      if (clientId.includes('_dataChannel')) continue
+
+      try {
+        console.log(`🔄 [RemoteDJHost] Aggiornamento connessione WebRTC per client: ${clientId}`)
+
+        // Rimuovi tutti i sender audio esistenti (microfono host)
+        const senders = peerConnection.getSenders()
+        for (const sender of senders) {
+          if (sender.track && sender.track.kind === 'audio') {
+            console.log(`🗑️ [RemoteDJHost] Rimozione track audio esistente: ${sender.track.id}`)
+            peerConnection.removeTrack(sender)
+          }
+        }
+
+        // Aggiungi i nuovi track dal nuovo stream microfono
+        for (const track of hostMicStreamRef.current.getTracks()) {
+          console.log(`➕ [RemoteDJHost] Aggiunta nuovo track microfono: ${track.id} per client ${clientId}`)
+          
+          // Muta il track di default (PTT mode)
+          track.enabled = false
+          
+          peerConnection.addTrack(track, hostMicStreamRef.current)
+          console.log(`✅ [RemoteDJHost] Track ${track.id} aggiunto e mutato per client ${clientId}`)
+        }
+
+        // Crea e invia nuovo offer se necessario
+        if (peerConnection.signalingState === 'stable') {
+          console.log(`🔄 [RemoteDJHost] Creazione nuovo offer per client ${clientId}`)
+          const offer = await peerConnection.createOffer()
+          await peerConnection.setLocalDescription(offer)
+
+          // Invia il nuovo offer al client tramite il server
+          if ((window as any).electronAPI?.webrtcServerAPI) {
+            ;(window as any).electronAPI.webrtcServerAPI.sendOffer({
+              clientId,
+              sdp: offer.sdp
+            })
+            console.log(`✅ [RemoteDJHost] Nuovo offer inviato al client ${clientId}`)
+          }
+        }
+
+      } catch (error) {
+        console.error(`❌ [RemoteDJHost] Errore aggiornamento connessione WebRTC per ${clientId}:`, error)
+      }
+    }
+
+    console.log(`✅ [RemoteDJHost] Aggiornamento connessioni WebRTC completato`)
+  }
+
+  // ✅ NEW: Function to force creation of new microphone stream (for settings changes)
+  const createNewMicrophoneStreamForceUpdate = async () => {
+    console.log('🔄 [RemoteDJHost] Creazione forzata nuovo stream microfono...')
+    
+    try {
+      // Get current microphone settings
+      const currentSettings = settingsRef.current
+      const micDeviceId = currentSettings?.microphone?.inputDevice || 'default'
+      
+      console.log('🎤 [RemoteDJHost] Creazione microfono con device:', micDeviceId)
+      
+      // Create new microphone stream
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: micDeviceId,
+          echoCancellation: currentSettings?.microphone?.echoCancellation ?? false,
+          noiseSuppression: currentSettings?.microphone?.noiseSuppression ?? true,
+          autoGainControl: currentSettings?.microphone?.autoGainControl ?? true,
+          sampleRate: currentSettings?.microphone?.sampleRate ?? 44100,
+          channelCount: 1
+        }
+      })
+      
+      // Store the new stream
+      hostMicStreamRef.current = stream
+      
+      console.log('✅ [RemoteDJHost] Nuovo stream microfono creato forzatamente')
+    } catch (error) {
+      console.error('❌ [RemoteDJHost] Errore creazione forzata stream microfono:', error)
+    }
+  }
+
+  // ✅ NEW: Function to restore host microphone stream
+  const restoreHostMicrophoneStream = async () => {
+    if (isRestoringHostMic || connectedDJs.length === 0) return
+    
+    // ✅ NEW: Check if we actually need to restore (stream might still be working)
+    if (hostMicStreamRef.current && hostMicStreamRef.current.active) {
+      console.log('ℹ️ [RemoteDJHost] Stream microfono già attivo, ripristino non necessario')
+      return
+    }
+    
+    // ✅ NEW: Don't restore if PTT is active to avoid interference
+    if (isPTTDJActive || isPTTLiveActive) {
+      console.log('ℹ️ [RemoteDJHost] PTT attivo, ripristino microfono saltato per evitare interferenze')
+      return
+    }
+    
+    console.log('🔄 [RemoteDJHost] Ripristino stream microfono host...')
+    setIsRestoringHostMic(true)
+    
+    try {
+      // Get current microphone settings
+      const currentSettings = settingsRef.current
+      const micDeviceId = currentSettings?.microphone?.inputDevice || 'default'
+      
+      console.log('🎤 [RemoteDJHost] Ripristino microfono con device:', micDeviceId)
+      
+      // Create new microphone stream
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: micDeviceId,
+          echoCancellation: currentSettings?.microphone?.echoCancellation ?? false,
+          noiseSuppression: currentSettings?.microphone?.noiseSuppression ?? true,
+          autoGainControl: currentSettings?.microphone?.autoGainControl ?? true,
+          sampleRate: currentSettings?.microphone?.sampleRate ?? 44100,
+          channelCount: 1
+        }
+      })
+      
+      // Store the new stream
+      hostMicStreamRef.current = stream
+      
+  // ✅ NEW: Update PTT track references to use the new stream
+  if (isPTTDJActive || isPTTLiveActive) {
+    console.log('🔄 [RemoteDJHost] Aggiornamento riferimenti PTT con nuovo stream')
+    // The track will be enabled/disabled in the loop above based on PTT state
+  }
+  
+  // ✅ NEW: Send PTT state to clients after restoration
+  if (isPTTDJActive) {
+    console.log('🔄 [RemoteDJHost] Reinvio stato PTT DJ dopo ripristino microfono')
+    sendPTTDJCommandToClients(true)
+  }
+  if (isPTTLiveActive) {
+    console.log('🔄 [RemoteDJHost] Reinvio stato PTT Live dopo ripristino microfono')
+    sendHostPTTLiveCommandToClients(true)
+  }
+      
+      // Add the stream to all existing peer connections
+      for (const [clientId, peerConnection] of peerConnectionsRef.current) {
+        try {
+          // Check if this is actually a RTCPeerConnection (not a DataChannel)
+          if (peerConnection && typeof peerConnection.getSenders === 'function') {
+            // Remove old audio tracks
+            const senders = peerConnection.getSenders()
+            for (const sender of senders) {
+              if (sender.track && sender.track.kind === 'audio') {
+                peerConnection.removeTrack(sender)
+              }
+            }
+            
+            // Add new audio track
+            const audioTrack = stream.getAudioTracks()[0]
+            if (audioTrack) {
+              peerConnection.addTrack(audioTrack, stream)
+              
+              // ✅ NEW: Preserve PTT state after restoration
+              if (isPTTDJActive || isPTTLiveActive) {
+                audioTrack.enabled = true
+                console.log(`✅ [RemoteDJHost] Stream microfono ripristinato per client ${clientId} - PTT attivo, track abilitato`)
+              } else {
+                audioTrack.enabled = false
+                console.log(`✅ [RemoteDJHost] Stream microfono ripristinato per client ${clientId} - PTT disattivo, track disabilitato`)
+              }
+            }
+          } else {
+            console.log(`⚠️ [RemoteDJHost] Saltando ${clientId} - non è una RTCPeerConnection`)
+          }
+        } catch (error) {
+          console.error(`❌ [RemoteDJHost] Errore ripristino stream per client ${clientId}:`, error)
+        }
+      }
+      
+      console.log('✅ [RemoteDJHost] Stream microfono host ripristinato con successo')
+      
+    } catch (error) {
+      console.error('❌ [RemoteDJHost] Errore ripristino stream microfono host:', error)
+    } finally {
+      setIsRestoringHostMic(false)
+    }
+  }
 
   // Funzione per mostrare tutti i dispositivi audio disponibili
   const logAvailableAudioDevices = async () => {
@@ -119,6 +388,7 @@ const RemoteDJHost: React.FC = () => {
         setConnectedDJs(prev => prev.filter(dj => dj.id !== client.id))
       })
 
+      // ✅ MANTENUTO: Listener audio level SOLO per visualizzazione UI (NON per monitoraggio automatico)
       webrtcServerAPI.onAudioLevel((event: any, data: any) => {
         setConnectedDJs(prev => prev.map(dj => 
           dj.id === data.clientId 
@@ -157,6 +427,9 @@ const RemoteDJHost: React.FC = () => {
         addChatMessage(data.djName, data.message)
       })
 
+      // ✅ CRITICAL FIX: Il ducking viene gestito solo dal sistema PTT dell'AudioContext
+      // Non abbiamo bisogno di gestione WebSocket separata per PTT Live
+
       // Gestione ripristino stato server
       webrtcServerAPI.onServerRestored((event: any, data: any) => {
         console.log('🔄 [RemoteDJHost] Server ripristinato:', data)
@@ -194,6 +467,140 @@ const RemoteDJHost: React.FC = () => {
       if (!peerConnectionsRef.current.has(clientId)) {
         const peerConnection = new RTCPeerConnection({ iceServers })
         
+        // ✅ NEW: Gestisci DataChannel dal client
+        peerConnection.ondatachannel = (event) => {
+          const dataChannel = event.channel
+          console.log(`📡 [DataChannel] Ricevuto DataChannel da ${djName}`)
+          
+          dataChannel.onopen = () => {
+            console.log(`📡 [DataChannel] DataChannel aperto con ${djName}`)
+          }
+          
+          dataChannel.onmessage = (event) => {
+            try {
+              const command = JSON.parse(event.data)
+              console.log(`📡 [DataChannel] Ricevuto comando da ${djName}:`, command)
+              
+              if (command.type === 'requestHostPTTLiveState') {
+                // ✅ NEW: Send current host PTT Live state to client
+                console.log(`📡 [DataChannel] Richiesta stato PTT Live host da ${djName}`)
+                const responseCommand = {
+                  type: 'hostPTTLive',
+                  active: isPTTLiveActive,
+                  timestamp: Date.now()
+                }
+                
+                try {
+                  dataChannel.send(JSON.stringify(responseCommand))
+                  console.log(`📡 [DataChannel] Stato PTT Live host inviato a ${djName}: ${isPTTLiveActive ? 'ATTIVO' : 'DISATTIVO'}`)
+                } catch (error) {
+                  console.error(`📡 [DataChannel] Errore invio stato PTT Live host a ${djName}:`, error)
+                }
+              } else if (command.type === 'requestHostPTTDJState') {
+                // ✅ NEW: Send current host PTT DJ state to client
+                console.log(`📡 [DataChannel] Richiesta stato PTT DJ host da ${djName}`)
+                const responseCommand = {
+                  type: 'pttDJ',
+                  active: isPTTDJActive,
+                  timestamp: Date.now()
+                }
+                
+                try {
+                  dataChannel.send(JSON.stringify(responseCommand))
+                  console.log(`📡 [DataChannel] Stato PTT DJ host inviato a ${djName}: ${isPTTDJActive ? 'ATTIVO' : 'DISATTIVO'}`)
+                } catch (error) {
+                  console.error(`📡 [DataChannel] Errore invio stato PTT DJ host a ${djName}:`, error)
+                }
+              } else if (command.type === 'pttLive') {
+                console.log(`📡 [DataChannel] PTT Live ${command.active ? 'attivato' : 'disattivato'} da ${djName}`)
+                
+                // ✅ DEBUG: Controlla lo stato dell'audio del client
+                const peerConnection = peerConnectionsRef.current.get(clientId)
+                if (peerConnection) {
+                  const receivers = peerConnection.getReceivers()
+                  receivers.forEach(receiver => {
+                    if (receiver.track && receiver.track.kind === 'audio') {
+                      console.log(`🎤 [DEBUG] Audio track del client ${djName}:`, {
+                        id: receiver.track.id,
+                        enabled: receiver.track.enabled,
+                        muted: receiver.track.muted,
+                        readyState: receiver.track.readyState
+                      })
+                    }
+                  })
+                }
+                
+                // ✅ CRITICAL FIX: Gestisci il ducking e lo streaming quando il client attiva/disattiva PTT Live
+                if (command.active) {
+                  // ✅ STEP 1: Aggiungi client alla lista PTT Live attivi
+                  setClientsWithPTTLive(prev => new Set([...prev, clientId]))
+                  console.log(`🎤 [PTT Live Client] Client ${djName} aggiunto alla lista PTT Live attivi`)
+                  
+                  // ✅ STEP 2: Attiva PTT Live dell'host (ducking + live streaming) SOLO se è il primo client
+                  if (clientsWithPTTLive.size === 0) {
+                    console.log(`🎤 [PTT Live Client] Primo client PTT Live - attivazione PTT Live host`)
+                    
+                    // Attiva il PTT Live dell'host usando il sistema AudioContext
+                    if (typeof (window as any).updatePTTVolumesOnly === 'function') {
+                      (window as any).updatePTTVolumesOnly(true).catch(console.error)
+                      console.log(`🎤 [PTT Live Client] PTT Live host attivato per client ${djName}`)
+                    }
+                  }
+                  
+                  // ✅ STEP 3: Aggiungi lo stream del client al live streaming
+                  const peerConnection = peerConnectionsRef.current.get(clientId)
+                  if (peerConnection) {
+                    const receivers = peerConnection.getReceivers()
+                    receivers.forEach(receiver => {
+                      if (receiver.track && receiver.track.kind === 'audio') {
+                        // Crea uno stream temporaneo per il live streaming
+                        const liveStream = new MediaStream([receiver.track])
+                        addRemoteDJStream(clientId, liveStream)
+                        console.log(`🎤 [PTT Live Client] Stream del client ${djName} aggiunto al live streaming`)
+                      }
+                    })
+                  }
+                  
+                  console.log(`🎤 [PTT Live Client] Sistema completo attivato per client ${djName}`)
+                } else {
+                  // ✅ STEP 1: Rimuovi client dalla lista PTT Live attivi
+                  setClientsWithPTTLive(prev => {
+                    const newSet = new Set(prev)
+                    newSet.delete(clientId)
+                    return newSet
+                  })
+                  console.log(`🎤 [PTT Live Client] Client ${djName} rimosso dalla lista PTT Live attivi`)
+                  
+                  // ✅ STEP 2: Rimuovi lo stream del client dal live streaming
+                  removeRemoteDJStream(clientId)
+                  console.log(`🎤 [PTT Live Client] Stream del client ${djName} rimosso dal live streaming`)
+                  
+                  // ✅ STEP 3: Disattiva PTT Live dell'host SOLO se non ci sono più client attivi
+                  if (clientsWithPTTLive.size <= 1) {
+                    console.log(`🎤 [PTT Live Client] Ultimo client PTT Live - disattivazione PTT Live host`)
+                    
+                    if (typeof (window as any).updatePTTVolumesOnly === 'function') {
+                      (window as any).updatePTTVolumesOnly(false).catch(console.error)
+                      console.log(`🎤 [PTT Live Client] PTT Live host disattivato per client ${djName}`)
+                    }
+                  }
+                  
+                  console.log(`🎤 [PTT Live Client] Sistema completo disattivato per client ${djName}`)
+                }
+              }
+            } catch (error) {
+              console.error(`📡 [DataChannel] Errore parsing comando da ${djName}:`, error)
+            }
+          }
+          
+          dataChannel.onerror = (error) => {
+            console.error(`📡 [DataChannel] Errore con ${djName}:`, error)
+          }
+          
+          // Salva il DataChannel per inviare comandi
+          peerConnectionsRef.current.set(`${clientId}_dataChannel`, dataChannel as any)
+        }
+        
         peerConnection.onicecandidate = (event) => {
           if (event.candidate && window.electronAPI?.webrtcServerAPI) {
             console.log(`🧊 [RemoteDJHost] Invio ICE candidate per ${djName}`)
@@ -204,6 +611,13 @@ const RemoteDJHost: React.FC = () => {
 
         peerConnection.ontrack = (event) => {
           console.log(`🎵 [RemoteDJHost] Ricevuto remote track da ${djName}:`, event.streams[0])
+          console.log(`🎵 [RemoteDJHost] Track info:`, {
+            id: event.track.id,
+            kind: event.track.kind,
+            enabled: event.track.enabled,
+            muted: event.track.muted,
+            readyState: event.track.readyState
+          })
           addRemoteAudioToMixer(clientId, event.streams[0])
         }
 
@@ -365,6 +779,10 @@ const RemoteDJHost: React.FC = () => {
           
           peerConnection.addTrack(track, hostMicStreamRef.current!)
           console.log(`🎤 [RemoteDJHost]   ✅ Track aggiunto alla connessione WebRTC per client ${djName}`)
+          
+          // ✅ CRITICAL FIX: Muta il microfono di default (PTT mode)
+          track.enabled = false
+          console.log(`🎤 [RemoteDJHost]   🔇 Track ${track.id} mutato di default (PTT mode)`)
         })
         console.log(`🎤 [RemoteDJHost] ===== FINE STREAM HOST PER CLIENT ${djName} =====`)
       } catch (error) {
@@ -441,32 +859,22 @@ const RemoteDJHost: React.FC = () => {
     console.log(`🎵 [RemoteDJHost] Aggiungendo audio remoto al mixer per ${clientId}`)
 
     try {
-      // Crea un elemento audio dedicato per il monitoraggio locale
       const audioElement = document.createElement('audio')
       audioElement.srcObject = stream
       audioElement.autoplay = true
-      audioElement.volume = 0.5
+      audioElement.volume = 1.0 // ✅ CRITICAL FIX: Volume al 100% per sentire chiaramente il client
       audioElement.style.display = 'none'
       document.body.appendChild(audioElement)
+      
+      console.log(`🎵 [RemoteDJHost] Audio del client ${clientId} configurato con volume 100%`)
       
       // Salva l'elemento audio per controllo successivo
       remoteAudioElementsRef.current.set(clientId, audioElement)
       
-      // Crea AudioContext per monitorare l'audio del DJ remoto
-      const audioContext = new AudioContext()
-      const analyser = audioContext.createAnalyser()
-      analyser.fftSize = 256
-      analyser.smoothingTimeConstant = 0.8
       
-      // Connetti lo stream all'analyser
-      const source = audioContext.createMediaStreamSource(stream)
-      source.connect(analyser)
-      
-      // Salva l'analyser per il monitoraggio
-      remoteAudioAnalysersRef.current.set(clientId, analyser)
-      
-      // Usa l'AudioContext per aggiungere lo stream
-      addRemoteDJStream(clientId, stream)
+      // ✅ CRITICAL FIX: NON aggiungere automaticamente al live streaming
+      // Lo stream verrà aggiunto solo quando il client attiva PTT Live
+      console.log(`🎵 [RemoteDJHost] Stream del client ${clientId} ricevuto ma NON aggiunto al live streaming (solo per comunicazione DJ-to-DJ)`)
       
       // Imposta il dispositivo di output se specificato nelle settings
       if (settings.audio?.outputDevice && settings.audio.outputDevice !== 'default') {
@@ -480,355 +888,211 @@ const RemoteDJHost: React.FC = () => {
     }
   }
 
-  const toggleMuteDJ = (clientId: string) => {
-    setConnectedDJs(prev => prev.map(dj => {
-      if (dj.id === clientId) {
-        const newMutedState = !dj.isMuted
-        const newVolume = newMutedState ? 0 : 0.5
-        
-        // Muta il track WebRTC ricevuto dal client
-        const peerConnection = peerConnectionsRef.current.get(clientId)
-        if (peerConnection) {
-          const receivers = peerConnection.getReceivers()
-          receivers.forEach(receiver => {
-            if (receiver.track && receiver.track.kind === 'audio') {
-              receiver.track.enabled = !newMutedState
-              console.log(`🎤 [RemoteDJHost] Track WebRTC ricevuto da ${clientId} ${newMutedState ? 'mutato' : 'attivato'}`)
-            }
-          })
-        }
-        
-        // Muta anche l'elemento audio locale
-        const audioElement = remoteAudioElementsRef.current.get(clientId)
-        if (audioElement) {
-          audioElement.muted = newMutedState
-        }
-        
-        // Muta anche l'analyser per evitare feedback/rumble
-        const analyser = remoteAudioAnalysersRef.current.get(clientId)
-        if (analyser) {
-          // Disconnetti l'analyser quando mutato per evitare feedback
-          if (newMutedState) {
-            try {
-              analyser.disconnect()
-              console.log(`🎤 [RemoteDJHost] Analyser disconnesso per ${clientId} (muted)`)
-            } catch (error) {
-              console.log(`🎤 [RemoteDJHost] Analyser già disconnesso per ${clientId}`)
-            }
-          } else {
-            // Riconnetti l'analyser quando unmuted
-            try {
-              const peerConnection = peerConnectionsRef.current.get(clientId)
-              if (peerConnection) {
-                const receivers = peerConnection.getReceivers()
-                receivers.forEach(receiver => {
-                  if (receiver.track && receiver.track.kind === 'audio' && receiver.track.enabled) {
-                    // Ricrea la connessione dell'analyser
-                    const audioContext = new AudioContext()
-                    const newAnalyser = audioContext.createAnalyser()
-                    newAnalyser.fftSize = 256
-                    newAnalyser.smoothingTimeConstant = 0.8
-                    
-                    const source = audioContext.createMediaStreamSource(new MediaStream([receiver.track]))
-                    source.connect(newAnalyser)
-                    
-                    remoteAudioAnalysersRef.current.set(clientId, newAnalyser)
-                    console.log(`🎤 [RemoteDJHost] Analyser riconnesso per ${clientId} (unmuted)`)
-                  }
-                })
-              }
-            } catch (error) {
-              console.error(`❌ [RemoteDJHost] Errore riconnessione analyser per ${clientId}:`, error)
-            }
-          }
-        }
-        
-        setRemoteDJVolume(clientId, newVolume)
-        console.log(`🎤 [RemoteDJHost] DJ ${clientId} ${newMutedState ? 'mutato' : 'attivato'}`)
-        return { ...dj, isMuted: newMutedState }
-      }
-      return dj
-    }))
-  }
 
-  const toggleHostMute = () => {
-    const newMutedState = !isHostMuted
-    setIsHostMuted(newMutedState)
+  // ✅ NEW: PTT DJ-to-DJ Functions
+  const handlePTTDJPress = () => {
+    // ✅ CRITICAL FIX: Se PTT Live è attivo, disattivalo prima di attivare PTT DJ
+    if (isPTTLiveActive) {
+      console.log('🎤 [PTT DJ] Disattivando PTT Live per attivare PTT DJ')
+      setIsPTTLiveActive(false)
+      // ✅ CRITICAL FIX: PTT DJ NON deve toccare il volume del live stream
+      // ✅ CRITICAL FIX: PTT Live usa solo il sistema PTT dell'AudioContext
+      console.log('🎤 [PTT DJ] Ducking gestito dal sistema PTT AudioContext')
+      // Invia comando ducking via DataChannel a tutti i client
+      sendDuckingCommandToClients(false)
+    }
     
-    // Imposta il flag globale per il controllo dello streaming
-    ;(window as any).__isHostMicMuted__ = newMutedState
-    
-    // ✅ CRITICAL FIX: Muta il stream del microfono dell'host condiviso (WebRTC)
+    setIsPTTDJActive(true)
+    console.log('🎤 [PTT DJ] Attivato - Comunicazione DJ-to-DJ (NON live streaming)')
+    // ✅ CRITICAL FIX: PTT DJ deve attivare il microfono per comunicazione DJ-to-DJ
     if (hostMicStreamRef.current) {
       hostMicStreamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = !newMutedState // Inverti: se muted=true, track.enabled=false
+        track.enabled = true
+        console.log(`🎤 [PTT DJ] Track ${track.id} abilitato per comunicazione DJ-to-DJ`)
       })
     }
+    // ✅ CRITICAL FIX: PTT DJ NON deve attivare il sistema PTT dell'AudioContext
+    // Il microfono sarà disponibile solo per WebRTC, NON per live streaming
+    console.log('🎤 [PTT DJ] Microfono attivato SOLO per WebRTC - NON per live streaming')
+    // ✅ CRITICAL FIX: PTT DJ NON deve attivare il ducking automatico
+    console.log('🎤 [PTT DJ] Ducking automatico NON attivato - solo comunicazione DJ-to-DJ')
     
-    // ✅ CRITICAL FIX: Muta anche il microfono principale per lo streaming live
-    if ((window as any).micStreamRef && (window as any).micStreamRef.current) {
-      (window as any).micStreamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = !newMutedState // Inverti: se muted=true, track.enabled=false
-      })
-      console.log(`🎤 [RemoteDJHost] Microfono principale ${newMutedState ? 'mutato' : 'attivato'} per streaming live`)
-    }
-    
-    // ✅ CRITICAL FIX: Forza aggiornamento del mixed stream se lo streaming è attivo
-    if ((window as any).isCurrentlyStreaming && (window as any).getMixedStream) {
-      console.log(`🎤 [RemoteDJHost] Forzando aggiornamento mixed stream per muting host...`)
-      ;(window as any).getMixedStream().then((newStream: MediaStream | null) => {
-        if (newStream && (window as any).streamingManager) {
-          (window as any).streamingManager.updateStream(newStream)
-          console.log(`🎤 [RemoteDJHost] Mixed stream aggiornato per muting host`)
-        }
-      }).catch((error: any) => {
-        console.error(`❌ [RemoteDJHost] Errore aggiornamento mixed stream:`, error)
-      })
-    }
-    
-    console.log(`🎤 [RemoteDJHost] Host microfono ${newMutedState ? 'mutato' : 'attivato'} (WebRTC + Streaming Live)`)
+    // ✅ NEW: Invia comando PTT DJ ai client via DataChannel
+    sendPTTDJCommandToClients(true)
   }
 
-  // Funzione per monitorare l'audio dell'host e applicare ducking automatico
-  const startHostAudioMonitoring = async () => {
-    try {
-      // Usa lo stesso stream del microfono condiviso se esiste già
-      if (!hostMicStreamRef.current) {
-        console.log(`🎤 [RemoteDJHost] ===== MONITORAGGIO AUDIO HOST =====`)
-        console.log(`🎤 [RemoteDJHost] Stream microfono host non disponibile per monitoraggio`)
-        console.log(`🎤 [RemoteDJHost] Il monitoraggio verrà avviato quando un client si connette`)
-        return
-      }
-
-      // Crea AudioContext per monitorare l'audio dell'host
-      if (!hostAudioContextRef.current) {
-        hostAudioContextRef.current = new AudioContext()
-        hostAnalyserRef.current = hostAudioContextRef.current.createAnalyser()
-        hostAnalyserRef.current.fftSize = 256
-        hostAnalyserRef.current.smoothingTimeConstant = 0.8
-
-        // Connetti il microfono all'analyser
-        const source = hostAudioContextRef.current.createMediaStreamSource(hostMicStreamRef.current)
-        source.connect(hostAnalyserRef.current)
-        console.log(`🎤 [RemoteDJHost] AudioContext creato per monitoraggio host`)
-      }
-
-      // ✅ FIX: Ottimizza il monitoraggio audio riducendo la frequenza
-      let frameCount = 0
-      const monitor = () => {
-        frameCount++
-        
-        // ✅ FIX: Processa l'audio solo ogni 3 frame per ridurre CPU usage
-        if (frameCount % 3 !== 0) {
-          hostAnimationFrameRef.current = requestAnimationFrame(monitor)
-          return
-        }
-        
-        let maxAudioLevel = 0
-        let activeSpeaker = ''
-
-        // Monitora l'audio dell'host
-        if (hostAnalyserRef.current && !isHostMuted) {
-          const bufferLength = hostAnalyserRef.current.frequencyBinCount
-          const dataArray = new Uint8Array(bufferLength)
-          hostAnalyserRef.current.getByteFrequencyData(dataArray)
-
-          // ✅ FIX: Ottimizza il calcolo usando solo una parte del buffer
-          const step = Math.max(1, Math.floor(bufferLength / 32)) // Usa solo 32 campioni
-          let sum = 0
-          let count = 0
-          for (let i = 0; i < bufferLength; i += step) {
-            sum += dataArray[i]
-            count++
-          }
-          const average = sum / count
-          const audioLevel = (average / 255) * 100
-
-          // ✅ CRITICAL FIX: Aggiorna il livello audio massimo solo se sopra soglia minima
-          if (audioLevel > 5 && audioLevel > maxAudioLevel) {
-            maxAudioLevel = audioLevel
-            activeSpeaker = 'Host'
-          }
-          
-          // ✅ FIX: Controlla il microfono host meno frequentemente
-          if (frameCount % 30 === 0) { // Ogni 30 frame (circa 1 secondo)
-            if (hostMicStreamRef.current) {
-              const tracks = hostMicStreamRef.current.getAudioTracks()
-              const activeTracks = tracks.filter(track => track.readyState === 'live' && track.enabled)
-              
-              if (activeTracks.length === 0) {
-                // Prova a riattivare il microfono silenziosamente
-                setTimeout(() => {
-                  if (hostMicStreamRef.current) {
-                    hostMicStreamRef.current.getTracks().forEach(track => {
-                      if (track.readyState === 'ended') {
-                        track.enabled = true
-                      }
-                    })
-                  }
-                }, 1000)
-              }
-            }
-          }
-        }
-
-        // Monitora l'audio dei DJ remoti
-        remoteAudioAnalysersRef.current.forEach((analyser, clientId) => {
-          const dj = connectedDJs.find(d => d.id === clientId)
-          if (analyser && dj && !dj.isMuted) {
-            const bufferLength = analyser.frequencyBinCount
-            const dataArray = new Uint8Array(bufferLength)
-            analyser.getByteFrequencyData(dataArray)
-
-            // ✅ FIX: Ottimizza il calcolo usando solo una parte del buffer
-            const step = Math.max(1, Math.floor(bufferLength / 32)) // Usa solo 32 campioni
-            let sum = 0
-            let count = 0
-            for (let i = 0; i < bufferLength; i += step) {
-              sum += dataArray[i]
-              count++
-            }
-            const average = sum / count
-            const audioLevel = (average / 255) * 100
-
-            // ✅ CRITICAL FIX: Soglia più bassa per DJ remoti per rilevare meglio il silenzio
-            if (audioLevel > 5 && audioLevel > maxAudioLevel) {
-              maxAudioLevel = audioLevel
-              activeSpeaker = dj.djName
-            }
-          }
-        })
-
-        // ✅ CRITICAL FIX: Debug migliorato per rilevamento silenzio
-        const lastAudioLevel = (window as any).__lastAudioLevel__ || 0
-        const levelChanged = Math.abs(maxAudioLevel - lastAudioLevel) > 2 // Cambio significativo di 2%
-        
-        // Mostra debug per livelli bassi (silenzio) e alti (attività)
-        if ((maxAudioLevel < 2 && levelChanged) || (maxAudioLevel > 5 && levelChanged)) {
-          const silenceStatus = maxAudioLevel < 2 ? '🔇 SILENZIO' : '🔊 ATTIVITÀ'
-          console.log(`🎤 [AudioLevels] ${silenceStatus} - Host: ${hostAnalyserRef.current && !isHostMuted ? 'attivo' : 'inattivo'}, DJ Remoti: ${remoteAudioAnalysersRef.current.size}, Max: ${maxAudioLevel.toFixed(1)}%, Speaker: ${activeSpeaker}`)
-          ;(window as any).__lastAudioLevel__ = maxAudioLevel
-        }
-
-        // ✅ CRITICAL FIX: Controlla se i microfoni sono mutati prima di attivare il ducking
-        const isMicMuted = (window as any).__isMicMuted__ || false
-        const isHostMicMuted = (window as any).__isHostMicMuted__ || false
-        
-        // Soglia per attivare il ducking
-        const threshold = 25 // 25% di livello audio
-        const shouldDuck = maxAudioLevel > threshold && !(isMicMuted && isHostMicMuted)
-
-        // Attiva ducking se necessario e se i microfoni non sono entrambi mutati
-        if (shouldDuck && !isAutoDuckingActive) {
-          setIsAutoDuckingActive(true)
-          setActiveSpeaker(activeSpeaker)
-          applyAutoDucking(true)
-          console.log(`🎤 [AutoDucking] Attivato da ${activeSpeaker} - livello audio: ${maxAudioLevel.toFixed(1)}%`)
-        }
-        
-        // ✅ CRITICAL FIX: Sistema di rilevamento silenzio migliorato
-        const silenceThreshold = 2 // Soglia molto bassa per rilevare silenzio (2%)
-        const silenceDuration = 1000 // 1 secondo di silenzio per disattivare ducking
-        
-        // Inizializza il timer di silenzio se non esiste
-        if (!(window as any).__silenceStartTime__) {
-          ;(window as any).__silenceStartTime__ = null
-        }
-        
-        // Se il livello audio è sotto la soglia di silenzio
-        if (maxAudioLevel < silenceThreshold) {
-          if (!(window as any).__silenceStartTime__) {
-            ;(window as any).__silenceStartTime__ = Date.now()
-            console.log(`🎤 [SilenceDetection] Inizio rilevamento silenzio - livello: ${maxAudioLevel.toFixed(1)}%`)
-          } else {
-            const silenceDuration_ms = Date.now() - (window as any).__silenceStartTime__
-            if (silenceDuration_ms >= silenceDuration && isAutoDuckingActive) {
-              setIsAutoDuckingActive(false)
-              setActiveSpeaker('')
-              applyAutoDucking(false)
-              console.log(`🎤 [AutoDucking] 🚫 Disattivato - silenzio rilevato per ${silenceDuration_ms}ms (livello: ${maxAudioLevel.toFixed(1)}%)`)
-              ;(window as any).__silenceStartTime__ = null
-            }
-          }
+  const handlePTTDJRelease = () => {
+    // ✅ NEW: Don't release PTT if we're navigating
+    if (isNavigating) {
+      console.log('🎤 [PTT DJ] Rilascio saltato - navigazione in corso')
+      return
+    }
+    
+    setIsPTTDJActive(false)
+    console.log('🎤 [PTT DJ] Disattivato')
+    // ✅ CRITICAL FIX: Disattiva il microfono quando si rilascia PTT DJ, ma solo se PTT Live non è attivo
+    if (hostMicStreamRef.current) {
+      hostMicStreamRef.current.getAudioTracks().forEach(track => {
+        if (!isPTTLiveActive) {
+        track.enabled = false
+        console.log(`🎤 [PTT DJ] Track ${track.id} disabilitato`)
         } else {
-          // Reset timer silenzio se c'è attività audio
-          if ((window as any).__silenceStartTime__) {
-            console.log(`🎤 [SilenceDetection] Silenzio interrotto - livello: ${maxAudioLevel.toFixed(1)}%`)
-            ;(window as any).__silenceStartTime__ = null
-          }
+          console.log(`🎤 [PTT DJ] Track ${track.id} mantenuto attivo per PTT Live`)
         }
-        
-        // ✅ CRITICAL FIX: Disattiva ducking se i microfoni sono mutati
-        if (isMicMuted && isHostMicMuted && isAutoDuckingActive) {
-          setIsAutoDuckingActive(false)
-          setActiveSpeaker('')
-          applyAutoDucking(false)
-          console.log(`🎤 [AutoDucking] 🚫 Disattivato - entrambi i microfoni sono mutati`)
-          ;(window as any).__silenceStartTime__ = null
-        }
-
-
-        // ✅ CRITICAL FIX: Forza il livello audio a 0 quando i microfoni sono mutati per evitare falsi positivi
-        if (isMicMuted && isHostMicMuted) {
-          maxAudioLevel = 0
-        }
-
-        hostAnimationFrameRef.current = requestAnimationFrame(monitor)
-      }
-
-      monitor()
-      console.log('🎤 [RemoteDJHost] Monitoraggio audio host avviato per ducking automatico')
-
-    } catch (error) {
-      console.error('❌ [RemoteDJHost] Errore monitoraggio audio host:', error)
+      })
     }
+    console.log('🎤 [PTT DJ] Microfono disattivato - solo WebRTC, NON live streaming')
+    
+    // ✅ NEW: Invia comando PTT DJ ai client via DataChannel
+    sendPTTDJCommandToClients(false)
   }
 
-  // Funzione per applicare/rimuovere il ducking automatico
-  const applyAutoDucking = (active: boolean) => {
-    // ✅ FIX: Log solo quando cambia stato per evitare spam
-    const lastAutoDuckingState = (window as any).__lastAutoDuckingState__
-    if (lastAutoDuckingState !== active) {
-      if (active) {
-        console.log(`🎤 [AutoDucking] Attivato - Ducking: ${settings?.microphone?.duckingPercent ?? 75}%`)
+  // ✅ NEW: PTT Live Functions
+  const handlePTTLivePress = () => {
+    // ✅ CRITICAL FIX: Se PTT DJ è attivo, disattivalo prima di attivare PTT Live
+    if (isPTTDJActive) {
+      console.log('📡 [PTT Live] Disattivando PTT DJ per attivare PTT Live')
+      setIsPTTDJActive(false)
+    }
+    
+    setIsPTTLiveActive(true)
+    console.log('📡 [PTT Live] Attivato - Streaming Live + Ducking')
+    // Attiva il microfono per streaming live
+    if (hostMicStreamRef.current) {
+      hostMicStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = true
+        console.log(`📡 [PTT Live] Track ${track.id} abilitato`)
+      })
+    }
+    // ✅ CRITICAL FIX: Attiva il sistema PTT dell'AudioContext per live streaming
+    if (typeof (window as any).updatePTTVolumesOnly === 'function') {
+      (window as any).updatePTTVolumesOnly(true).catch(console.error)
+      console.log('📡 [PTT Live] Sistema PTT AudioContext attivato per live streaming')
+    }
+    // ✅ CRITICAL FIX: PTT Live usa solo il sistema PTT dell'AudioContext
+    console.log('📡 [PTT Live] Ducking gestito dal sistema PTT AudioContext')
+    // ✅ NEW: Invia comando ducking via DataChannel a tutti i client
+    sendDuckingCommandToClients(true)
+    // ✅ NEW: Invia comando PTT Live dell'host ai client
+    sendHostPTTLiveCommandToClients(true)
+  }
+
+  const handlePTTLiveRelease = () => {
+    // ✅ NEW: Don't release PTT if we're navigating
+    if (isNavigating) {
+      console.log('📡 [PTT Live] Rilascio saltato - navigazione in corso')
+      return
+    }
+    
+    setIsPTTLiveActive(false)
+    console.log('📡 [PTT Live] Disattivato')
+    // ✅ CRITICAL FIX: Disattiva il microfono quando si rilascia PTT Live, ma solo se PTT DJ non è attivo
+    if (hostMicStreamRef.current) {
+      hostMicStreamRef.current.getAudioTracks().forEach(track => {
+        if (!isPTTDJActive) {
+        track.enabled = false
+        console.log(`📡 [PTT Live] Track ${track.id} disabilitato`)
+        } else {
+          console.log(`📡 [PTT Live] Track ${track.id} mantenuto attivo per PTT DJ`)
+        }
+      })
+    }
+    // ✅ CRITICAL FIX: Disattiva il sistema PTT dell'AudioContext
+    if (typeof (window as any).updatePTTVolumesOnly === 'function') {
+      (window as any).updatePTTVolumesOnly(false).catch(console.error)
+      console.log('📡 [PTT Live] Sistema PTT AudioContext disattivato')
+    }
+    // ✅ CRITICAL FIX: PTT Live usa solo il sistema PTT dell'AudioContext
+    console.log('📡 [PTT Live] Ducking gestito dal sistema PTT AudioContext')
+    // ✅ NEW: Invia comando ducking via DataChannel a tutti i client
+    sendDuckingCommandToClients(false)
+    // ✅ NEW: Invia comando PTT Live dell'host ai client
+    sendHostPTTLiveCommandToClients(false)
+  }
+
+  // ✅ NEW: Send ducking command to all clients via DataChannel
+  const sendDuckingCommandToClients = (active: boolean) => {
+    console.log(`📡 [DataChannel] Invio comando ducking: ${active ? 'ATTIVO' : 'DISATTIVO'}`)
+    
+    const command = {
+      type: 'ducking',
+      active: active,
+      timestamp: Date.now()
+    }
+    
+    // Invia a tutti i client connessi tramite DataChannel
+    // ✅ FIX: Usa peerConnectionsRef invece di remoteDJs
+    peerConnectionsRef.current.forEach((peerConnection, clientId) => {
+      if (clientId.includes('_dataChannel')) return // Skip dataChannel entries
+      
+      const dataChannel = peerConnectionsRef.current.get(`${clientId}_dataChannel`)
+      if (dataChannel && dataChannel.readyState === 'open') {
+        try {
+          dataChannel.send(JSON.stringify(command))
+          console.log(`📡 [DataChannel] Comando ducking inviato a ${clientId}`)
+        } catch (error) {
+          console.error(`📡 [DataChannel] Errore invio comando a ${clientId}:`, error)
+        }
       } else {
-        console.log(`🎤 [AutoDucking] Disattivato`)
-      }
-      ;(window as any).__lastAutoDuckingState__ = active
-    }
-    
-    // Usa la funzione di ducking dell'AudioContext
-    if (setStreamDucking) {
-      setStreamDucking(active)
-    } else {
-      console.warn('⚠️ [AutoDucking] Funzione setStreamDucking non disponibile')
-    }
-  }
-
-  // Cleanup del monitoraggio audio
-  const stopHostAudioMonitoring = () => {
-    if (hostAnimationFrameRef.current) {
-      cancelAnimationFrame(hostAnimationFrameRef.current)
-      hostAnimationFrameRef.current = null
-    }
-    if (hostAudioContextRef.current) {
-      hostAudioContextRef.current.close()
-      hostAudioContextRef.current = null
-    }
-    hostAnalyserRef.current = null
-    
-    // Cleanup degli analyser remoti
-    remoteAudioAnalysersRef.current.forEach((analyser, clientId) => {
-      try {
-        analyser.disconnect()
-        console.log(`🎤 [RemoteDJHost] Analyser disconnesso per ${clientId} (stop monitoring)`)
-      } catch (error) {
-        console.log(`🎤 [RemoteDJHost] Analyser già disconnesso per ${clientId}`)
+        console.warn(`📡 [DataChannel] DataChannel non disponibile per ${clientId}`)
       }
     })
-    remoteAudioAnalysersRef.current.clear()
+  }
+
+  // ✅ NEW: Send host PTT Live command to all clients via DataChannel
+  const sendHostPTTLiveCommandToClients = (active: boolean) => {
+    console.log(`📡 [DataChannel] Invio comando host PTT Live: ${active ? 'ATTIVO' : 'DISATTIVO'}`)
     
-    console.log('🎤 [RemoteDJHost] Monitoraggio audio fermato (host + remoti)')
+    const command = {
+      type: 'hostPTTLive',
+      active: active,
+      timestamp: Date.now()
+    }
+    
+    // Invia a tutti i client connessi tramite DataChannel
+    peerConnectionsRef.current.forEach((peerConnection, clientId) => {
+      if (clientId.includes('_dataChannel')) return // Skip dataChannel entries
+      
+      const dataChannel = peerConnectionsRef.current.get(`${clientId}_dataChannel`)
+      if (dataChannel && dataChannel.readyState === 'open') {
+        try {
+          dataChannel.send(JSON.stringify(command))
+          console.log(`📡 [DataChannel] Comando host PTT Live inviato a ${clientId}`)
+    } catch (error) {
+          console.error(`📡 [DataChannel] Errore invio comando host PTT Live a ${clientId}:`, error)
+        }
+      } else {
+        console.warn(`📡 [DataChannel] DataChannel non disponibile per ${clientId}`)
+      }
+    })
+  }
+
+  // ✅ NEW: Send PTT DJ command to all clients via DataChannel
+  const sendPTTDJCommandToClients = (active: boolean) => {
+    console.log(`📡 [DataChannel] Invio comando PTT DJ: ${active ? 'ATTIVO' : 'DISATTIVO'}`)
+    
+    const command = {
+      type: 'pttDJ',
+      active: active,
+      timestamp: Date.now()
+    }
+    
+    // Invia a tutti i client connessi tramite DataChannel
+    peerConnectionsRef.current.forEach((peerConnection, clientId) => {
+      if (clientId.includes('_dataChannel')) return // Skip dataChannel entries
+      
+      const dataChannel = peerConnectionsRef.current.get(`${clientId}_dataChannel`)
+      if (dataChannel && dataChannel.readyState === 'open') {
+        try {
+          dataChannel.send(JSON.stringify(command))
+          console.log(`📡 [DataChannel] Comando PTT DJ inviato a ${clientId}`)
+    } catch (error) {
+          console.error(`📡 [DataChannel] Errore invio comando PTT DJ a ${clientId}:`, error)
+        }
+      } else {
+        console.warn(`📡 [DataChannel] DataChannel non disponibile per ${clientId}`)
+      }
+    })
   }
 
   const setDJVolume = (clientId: string, volume: number) => {
@@ -870,19 +1134,26 @@ const RemoteDJHost: React.FC = () => {
     // Non cleanup del microfono host qui - è condiviso tra tutti i client
 
     // Cleanup remote audio analyser
-    const remoteAnalyser = remoteAudioAnalysersRef.current.get(clientId)
-    if (remoteAnalyser) {
-      try {
-        remoteAnalyser.disconnect()
-        console.log(`🎤 [RemoteDJHost] Analyser disconnesso per ${clientId} (disconnect)`)
-      } catch (error) {
-        console.log(`🎤 [RemoteDJHost] Analyser già disconnesso per ${clientId}`)
-      }
-      remoteAudioAnalysersRef.current.delete(clientId)
-    }
 
     // Rimuovi stream audio
     removeRemoteDJStream(clientId)
+
+    // ✅ NEW: Cleanup PTT Live state
+    setClientsWithPTTLive(prev => {
+      const newSet = new Set(prev)
+      const hadPTTLive = newSet.has(clientId)
+      newSet.delete(clientId)
+      
+      // Se questo client aveva PTT Live attivo e non ci sono più client attivi, disattiva PTT Live host
+      if (hadPTTLive && newSet.size === 0) {
+        console.log(`🎤 [PTT Live Client] Ultimo client PTT Live disconnesso - disattivazione PTT Live host`)
+          if (typeof (window as any).updatePTTVolumesOnly === 'function') {
+            (window as any).updatePTTVolumesOnly(false).catch(console.error)
+          }
+      }
+      
+      return newSet
+    })
 
     // Rimuovi dalla lista
     setConnectedDJs(prev => prev.filter(dj => dj.id !== clientId))
@@ -998,11 +1269,9 @@ const RemoteDJHost: React.FC = () => {
             })))
             console.log('✅ [RemoteDJHost] Server già attivo, stato UI ripristinato:', status)
             
-            // Ripristina il monitoraggio audio se ci sono client connessi
             if (status.clients.length > 0) {
-              console.log(`🎤 [AutoDucking] Ripristino monitoraggio audio dopo ripristino server - ${status.clients.length} DJ connessi`)
+              console.log(`🎤 [AutoDucking] Sistema automatico disattivato - ${status.clients.length} DJ connessi`)
               setTimeout(() => {
-                startHostAudioMonitoring()
               }, 1000)
             }
           } else {
@@ -1017,7 +1286,6 @@ const RemoteDJHost: React.FC = () => {
     checkServerStatus()
   }, [])
 
-  // ✅ FIX: Ripristina monitoraggio audio quando la finestra torna in focus
   useEffect(() => {
     let isRestoring = false // Flag per evitare riavvii multipli
 
@@ -1025,6 +1293,9 @@ const RemoteDJHost: React.FC = () => {
       if (isRestoring) return // Evita riavvii multipli
       
       console.log('🔄 [RemoteDJHost] Finestra in focus - controllo stato server')
+      
+      // ✅ NEW: Set navigating state to prevent PTT disconnection
+      setIsNavigating(true)
       
       // Controlla sempre lo stato del server quando la finestra torna in focus
       if (window.electronAPI?.webrtcServerAPI) {
@@ -1044,12 +1315,21 @@ const RemoteDJHost: React.FC = () => {
               console.log(`🔄 [RemoteDJHost] Ripristinati ${status.clients.length} client dopo focus`)
             }
             
-            // Ripristina monitoraggio audio solo se non è già attivo
-            if (status.clients.length > 0 && !hostAnimationFrameRef.current) {
-              console.log('🔄 [RemoteDJHost] Finestra in focus - ripristino monitoraggio audio')
+            if (status.clients.length > 0) {
+              console.log('🔄 [RemoteDJHost] Finestra in focus - sistema automatico disattivato')
+              
+  // ✅ NEW: Restore host microphone stream when returning to page (only if needed)
+  setTimeout(() => {
+    // Only restore if no PTT is active and microphone might need restoration
+    if (!isPTTDJActive && !isPTTLiveActive) {
+      restoreHostMicrophoneStream()
+    } else {
+      console.log('ℹ️ [RemoteDJHost] PTT attivo, ripristino microfono saltato per evitare interferenze')
+    }
+  }, 1000) // Small delay to ensure page is fully loaded
+              
               isRestoring = true
               setTimeout(() => {
-                startHostAudioMonitoring()
                 isRestoring = false
               }, 500)
             }
@@ -1062,6 +1342,12 @@ const RemoteDJHost: React.FC = () => {
           console.log('⚠️ [RemoteDJHost] Errore controllo server dopo focus:', error)
         }
       }
+      
+      // ✅ NEW: Clear navigating state after a delay
+      setTimeout(() => {
+        setIsNavigating(false)
+        console.log('🔄 [RemoteDJHost] Stato navigazione resettato')
+      }, 2000) // 2 second delay to ensure all navigation events are complete
     }
 
     const handleVisibilityChange = async () => {
@@ -1069,17 +1355,30 @@ const RemoteDJHost: React.FC = () => {
       
       console.log('🔄 [RemoteDJHost] Pagina visibile - controllo stato server')
       
+      // ✅ NEW: Set navigating state to prevent PTT disconnection
+      setIsNavigating(true)
+      
       // Controlla lo stato del server quando la pagina torna visibile
       if (window.electronAPI?.webrtcServerAPI) {
         try {
           const status = await window.electronAPI.webrtcServerAPI.checkServerStatus()
           if (status.success && status.isRunning) {
             console.log('✅ [RemoteDJHost] Server ancora attivo dopo visibility change')
-            if (status.clients.length > 0 && !hostAnimationFrameRef.current) {
-              console.log('🔄 [RemoteDJHost] Pagina visibile - ripristino monitoraggio audio')
+            if (status.clients.length > 0) {
+              console.log('🔄 [RemoteDJHost] Pagina visibile - sistema automatico disattivato')
+              
+  // ✅ NEW: Restore host microphone stream when page becomes visible (only if needed)
+  setTimeout(() => {
+    // Only restore if no PTT is active and microphone might need restoration
+    if (!isPTTDJActive && !isPTTLiveActive) {
+      restoreHostMicrophoneStream()
+    } else {
+      console.log('ℹ️ [RemoteDJHost] PTT attivo, ripristino microfono saltato per evitare interferenze')
+    }
+  }, 1000) // Small delay to ensure page is fully loaded
+              
               isRestoring = true
               setTimeout(() => {
-                startHostAudioMonitoring()
                 isRestoring = false
               }, 500)
             }
@@ -1092,6 +1391,12 @@ const RemoteDJHost: React.FC = () => {
           console.log('⚠️ [RemoteDJHost] Errore controllo server dopo visibility change:', error)
         }
       }
+      
+      // ✅ NEW: Clear navigating state after a delay
+      setTimeout(() => {
+        setIsNavigating(false)
+        console.log('🔄 [RemoteDJHost] Stato navigazione resettato (visibility)')
+      }, 2000) // 2 second delay to ensure all navigation events are complete
     }
 
     window.addEventListener('focus', handleWindowFocus)
@@ -1103,24 +1408,12 @@ const RemoteDJHost: React.FC = () => {
     }
   }, [isServerRunning, connectedDJs.length])
 
-  // Avvia/ferma il monitoraggio audio automatico quando ci sono DJ connessi
   useEffect(() => {
     if (connectedDJs.length > 0) {
-      // Ci sono DJ connessi, avvia il monitoraggio audio per ducking automatico
-      console.log(`🎤 [AutoDucking] ${connectedDJs.length} DJ connessi, avvio monitoraggio audio automatico`)
-      // Aspetta un po' per assicurarsi che il microfono host sia stato creato
-      setTimeout(() => {
-        startHostAudioMonitoring()
-      }, 1000)
+      console.log(`🎤 [AutoDucking] ${connectedDJs.length} DJ connessi - SISTEMA AUTOMATICO DISATTIVATO`)
+      console.log(`🎤 [AutoDucking] Usare PTT DJ o PTT Live per attivare ducking manualmente`)
     } else {
-      // Nessun DJ connesso, ferma il monitoraggio audio
-      console.log('🎤 [AutoDucking] Nessun DJ connesso, fermo monitoraggio audio automatico')
-      stopHostAudioMonitoring()
-      // Disattiva anche il ducking se era attivo
-      if (isAutoDuckingActive) {
-        setIsAutoDuckingActive(false)
-        applyAutoDucking(false)
-      }
+      console.log('🎤 [AutoDucking] Nessun DJ connesso - SISTEMA AUTOMATICO DISATTIVATO')
       
       // Pulisci il microfono host quando non ci sono più client
       if (hostMicStreamRef.current) {
@@ -1130,9 +1423,8 @@ const RemoteDJHost: React.FC = () => {
       }
     }
 
-    // Cleanup quando il componente si smonta
+    // ✅ CRITICAL FIX: Cleanup semplificato - sistema automatico disattivato
     return () => {
-      stopHostAudioMonitoring()
       // Pulisci anche il microfono host al dismount
       if (hostMicStreamRef.current) {
         hostMicStreamRef.current.getTracks().forEach(track => track.stop())
@@ -1145,7 +1437,17 @@ const RemoteDJHost: React.FC = () => {
   return (
     <div className="bg-dj-primary border border-dj-accent rounded-lg p-6">
       <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center space-x-3">
         <h2 className="text-xl font-bold text-white">🎤 DJ Remoti</h2>
+          {clientsWithPTTLive.size > 0 && (
+            <div className="flex items-center space-x-2 px-3 py-1 bg-red-600 rounded-full animate-pulse">
+              <span className="w-2 h-2 bg-red-400 rounded-full animate-ping"></span>
+              <span className="text-white text-sm font-medium">
+                🔴 LIVE ({clientsWithPTTLive.size} client{clientsWithPTTLive.size > 1 ? 'i' : ''})
+              </span>
+            </div>
+          )}
+        </div>
         <div className="flex space-x-2">
           {!isServerRunning ? (
             <button
@@ -1157,25 +1459,127 @@ const RemoteDJHost: React.FC = () => {
             </button>
           ) : (
             <>
+              {/* PTT DJ-to-DJ Button */}
               <button
-                onClick={toggleHostMute}
-                className={`${isHostMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white font-medium py-2 px-4 rounded-md transition-colors`}
+                tabIndex={0}
+                onMouseDown={handlePTTDJPress}
+                onMouseUp={(e) => {
+                  // Only release if we're not navigating
+                  if (!isNavigating) {
+                    handlePTTDJRelease()
+                  } else {
+                    console.log('🎤 [PTT DJ] MouseUp saltato - navigazione in corso')
+                  }
+                }}
+                onTouchStart={handlePTTDJPress}
+                onTouchEnd={(e) => {
+                  // Only release if we're not navigating
+                  if (!isNavigating) {
+                    handlePTTDJRelease()
+                  } else {
+                    console.log('🎤 [PTT DJ] TouchEnd saltato - navigazione in corso')
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault()
+                    handlePTTDJPress()
+                  }
+                }}
+                onKeyUp={(e) => {
+                  if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault()
+                    if (!isNavigating) {
+                      handlePTTDJRelease()
+                    } else {
+                      console.log('🎤 [PTT DJ] KeyUp saltato - navigazione in corso')
+                    }
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  // Only release if the mouse actually left the button area
+                  // and we're not in the middle of a page navigation
+                  if (!isNavigating && (e.relatedTarget === null || !e.currentTarget.contains(e.relatedTarget as Node))) {
+                    handlePTTDJRelease()
+                  } else if (isNavigating) {
+                    console.log('🎤 [PTT DJ] MouseLeave saltato - navigazione in corso')
+                  }
+                }}
+                className={`${isPTTDJActive ? 'bg-green-600 hover:bg-green-700 animate-pulse' : 'bg-blue-600 hover:bg-blue-700'} text-white font-medium py-2 px-4 rounded-md transition-all duration-200 relative`}
               >
-                {isHostMuted ? '🔇 Unmute Host' : '🔊 Mute Host'}
+                {isPTTDJActive && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-ping"></span>
+                )}
+                {isPTTDJActive ? '🎤 PTT DJ 🔴 LIVE' : '🎤 PTT DJ'}
               </button>
-              {connectedDJs.length > 0 && (
-                <div className={`px-3 py-2 rounded-md text-sm font-medium ${
-                  isAutoDuckingActive ? 'bg-orange-600 text-white' : 'bg-gray-600 text-gray-300'
-                }`}>
-                  {isAutoDuckingActive ? `🎤 Auto Ducking ON (${activeSpeaker})` : '🎤 Auto Ducking Ready'}
-                </div>
-              )}
+              
+              {/* PTT Live Button */}
+              <button
+                tabIndex={0}
+                onMouseDown={handlePTTLivePress}
+                onMouseUp={(e) => {
+                  // Only release if we're not navigating
+                  if (!isNavigating) {
+                    handlePTTLiveRelease()
+                  } else {
+                    console.log('📡 [PTT Live] MouseUp saltato - navigazione in corso')
+                  }
+                }}
+                onTouchStart={handlePTTLivePress}
+                onTouchEnd={(e) => {
+                  // Only release if we're not navigating
+                  if (!isNavigating) {
+                    handlePTTLiveRelease()
+                  } else {
+                    console.log('📡 [PTT Live] TouchEnd saltato - navigazione in corso')
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault()
+                    handlePTTLivePress()
+                  }
+                }}
+                onKeyUp={(e) => {
+                  if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault()
+                    if (!isNavigating) {
+                      handlePTTLiveRelease()
+                    } else {
+                      console.log('📡 [PTT Live] KeyUp saltato - navigazione in corso')
+                    }
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  // Only release if the mouse actually left the button area
+                  // and we're not in the middle of a page navigation
+                  if (!isNavigating && (e.relatedTarget === null || !e.currentTarget.contains(e.relatedTarget as Node))) {
+                    handlePTTLiveRelease()
+                  } else if (isNavigating) {
+                    console.log('📡 [PTT Live] MouseLeave saltato - navigazione in corso')
+                  }
+                }}
+                className={`${isPTTLiveActive ? 'bg-orange-600 hover:bg-orange-700 animate-pulse' : 'bg-red-600 hover:bg-red-700'} text-white font-medium py-2 px-4 rounded-md transition-all duration-200 relative`}
+              >
+                {isPTTLiveActive && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-orange-400 rounded-full animate-ping"></span>
+                )}
+                {isPTTLiveActive ? '📡 PTT Live 🔴 LIVE' : '📡 PTT Live'}
+              </button>
               <button
                 onClick={stopServer}
                 className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
               >
                 🛑 Ferma Server
               </button>
+              
+              {/* ✅ NEW: Host Microphone Restoration Indicator */}
+              {isRestoringHostMic && (
+                <div className="flex items-center space-x-2 px-3 py-2 bg-yellow-600 text-white rounded-md">
+                  <div className="animate-spin">🔄</div>
+                  <span className="text-sm font-medium">Ripristino microfono...</span>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -1234,25 +1638,43 @@ const RemoteDJHost: React.FC = () => {
               >
                 <div className="flex justify-between items-start mb-3">
                   <div>
+                    <div className="flex items-center space-x-2">
                     <h4 className="font-semibold text-white">{dj.djName}</h4>
+                      {clientsWithPTTLive.has(dj.id) && (
+                        <span className="px-2 py-1 bg-red-600 text-white text-xs rounded-full font-medium animate-pulse">
+                          🔴 LIVE
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm text-dj-light">
                       IP: {dj.ip} | Connesso: {dj.connectedAt ? dj.connectedAt.toLocaleTimeString() : 'N/A'}
                     </div>
                   </div>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => toggleMuteDJ(dj.id)}
-                      className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                        dj.isMuted
-                          ? 'bg-red-600 hover:bg-red-700 text-white'
-                          : 'bg-green-600 hover:bg-green-700 text-white'
-                      }`}
-                    >
-                      {dj.isMuted ? '🔇' : '🔊'}
-                    </button>
+                  <div className="flex items-center space-x-3">
+                    {/* Volume Control */}
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-dj-light">Vol:</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={dj.volume * 100}
+                        onChange={(e) => setRemoteDJVolume(dj.id, parseFloat(e.target.value) / 100)}
+                        className="w-16 h-1 bg-dj-light rounded-lg appearance-none cursor-pointer slider"
+                        style={{
+                          background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${dj.volume * 100}%, #374151 ${dj.volume * 100}%, #374151 100%)`
+                        }}
+                      />
+                      <span className="text-xs text-dj-light w-8">
+                        {Math.round(dj.volume * 100)}%
+                      </span>
+                    </div>
+                    
+                    {/* Disconnect Button */}
                     <button
                       onClick={() => disconnectDJ(dj.id)}
                       className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium transition-colors"
+                      title="Disconnetti DJ"
                     >
                       🔌
                     </button>
@@ -1260,20 +1682,6 @@ const RemoteDJHost: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-sm text-dj-light">Audio Level</span>
-                      <span className="text-sm text-dj-light">{dj.audioLevel.toFixed(0)}%</span>
-                    </div>
-                    <div className="w-full bg-dj-primary rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all duration-100 ${
-                          dj.isMuted ? 'bg-red-500' : 'bg-dj-accent'
-                        }`}
-                        style={{ width: `${dj.isMuted ? 0 : dj.audioLevel}%` }}
-                      />
-                    </div>
-                  </div>
                   
                   <div>
                     <div className="flex justify-between items-center mb-1">
@@ -1325,3 +1733,4 @@ const RemoteDJHost: React.FC = () => {
 }
 
 export default RemoteDJHost
+

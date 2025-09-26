@@ -17,7 +17,7 @@ import DuplicateTrackDialog from './DuplicateTrackDialog'
 import StreamingDebugPanel from './StreamingDebugPanel'
 import ConfirmationDialog from '../ConfirmationDialog'
 import { DeckEffects } from '../DeckEffects'
-import RemoteDJHost from '../RemoteDJHost'
+// import RemoteDJHost from '../RemoteDJHost' // Rimosso - ora disponibile come pagina dedicata
 
 const RebuiltDJConsole: React.FC = () => {
   // ✅ NUOVO: CSS per animazione contatore ascoltatori
@@ -962,6 +962,16 @@ const RebuiltDJConsole: React.FC = () => {
     // ✅ Salva il volume corrente per il PTT
     ;(window as any).__currentStreamVolume__ = clampedVolume
     
+    // ✅ CRITICAL FIX: Aggiorna anche il mixer WebAudio per il ducking reale
+    const mixerGain = (window as any).mixerGain
+    const context = (window as any).currentMixContext
+    if (mixerGain && mixerGain.gain && context) {
+      mixerGain.gain.setValueAtTime(clampedVolume, context.currentTime)
+      console.log(`🔊 [LIVE STREAM] Mixer WebAudio aggiornato a ${Math.round(clampedVolume * 100)}%`)
+    } else {
+      console.warn('⚠️ [LIVE STREAM] Mixer WebAudio non disponibile per aggiornamento volume')
+    }
+    
     // ✅ Dispatch evento per aggiornare altri componenti
     window.dispatchEvent(new CustomEvent('djconsole:stream-volume-change', {
       detail: { volume: clampedVolume }
@@ -1247,9 +1257,13 @@ const RebuiltDJConsole: React.FC = () => {
         debugMessages={debugMessages}
       />
 
-      {/* Pannello DJ Remoti */}
-      <div className="mt-6">
-        <RemoteDJHost />
+      {/* Pannello DJ Remoti - Ora disponibile come pagina dedicata */}
+      <div className="mt-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-md">
+        <h4 className="text-blue-400 font-semibold mb-2">🎤 DJ Remoto Server</h4>
+        <div className="text-sm text-blue-300 space-y-1">
+          <div>Il server DJ Remoto è ora disponibile come pagina dedicata.</div>
+          <div>Clicca su "🎤 DJ Remoto Server" nella barra di navigazione in alto.</div>
+        </div>
       </div>
 
       {/* Footer informativo */}

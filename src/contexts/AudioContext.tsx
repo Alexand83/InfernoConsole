@@ -1006,6 +1006,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             micSource.connect(micGain)
             
             // ✅ CRITICAL FIX: Connetto SEMPRE il microfono al MediaStreamDestination per lo streaming
+            // (La logica per distinguere PTT DJ-to-DJ vs PTT Live viene gestita nel RemoteDJHost)
             micGain.connect(destinationStream)
             console.log('🎤 [MIC] Microfono connesso al MediaStreamDestination per streaming')
             
@@ -1853,7 +1854,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }
 
   // ✅ FIX: Funzione globale per aggiornare i volumi PTT dinamicamente
-  ;(window as any).updatePTTVolumesOnly = (pttActive: boolean) => {
+  ;(window as any).updatePTTVolumesOnly = async (pttActive: boolean) => {
     try {
       // ✅ FIX: Riduci i log per evitare spam - solo quando cambia stato
       const lastPTTState = (window as any).__lastPTTState__
@@ -1899,7 +1900,10 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       
       // ✅ CRITICAL FIX: PTT Ducking dalle impostazioni (default 75% = musica abbassata del 75% del volume corrente)
-      const pttDuckingLevel = (window as any).__pttDuckingLevel__ || 0.75 // Default 75% di abbassamento
+      const settings = await localDatabase.getSettings()
+      const duckingPercent = settings?.microphone?.duckingPercent ?? 75
+      const pttDuckingLevel = duckingPercent / 100 // Converte da percentuale a decimale
+      ;(window as any).__pttDuckingLevel__ = pttDuckingLevel
       
       if (pttActive) {
         // ✅ STORE: Salva il volume corrente del LiveStream prima del ducking
@@ -2532,10 +2536,66 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       ;(window as any).__lastStreamDuckingState__ = active
     }
     
-    // ✅ CRITICAL FIX: Aggiorna i volumi PTT dinamicamente
+    // ✅ CRITICAL FIX: Ducking automatico per i deck
+    const duckingPercent = settings?.microphone?.duckingPercent ?? 75
+    const duckingFactor = active ? (100 - duckingPercent) / 100 : 1.0 // Se attivo, riduce al (100-duckingPercent)%, altrimenti 100%
+    
+    if (active) {
+      // Salva i volumi originali se non sono già salvati
+      if (!(window as any).__originalDeckVolumes__) {
+        // ✅ CRITICAL FIX: Usa i volumi effettivi degli elementi audio invece dei volumi dello stato
+        const leftAudio = leftAudioRef.current
+        const rightAudio = rightAudioRef.current
+        
+        const leftVolume = leftAudio ? leftAudio.volume : state.leftDeck.localVolume
+        const rightVolume = rightAudio ? rightAudio.volume : state.rightDeck.localVolume
+        
+        ;(window as any).__originalDeckVolumes__ = {
+          left: leftVolume,
+          right: rightVolume
+        }
+        console.log(`🎤 [AUTO-DUCKING] Volumi originali salvati - Left: ${leftVolume}, Right: ${rightVolume}`)
+      }
+      
+      // Applica ducking ai deck
+      const newLeftVolume = (window as any).__originalDeckVolumes__.left * duckingFactor
+      const newRightVolume = (window as any).__originalDeckVolumes__.right * duckingFactor
+      
+      dispatch({ type: 'SET_LEFT_DECK_LOCAL_VOLUME', payload: newLeftVolume })
+      dispatch({ type: 'SET_RIGHT_DECK_LOCAL_VOLUME', payload: newRightVolume })
+      
+      console.log(`🎤 [AUTO-DUCKING] Ducking applicato - Left: ${(newLeftVolume * 100).toFixed(1)}%, Right: ${(newRightVolume * 100).toFixed(1)}%`)
+    } else {
+      // Ripristina i volumi originali
+      if ((window as any).__originalDeckVolumes__) {
+        const originalLeft = (window as any).__originalDeckVolumes__.left
+        const originalRight = (window as any).__originalDeckVolumes__.right
+        
+        // ✅ CRITICAL FIX: Ripristina sia lo stato che gli elementi audio
+        dispatch({ type: 'SET_LEFT_DECK_LOCAL_VOLUME', payload: originalLeft })
+        dispatch({ type: 'SET_RIGHT_DECK_LOCAL_VOLUME', payload: originalRight })
+        
+        // ✅ CRITICAL FIX: Ripristina anche i volumi degli elementi audio direttamente
+        const leftAudio = leftAudioRef.current
+        const rightAudio = rightAudioRef.current
+        
+        if (leftAudio) {
+          leftAudio.volume = originalLeft
+        }
+        if (rightAudio) {
+          rightAudio.volume = originalRight
+        }
+        
+        console.log(`🎤 [AUTO-DUCKING] Volumi ripristinati - Left: ${(originalLeft * 100).toFixed(1)}%, Right: ${(originalRight * 100).toFixed(1)}%`)
+        
+        // Pulisci i volumi salvati
+        delete (window as any).__originalDeckVolumes__
+      }
+    }
+    
+    // ✅ CRITICAL FIX: Aggiorna anche i volumi PTT dinamicamente
     if (typeof (window as any).updatePTTVolumesOnly === 'function') {
       // ✅ CRITICAL FIX: Imposta il livello di ducking dalle impostazioni
-      const duckingPercent = settings?.microphone?.duckingPercent ?? 75
       const pttDuckingLevel = duckingPercent / 100 // Converte da percentuale a decimale
       ;(window as any).__pttDuckingLevel__ = pttDuckingLevel
       
@@ -2548,7 +2608,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } else {
       console.warn('⚠️ [PTT] Funzione updatePTTVolumesOnly non disponibile')
     }
-  }, [settings?.microphone?.duckingPercent])
+  }, [settings?.microphone?.duckingPercent, state.leftDeck.localVolume, state.rightDeck.localVolume])
 
   // ✅ FIX: Funzione per impostare il volume master dello streaming
   const setStreamMasterVolume = useCallback((volume: number) => {
