@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Settings as SettingsIcon, Volume2, Mic, Headphones, Monitor, Save, RotateCcw, Download, Upload, Globe, Shield, Database, Radio, Info, Eye, EyeOff } from 'lucide-react'
 import { localDatabase } from '../database/LocalDatabase'
 import { useSettings, AppSettings } from '../contexts/SettingsContext'
@@ -10,6 +11,7 @@ import { updateConfig } from '../config/updateConfig'
 import { getVersionInfo, formatVersion, getChangelog, refreshVersionInfo, downloadUpdate, installUpdate } from '../utils/versionSync'
 
 const Settings = () => {
+  const [searchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState('audio')
   const [isLoading, setIsLoading] = useState(false)
   const [availableMicrophones, setAvailableMicrophones] = useState<MediaDeviceInfo[]>([])
@@ -213,6 +215,14 @@ const Settings = () => {
       console.error('❌ [SETTINGS] Errore fermata test microfono:', error)
     }
   }
+
+  // Gestisce il tab dalla URL
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab')
+    if (tabFromUrl) {
+      setActiveTab(tabFromUrl)
+    }
+  }, [searchParams])
 
   // Carica informazioni di versione
   useEffect(() => {

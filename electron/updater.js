@@ -127,30 +127,24 @@ class AppUpdater {
       
       // Controlla se è in download
       if (this.downloadState.isDownloading) {
-        dialog.showMessageBox({
-          type: 'info',
-          title: 'Download in Corso',
-          message: `L'aggiornamento alla versione ${info.version} è già in download.\nDimensione: ${fileSizeMB} MB\n\nAttendi il completamento del download.`,
-          buttons: ['OK']
-        })
+        // Invia notifica di download in corso
+        const { BrowserWindow } = require('electron')
+        const mainWindow = BrowserWindow.getAllWindows()[0]
+        if (mainWindow) {
+          mainWindow.webContents.send('download-progress', { percent: 0 })
+        }
         return
       }
       
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Aggiornamento Disponibile',
-        message: `È disponibile una nuova versione (${info.version}).\nDimensione download: ${fileSizeMB} MB\n\nVai in Impostazioni > Info per scaricare e installare l'aggiornamento.`,
-        buttons: ['Vai alle Impostazioni', 'Annulla']
-      }).then((result) => {
-        if (result.response === 0) {
-          // Invia messaggio al renderer per aprire Settings
-          const { BrowserWindow } = require('electron')
-          const mainWindow = BrowserWindow.getAllWindows()[0]
-          if (mainWindow) {
-            mainWindow.webContents.send('navigate-to-settings')
-          }
-        }
-      })
+      // Invia notifica grafica invece di dialog
+      const { BrowserWindow } = require('electron')
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+      if (mainWindow) {
+        mainWindow.webContents.send('update-available', {
+          version: info.version,
+          size: fileSizeMB
+        })
+      }
     })
 
     autoUpdater.on('update-not-available', (info) => {
@@ -211,6 +205,12 @@ class AppUpdater {
       this.downloadState.isDownloading = false
       this.downloadState.isDownloaded = true
       
+      // Invia notifica di download completato
+      const mainWindow = require('./main').getMainWindow()
+      if (mainWindow) {
+        mainWindow.webContents.send('download-complete')
+      }
+      
       // ✅ FIX: Verifica il tipo di download in base alla piattaforma
       let downloadType = 'completo'
       if (process.platform === 'darwin') {
@@ -225,22 +225,8 @@ class AppUpdater {
       }
       console.log(`📦 Tipo download: ${downloadType}`)
       
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Aggiornamento Pronto',
-        message: `L'aggiornamento alla versione ${info.version} è stato scaricato.\nTipo: ${downloadType}\n\nL'app verrà chiusa e riavviata per applicare l'aggiornamento.`,
-        buttons: ['Installa e Riavvia', 'Installa Dopo']
-      }).then((result) => {
-        if (result.response === 0) {
-          // Installa e riavvia immediatamente
-          console.log('🚀 Installazione aggiornamento e riavvio...')
-          this.downloadState.isInstalling = true
-          this.installUpdate()
-        } else {
-          // L'utente può installare dopo
-          console.log('⏰ Installazione rinviata dall\'utente')
-        }
-      })
+      // Non mostrare dialog, l'utente installerà tramite interfaccia grafica
+      console.log('✅ Download completato, pronto per installazione tramite UI')
     })
 
     // Controlla aggiornamenti all'avvio
@@ -358,32 +344,26 @@ class AppUpdater {
       const appPath = app.getPath('exe')
       const appDir = require('path').dirname(appPath)
       
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Installazione Aggiornamento',
-        message: `L'app verrà chiusa e riavviata per applicare l'aggiornamento.\n\nDopo l'installazione:\n• L'app aggiornata si troverà in: ${appDir}\n• Un collegamento "Inferno Console" sarà creato sul desktop\n• Puoi lanciare l'app dal desktop o dal menu Start\n\nClicca OK per procedere.`,
-        buttons: ['OK', 'Annulla']
-      }).then((result) => {
-        if (result.response === 0) {
-          // ✅ NUOVO: Crea collegamento desktop prima dell'installazione
-          this.createDesktopShortcut()
-          
-          // ✅ FIX: Parametri corretti per macOS e Windows
-          if (process.platform === 'darwin') {
-            // macOS: force=false, isSilent=false per installazione corretta
-            console.log('🍎 macOS: Installazione aggiornamento...')
-            autoUpdater.quitAndInstall(false, false)
-          } else {
-            // Windows: force=true, isSilent=true per installazione silenziosa
-            console.log('🪟 Windows: Installazione aggiornamento...')
-            autoUpdater.quitAndInstall(true, true)
-          }
-        } else {
-          // Annulla installazione
-          this.downloadState.isInstalling = false
-          console.log('❌ Installazione annullata dall\'utente')
-        }
-      })
+      // Invia notifica di installazione in corso
+      const mainWindow = require('./main').getMainWindow()
+      if (mainWindow) {
+        mainWindow.webContents.send('installing-update')
+      }
+      
+      // ✅ FIX: Crea collegamento desktop DOPO l'installazione
+      // Il collegamento verrà creato al prossimo avvio dell'app aggiornata
+      console.log('🔗 Collegamento desktop sarà creato al prossimo avvio')
+      
+      // ✅ FIX: Parametri corretti per macOS e Windows
+      if (process.platform === 'darwin') {
+        // macOS: force=false, isSilent=false per installazione corretta
+        console.log('🍎 macOS: Installazione aggiornamento...')
+        autoUpdater.quitAndInstall(false, false)
+      } else {
+        // Windows: force=true, isSilent=true per installazione silenziosa
+        console.log('🪟 Windows: Installazione aggiornamento...')
+        autoUpdater.quitAndInstall(true, true)
+      }
     } else {
       console.log('⚠️ Installazione non possibile:', {
         isDownloaded: this.downloadState.isDownloaded,
@@ -471,29 +451,73 @@ updaterCacheDirName: dj-console-updater`
   createDesktopShortcut() {
     try {
       const { app } = require('electron')
-      const { shell } = require('electron')
       const path = require('path')
       const fs = require('fs')
       
       if (process.platform === 'win32') {
         const desktopPath = path.join(require('os').homedir(), 'Desktop')
         const shortcutPath = path.join(desktopPath, 'Inferno Console.lnk')
-        const appPath = app.getPath('exe')
         
-        // Crea il collegamento usando PowerShell
-        const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut("${shortcutPath}"); $Shortcut.TargetPath = "${appPath}"; $Shortcut.Save()`
+        // ✅ FIX: Verifica se il collegamento esiste già
+        if (fs.existsSync(shortcutPath)) {
+          console.log('✅ Collegamento desktop già esistente:', shortcutPath)
+          return
+        }
         
-        require('child_process').exec(`powershell -Command "${psCommand}"`, (error) => {
-          if (error) {
-            console.error('❌ Errore creazione collegamento:', error)
-          } else {
-            console.log('✅ Collegamento desktop creato:', shortcutPath)
-          }
-        })
+        // ✅ FIX: Percorso corretto per electron-builder Windows
+        // electron-builder installa in: %LOCALAPPDATA%\Programs\Inferno Console\
+        const localAppData = process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local')
+        const updatedAppPath = path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno Console.exe')
+        
+        console.log('🔗 Creazione collegamento desktop...')
+        console.log('📁 Percorso collegamento:', shortcutPath)
+        console.log('📁 Percorso app aggiornata:', updatedAppPath)
+        console.log('📁 LOCALAPPDATA:', localAppData)
+        
+        // Verifica che il percorso esista prima di creare il collegamento
+        if (!fs.existsSync(updatedAppPath)) {
+          console.log('⚠️ App non ancora installata, creo collegamento con percorso corrente')
+          // Usa il percorso corrente come fallback
+          const currentAppPath = app.getPath('exe')
+          this.createShortcutWithPath(shortcutPath, currentAppPath)
+        } else {
+          this.createShortcutWithPath(shortcutPath, updatedAppPath)
+        }
       }
     } catch (error) {
       console.error('❌ Errore nella creazione del collegamento:', error)
     }
+  }
+
+  // ✅ NUOVO: Metodo separato per creare il collegamento
+  createShortcutWithPath(shortcutPath, appPath) {
+    const path = require('path')
+    
+    const psCommand = `
+      try {
+        $WshShell = New-Object -comObject WScript.Shell
+        $Shortcut = $WshShell.CreateShortcut("${shortcutPath}")
+        $Shortcut.TargetPath = "${appPath}"
+        $Shortcut.WorkingDirectory = "${path.dirname(appPath)}"
+        $Shortcut.Description = "Inferno Console - Console DJ professionale"
+        $Shortcut.IconLocation = "${appPath},0"
+        $Shortcut.Save()
+        Write-Host "SUCCESS: Collegamento creato in ${shortcutPath}"
+      } catch {
+        Write-Host "ERROR: $($_.Exception.Message)"
+        exit 1
+      }
+    `
+    
+    require('child_process').exec(`powershell -Command "${psCommand}"`, (error, stdout, stderr) => {
+      if (error) {
+        console.error('❌ Errore creazione collegamento:', error)
+        console.error('❌ Stderr:', stderr)
+      } else {
+        console.log('✅ Collegamento desktop creato con successo')
+        console.log('📋 Output:', stdout)
+      }
+    })
   }
 }
 

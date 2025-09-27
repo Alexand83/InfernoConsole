@@ -62,6 +62,24 @@ const RebuiltDJConsole: React.FC = () => {
     dispatch: streamingDispatch,
     updateErrorCount
   } = useStreaming()
+
+  // ✅ NUOVO: Listener per navigazione alle impostazioni da auto-updater
+  useEffect(() => {
+    const handleNavigateToSettings = (event: CustomEvent) => {
+      console.log('🔧 Navigazione alle impostazioni richiesta da auto-updater')
+      const tab = event.detail?.tab
+      if (tab) {
+        navigate(`/settings?tab=${tab}`)
+      } else {
+        navigate('/settings')
+      }
+    }
+    
+    window.addEventListener('navigate-to-settings', handleNavigateToSettings as EventListener)
+    return () => {
+      window.removeEventListener('navigate-to-settings', handleNavigateToSettings as EventListener)
+    }
+  }, [navigate])
   
   // ✅ FIX: Usa PlaylistContext invece di stato locale per persistenza
   // const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null)

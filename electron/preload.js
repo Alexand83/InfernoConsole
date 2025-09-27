@@ -90,7 +90,14 @@ contextBridge.exposeInMainWorld('autoUpdater', {
   onDownloadProgress: (callback) => ipcRenderer.on('download-progress', callback),
   removeDownloadProgressListener: (callback) => ipcRenderer.removeListener('download-progress', callback),
   onNavigateToSettings: (callback) => ipcRenderer.on('navigate-to-settings', callback), // ✅ NUOVO: Listener per navigazione
-  removeNavigateToSettingsListener: (callback) => ipcRenderer.removeListener('navigate-to-settings', callback)
+  removeNavigateToSettingsListener: (callback) => ipcRenderer.removeListener('navigate-to-settings', callback),
+  // ✅ NUOVO: Listener per eventi di aggiornamento
+  onUpdateAvailable: (callback) => ipcRenderer.on('update-available', callback),
+  removeUpdateAvailableListener: (callback) => ipcRenderer.removeListener('update-available', callback),
+  onDownloadComplete: (callback) => ipcRenderer.on('download-complete', callback),
+  removeDownloadCompleteListener: (callback) => ipcRenderer.removeListener('download-complete', callback),
+  onInstallingUpdate: (callback) => ipcRenderer.on('installing-update', callback),
+  removeInstallingUpdateListener: (callback) => ipcRenderer.removeListener('installing-update', callback)
 })
 
 // Simple logger bridge

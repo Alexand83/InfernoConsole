@@ -17,6 +17,7 @@ import { StreamingProvider } from './contexts/StreamingContext'
 import { DJRemotoServerProvider } from './contexts/DJRemotoServerContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import './styles/themes.css'
+import UpdateNotification from './components/UpdateNotification'
 
 function App() {
   // ✅ PERFORMANCE: Rimossi log di re-render per ridurre overhead CPU
@@ -42,17 +43,13 @@ function App() {
   React.useEffect(() => {
     const handleNavigateToSettings = () => {
       console.log('🔧 Navigazione alle impostazioni richiesta da auto-updater')
-      window.location.href = '/settings'
+      // Usa React Router invece di window.location.href
+      window.dispatchEvent(new CustomEvent('navigate-to-settings'))
     }
     
-    if (window.autoUpdater) {
-      window.autoUpdater.onNavigateToSettings(handleNavigateToSettings)
-    }
-    
+    // Non usare window.autoUpdater per la navigazione, usa solo eventi custom
     return () => {
-      if (window.autoUpdater) {
-        window.autoUpdater.removeNavigateToSettingsListener(handleNavigateToSettings)
-      }
+      // Cleanup non necessario per eventi custom
     }
   }, [])
 
@@ -77,15 +74,7 @@ function App() {
     return React.lazy(() => import('./components/YouTubeDownloader/YouTubeDownloaderPage'))
   }, [])
 
-  // ✅ LAZY LOADING per context pesanti - Caricamento differito
-  const LazyPlaylistProvider = useMemo(() => {
-    return React.lazy(() => import('./contexts/PlaylistContext').then(module => ({
-      default: ({ children }: { children: React.ReactNode }) => {
-        const { PlaylistProvider } = module
-        return <PlaylistProvider>{children}</PlaylistProvider>
-      }
-    })))
-  }, [])
+  // LazyPlaylistProvider rimosso - non utilizzato
   
   const memoizedTestConsole = useMemo(() => <TestConsole key="test-stable" />, [stableRef.current])
   // const memoizedDJRemotoServerPage = useMemo(() => <DJRemotoServerPage key="dj-remoto-server-stable" />, [stableRef.current]) // Ora è un pannello
@@ -128,6 +117,9 @@ function App() {
                   onTrackLoad={undefined} // Sarà gestito internamente
                   onDuplicateTrackWarning={undefined} // Sarà gestito internamente
                 />
+                
+                {/* ✅ NUOVO: Notifiche di aggiornamento */}
+                <UpdateNotification />
               </div>
               </ErrorBoundary>
               </DJRemotoServerProvider>

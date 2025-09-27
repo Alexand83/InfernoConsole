@@ -223,7 +223,12 @@ app.whenReady().then(() => {
   // ✅ OPTIMIZATION: Inizializza l'auto-updater in background per non bloccare l'avvio
   setTimeout(() => {
     try {
-      new AppUpdater()
+      const updater = new AppUpdater()
+      
+      // ✅ NUOVO: Crea collegamento desktop all'avvio se non esiste
+      if (process.platform === 'win32') {
+        updater.createDesktopShortcut()
+      }
     } catch (error) {
       console.error('Auto-updater initialization failed:', error)
     }
