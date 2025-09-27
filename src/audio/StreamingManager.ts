@@ -1165,8 +1165,8 @@ export class StreamingManager {
         this.addNotification('error', 'Errore MediaRecorder', 'Errore nella cattura audio')
       }
       
-      // Avvia registrazione con chunk frequenti per streaming continuo
-      this.mediaRecorder.start(100) // Chunk ogni 100ms per streaming fluido
+      // Avvia registrazione con chunk ottimizzati per streaming continuo
+      this.mediaRecorder.start(200) // ✅ PERFORMANCE: Chunk ogni 200ms per ridurre CPU (era 100ms)
       
       console.log('✅ [MEDIARECORDER] MediaRecorder avviato con successo')
       

@@ -10,7 +10,7 @@ interface LogEntry {
 
 class AudioLogger {
   private logs: LogEntry[] = []
-  private maxLogs = 1000
+  private maxLogs = 20 // ✅ PERFORMANCE: Ridotto da 1000 a 20 per ridurre memory usage
   private isEnabled = true
 
   public log(level: LogEntry['level'], category: string, message: string, data?: any): void {

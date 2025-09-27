@@ -77,7 +77,7 @@ function streamingReducer(state: StreamingState, action: StreamingAction): Strea
       const newMessages = [
         `${new Date().toLocaleTimeString()}: ${action.payload}`,
         ...state.debugMessages
-      ].slice(0, 50) // Mantieni solo gli ultimi 50 messaggi
+      ].slice(0, 20) // ✅ PERFORMANCE: Mantieni solo gli ultimi 20 messaggi (era 50)
       return { ...state, debugMessages: newMessages }
     
     case 'CLEAR_DEBUG_MESSAGES':

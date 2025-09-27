@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect } from 'react'
+import React, { useMemo, useRef } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import TopNav from './components/TopNav'
 import DJConsole from './components/DJConsole'
@@ -19,23 +19,10 @@ import ErrorBoundary from './components/ErrorBoundary'
 import './styles/themes.css'
 
 function App() {
-  // Debug: Monitor re-render dell'intero albero
-  const renderCount = useRef(0)
-  const lastRenderTime = useRef(Date.now())
-  
-  useEffect(() => {
-    renderCount.current++
-    const now = Date.now()
-    const timeSinceLastRender = now - lastRenderTime.current
-    lastRenderTime.current = now
-    
-    console.log(`🔄 [APP] Re-render #${renderCount.current} - Time since last: ${timeSinceLastRender}ms`)
-    
-    // Stack trace per identificare cosa causa il re-render
-    if (renderCount.current > 1) {
-      console.trace('🔄 [APP] Stack trace for re-render')
-    }
-  })
+  // ✅ PERFORMANCE: Rimossi log di re-render per ridurre overhead CPU
+  // Debug: Monitor re-render dell'intero albero (DISABILITATO per performance)
+  // const renderCount = useRef(0)
+  // const lastRenderTime = useRef(Date.now())
 
   // Log quando viene richiesto il refresh (ma non ricaricare la pagina)
   React.useEffect(() => {

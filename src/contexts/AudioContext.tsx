@@ -110,7 +110,7 @@ const audioReducer = (state: AudioState, action: AudioAction): AudioState => {
       const newStreams = new Map(state.remoteDJs.streams)
       const newVolumes = new Map(state.remoteDJs.volumes)
       newStreams.set(action.payload.id, action.payload.stream)
-      newVolumes.set(action.payload.id, 0.5) // Volume iniziale 50%
+      newVolumes.set(action.payload.id, 1.0) // ✅ CRITICAL FIX: Volume iniziale 100% per qualità massima
       return { 
         ...state, 
         remoteDJs: { 
@@ -713,7 +713,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // ✅ CRITICAL FIX: Avvia sincronizzazione continua solo se non è già attiva
         if (!(window as any).leftSyncInterval) {
           console.log('🔄 [SYNC LEFT] Avvio sincronizzazione continua per deck sinistro')
-          ;(window as any).leftSyncInterval = setInterval(syncLeftPosition, 200)
+          ;(window as any).leftSyncInterval = setInterval(syncLeftPosition, 500) // ✅ PERFORMANCE: Ridotto da 200ms a 500ms
         }
             
             // ✅ RIMOSSO: Event listeners che fermavano la sincronizzazione durante cambio traccia
@@ -928,7 +928,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // ✅ CRITICAL FIX: Avvia sincronizzazione continua solo se non è già attiva
         if (!(window as any).rightSyncInterval) {
           console.log('🔄 [SYNC RIGHT] Avvio sincronizzazione continua per deck destro')
-          ;(window as any).rightSyncInterval = setInterval(syncRightPosition, 200)
+          ;(window as any).rightSyncInterval = setInterval(syncRightPosition, 500) // ✅ PERFORMANCE: Ridotto da 200ms a 500ms
         }
             
             // ✅ RIMOSSO: Event listeners che fermavano la sincronizzazione durante cambio traccia
@@ -1050,7 +1050,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               
               state.remoteDJs.streams.forEach((stream, clientId) => {
                 try {
-                  const remoteVolume = state.remoteDJs.volumes.get(clientId) || 0.5
+                  // ✅ CRITICAL FIX: Volume al 100% per qualità massima live streaming
+                  const remoteVolume = 1.0 // ✅ FORZATO: 100% per qualità massima come l'host
                   
                   // Crea MediaStreamSource per il DJ remoto
                   const remoteSource = mixContext.createMediaStreamSource(stream)
@@ -1060,19 +1061,13 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                   // Connetti al destination per lo streaming
                   remoteGain.connect(destinationStream)
                   
-                  // ✅ CRITICAL FIX: Controlla se i microfoni sono mutati per i DJ remoti
-                  const isMicMuted = (window as any).__isMicMuted__ || false
-                  const isHostMicMuted = (window as any).__isHostMicMuted__ || false
+                  // ✅ CRITICAL FIX: Volume sempre al 100% per live streaming (come l'host)
+                  remoteGain.gain.setValueAtTime(remoteVolume, mixContext.currentTime)
+                  console.log(`🎤 [REMOTE DJ] DJ ${clientId} connesso allo streaming con volume ${Math.round(remoteVolume * 100)}% (QUALITÀ MASSIMA)`)
                   
-                  // Se entrambi i microfoni sono mutati, silenzia anche i DJ remoti
-                  if (isMicMuted && isHostMicMuted) {
-                    remoteGain.gain.setValueAtTime(0.0, mixContext.currentTime)
-                    console.log(`🎤 [REMOTE DJ] 🚫 DJ ${clientId} silenziato per streaming - entrambi i microfoni sono mutati`)
-                  } else {
-                    // Imposta il volume del DJ remoto
-                    remoteGain.gain.setValueAtTime(remoteVolume, mixContext.currentTime)
-                    console.log(`🎤 [REMOTE DJ] DJ ${clientId} connesso allo streaming con volume ${Math.round(remoteVolume * 100)}%`)
-                  }
+                  // ✅ CRITICAL FIX: NON controllare mute per DJ remoti nel live streaming
+                  // I DJ remoti devono sempre andare in live quando PTT Live è attivo
+                  console.log(`🎤 [REMOTE DJ] DJ ${clientId} sempre attivo per live streaming (nessun controllo mute)`)
                   
                   hasRealAudio = true
                 } catch (error) {
@@ -1426,6 +1421,40 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // ✅ ESPONI: Funzione per inizializzare AudioContext principale
   ;(window as any).ensureMainAudioContext = ensureMainAudioContext
   
+  // ✅ PERFORMANCE: Cleanup automatico ogni 30 secondi per prevenire memory leaks
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      if ((window as any).activeAudioStreams && Array.isArray((window as any).activeAudioStreams)) {
+        // Se ci sono più di 5 stream, pulisci quelli vecchi
+        if ((window as any).activeAudioStreams.length > 5) {
+          console.log(`🧹 [CLEANUP] Troppi stream audio (${(window as any).activeAudioStreams.length}), pulizia automatica...`)
+          // Chiama la funzione di cleanup direttamente qui per evitare dependency issues
+          try {
+            console.log('🧹 [CLEANUP] Inizio cleanup automatico stream audio...')
+            if ((window as any).activeAudioStreams && Array.isArray((window as any).activeAudioStreams)) {
+              ;(window as any).activeAudioStreams.forEach((stream: MediaStream, index: number) => {
+                try {
+                  if (stream && stream.getTracks) {
+                    stream.getTracks().forEach(track => {
+                      track.stop()
+                    })
+                  }
+                } catch (error) {
+                  console.warn(`⚠️ [CLEANUP] Errore fermando stream ${index}:`, error)
+                }
+              })
+              ;(window as any).activeAudioStreams = []
+            }
+          } catch (error) {
+            console.warn('⚠️ [CLEANUP] Errore cleanup automatico:', error)
+          }
+        }
+      }
+    }, 30000) // Ogni 30 secondi
+    
+    return () => clearInterval(cleanupInterval)
+  }, []) // Rimossa dependency per evitare loop
+  
   // ✅ CLEANUP: Funzione per pulire tutti gli stream audio
   const cleanupAllAudioStreams = useCallback(() => {
     try {
@@ -1448,7 +1477,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }
         })
         
-        // ✅ CLEANUP: Pulisci l'array di tracking
+        // ✅ PERFORMANCE: Pulisci l'array di tracking e limita a 5 stream massimi
         ;(window as any).activeAudioStreams = []
         console.log('🧹 [CLEANUP] Array di tracking stream pulito')
       }
@@ -3750,9 +3779,15 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         console.log(`🎵 [AudioContext] Aggiungendo stream DJ remoto: ${id}`)
         dispatch({ type: 'ADD_REMOTE_DJ_STREAM', payload: { id, stream } })
         
+        // ✅ CRITICAL FIX: Imposta immediatamente il volume al 100% per qualità massima
+        setTimeout(() => {
+          dispatch({ type: 'SET_REMOTE_DJ_VOLUME', payload: { id, volume: 1.0 } })
+          console.log(`🎵 [AudioContext] Volume DJ remoto ${id} impostato al 100% per qualità massima`)
+        }, 100) // Piccolo delay per assicurarsi che lo stream sia stato aggiunto
+        
         // L'audio viene gestito direttamente dall'elemento audio nel RemoteDJHost
         // Questo è solo per il tracking dello stato
-        console.log(`✅ [AudioContext] Stream DJ remoto ${id} aggiunto al tracking`)
+        console.log(`✅ [AudioContext] Stream DJ remoto ${id} aggiunto al tracking con volume 100%`)
       },
       removeRemoteDJStream: (id: string) => {
         console.log(`🎵 [AudioContext] Rimuovendo stream DJ remoto: ${id}`)

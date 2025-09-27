@@ -300,7 +300,7 @@ const AutoAdvanceManager: React.FC<AutoAdvanceManagerProps> = ({
       }
     }
 
-    const interval = setInterval(checkAutoAdvance, 2000) // ✅ PERFORMANCE: Ridotto da 500ms a 2000ms per ridurre CPU
+    const interval = setInterval(checkAutoAdvance, 5000) // ✅ PERFORMANCE: Ridotto da 2000ms a 5000ms per ridurre CPU
     return () => clearInterval(interval)
   }, [settings.interface.autoAdvance, audioState.leftDeck.track, audioState.rightDeck.track, audioState.leftDeck.isPlaying, audioState.rightDeck.isPlaying, handleAutoAdvance])
 

@@ -54,7 +54,7 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
   // ✅ NEW: Volume control for host audio
   const [hostVolume, setHostVolume] = useState(() => {
     const saved = sessionStorage.getItem('remoteDJ_hostVolume')
-    return saved ? parseFloat(saved) : 0.8
+    return saved ? parseFloat(saved) : 1.0 // ✅ CRITICAL FIX: Volume di default 100% per qualità massima
   })
   
   // ✅ NEW: Track if host is using PTT Live
@@ -323,14 +323,7 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
   const animationFrameRef = useRef<number | null>(null)
   const hostAudioElementRef = useRef<HTMLAudioElement | null>(null)
 
-  // Configurazione WebRTC
-  const rtcConfig = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' }
-    ]
-  }
+  // ✅ RIMOSSO: rtcConfig non più utilizzato (sostituito da optimizedRtcConfig)
 
   // Funzione per mostrare tutti i dispositivi audio disponibili
   const logAvailableAudioDevices = async () => {
@@ -416,7 +409,7 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
         
         // Salva lo stato PTT corrente
         const wasPTTDJActive = isPTTDJActive
-        const wasPTTLiveActive = isPTTLiveActive
+        // const wasPTTLiveActive = isPTTLiveActive // ❌ RIMOSSO: Non utilizzato
         
         // Ferma lo stream corrente
         localStreamRef.current.getTracks().forEach(track => track.stop())
@@ -428,15 +421,16 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
             await updateClientMicrophoneStream()
             console.log('✅ [RemoteDJClient] Stream microfono aggiornato elegantemente con nuove settings')
             
-            // Ripristina lo stato PTT se era attivo
+            // ✅ FIX: Ripristina lo stato PTT SOLO se era effettivamente attivo dall'utente
             if (wasPTTDJActive) {
               console.log('🔄 [RemoteDJClient] Ripristino PTT DJ dopo cambio settings')
               handlePTTDJPress()
             }
-            if (wasPTTLiveActive) {
-              console.log('🔄 [RemoteDJClient] Ripristino PTT Live dopo cambio settings')
-              handlePTTLivePress()
-            }
+            // ✅ CRITICAL FIX: NON riattivare automaticamente PTT Live - deve essere attivato manualmente dall'utente
+            // if (wasPTTLiveActive) {
+            //   console.log('🔄 [RemoteDJClient] Ripristino PTT Live dopo cambio settings')
+            //   handlePTTLivePress()
+            // }
           } catch (error) {
             console.error('❌ [RemoteDJClient] Errore aggiornamento elegante stream microfono:', error)
           }
@@ -532,13 +526,13 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
     try {
       // Cattura microfono usando le impostazioni dalle settings
       const micDeviceId = settings.microphone?.inputDevice === 'default' ? undefined : settings.microphone?.inputDevice
-      console.log(`🎤 [RemoteDJClient] ===== CONFIGURAZIONE MICROFONO CLIENT =====`)
+      console.log(`🎤 [RemoteDJClient] ===== CONFIGURAZIONE MICROFONO CLIENT OTTIMIZZATA =====`)
       console.log(`🎤 [RemoteDJClient] Device ID dalle settings: ${settings.microphone?.inputDevice || 'default'}`)
       console.log(`🎤 [RemoteDJClient] Device ID per getUserMedia:`, micDeviceId)
       console.log(`🎤 [RemoteDJClient] Echo Cancellation: ${settings.microphone?.echoCancellation ?? true}`)
       console.log(`🎤 [RemoteDJClient] Noise Suppression: ${settings.microphone?.noiseSuppression ?? true}`)
       console.log(`🎤 [RemoteDJClient] Auto Gain Control: ${settings.microphone?.autoGainControl ?? true}`)
-      console.log(`🎤 [RemoteDJClient] Sample Rate: 44100`)
+      console.log(`🎤 [RemoteDJClient] Sample Rate: 48000 (OTTIMIZZATO)`)
       console.log(`🎤 [RemoteDJClient] Channel Count: 1`)
       
       // Try to get the exact device first
@@ -548,28 +542,79 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
       if (micDeviceId && micDeviceId !== 'default') {
         try {
           console.log(`🎤 [RemoteDJClient] Tentativo di usare il dispositivo specifico: ${micDeviceId}`)
+          // ✅ QUALITÀ PTT: Configurazione audio ottimizzata per qualità massima
           stream = await navigator.mediaDevices.getUserMedia({
             audio: {
               deviceId: { exact: micDeviceId },
-              echoCancellation: settings.microphone?.echoCancellation ?? true,
-              noiseSuppression: settings.microphone?.noiseSuppression ?? true,
-              autoGainControl: settings.microphone?.autoGainControl ?? true,
-              sampleRate: 44100,
-              channelCount: 1
+              // ✅ PARAMETRI BASE per qualità massima
+              echoCancellation: true,             // ✅ FORZATO: Sempre attivo per qualità
+              noiseSuppression: true,             // ✅ FORZATO: Sempre attivo per pulizia
+              autoGainControl: false,             // ✅ DISABILITATO: Controllo manuale
+              // latency: 0,                         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              sampleRate: 48000,                  // ✅ OTTIMIZZATO: 48kHz per qualità superiore
+              channelCount: 1,                    // Mono per ridurre latenza
+              sampleSize: 16,                     // 16-bit per compatibilità
+              
+              // ✅ PARAMETRI GOOGLE AGGIUNTIVI per qualità massima (rimossi per compatibilità)
+              // googEchoCancellation: true,         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googNoiseSuppression: true,         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googAutoGainControl: false,         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googHighpassFilter: true,           // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googTypingNoiseDetection: true,     // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googAudioMirroring: false,          // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              
+              // ✅ PARAMETRI AGGIUNTIVI per qualità massima (rimossi per compatibilità)
+              // googDAEchoCancellation: true,       // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googNoiseReduction: true,           // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googBeamforming: true,              // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              
+              // ✅ PARAMETRI SPECIFICI per qualità PTT (rimossi per compatibilità)
+              // suppressLocalAudioPlayback: true,   // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googEchoCancellation2: true,        // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googNoiseSuppression2: true,        // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googHighpassFilter2: true,          // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googTypingNoiseDetection2: true,    // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googAudioMirroring2: false,         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googAutoGainControl2: false,        // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
             }
           })
           actualDeviceUsed = 'specific device'
           console.log(`🎤 [RemoteDJClient] ✅ Dispositivo specifico utilizzato con successo`)
         } catch (specificDeviceError) {
           console.warn(`🎤 [RemoteDJClient] ⚠️ Dispositivo specifico non disponibile, fallback a default:`, specificDeviceError)
-          // Fallback to default device
+          // ✅ QUALITÀ PTT: Fallback con configurazione audio ottimizzata
           stream = await navigator.mediaDevices.getUserMedia({
             audio: {
-              echoCancellation: settings.microphone?.echoCancellation ?? true,
-              noiseSuppression: settings.microphone?.noiseSuppression ?? true,
-              autoGainControl: settings.microphone?.autoGainControl ?? true,
-              sampleRate: 44100,
-              channelCount: 1
+              // ✅ PARAMETRI BASE per qualità massima
+              echoCancellation: true,             // ✅ FORZATO: Sempre attivo per qualità
+              noiseSuppression: true,             // ✅ FORZATO: Sempre attivo per pulizia
+              autoGainControl: false,             // ✅ DISABILITATO: Controllo manuale
+              // latency: 0,                         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              sampleRate: 48000,                  // ✅ OTTIMIZZATO: 48kHz per qualità superiore
+              channelCount: 1,                    // Mono per ridurre latenza
+              sampleSize: 16,                     // 16-bit per compatibilità
+              
+              // ✅ PARAMETRI GOOGLE AGGIUNTIVI per qualità massima (rimossi per compatibilità)
+              // googEchoCancellation: true,         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googNoiseSuppression: true,         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googAutoGainControl: false,         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googHighpassFilter: true,           // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googTypingNoiseDetection: true,     // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googAudioMirroring: false,          // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              
+              // ✅ PARAMETRI AGGIUNTIVI per qualità massima (rimossi per compatibilità)
+              // googDAEchoCancellation: true,       // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googNoiseReduction: true,           // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googBeamforming: true,              // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              
+              // ✅ PARAMETRI SPECIFICI per qualità PTT (rimossi per compatibilità)
+              // suppressLocalAudioPlayback: true,   // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googEchoCancellation2: true,        // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googNoiseSuppression2: true,        // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googHighpassFilter2: true,          // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googTypingNoiseDetection2: true,    // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googAudioMirroring2: false,         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+              // googAutoGainControl2: false,        // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
             }
           })
           actualDeviceUsed = 'default (fallback)'
@@ -577,13 +622,39 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
         }
       } else {
         console.log(`🎤 [RemoteDJClient] Utilizzo dispositivo default`)
+        // ✅ QUALITÀ PTT: Configurazione audio ottimizzata per dispositivo default
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
-            echoCancellation: settings.microphone?.echoCancellation ?? true,
-            noiseSuppression: settings.microphone?.noiseSuppression ?? true,
-            autoGainControl: settings.microphone?.autoGainControl ?? true,
-            sampleRate: 44100,
-            channelCount: 1
+            // ✅ PARAMETRI BASE per qualità massima
+            echoCancellation: true,             // ✅ FORZATO: Sempre attivo per qualità
+            noiseSuppression: true,             // ✅ FORZATO: Sempre attivo per pulizia
+            autoGainControl: false,             // ✅ DISABILITATO: Controllo manuale
+            // latency: 0,                         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            sampleRate: 48000,                  // ✅ OTTIMIZZATO: 48kHz per qualità superiore
+            channelCount: 1,                    // Mono per ridurre latenza
+            sampleSize: 16,                     // 16-bit per compatibilità
+            
+            // ✅ PARAMETRI GOOGLE AGGIUNTIVI per qualità massima (rimossi per compatibilità)
+            // googEchoCancellation: true,         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            // googNoiseSuppression: true,         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            // googAutoGainControl: false,         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            // googHighpassFilter: true,           // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            // googTypingNoiseDetection: true,     // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            // googAudioMirroring: false,          // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            
+            // ✅ PARAMETRI AGGIUNTIVI per qualità massima (rimossi per compatibilità)
+            // googDAEchoCancellation: true,       // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            // googNoiseReduction: true,           // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            // googBeamforming: true,              // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            
+            // ✅ PARAMETRI SPECIFICI per qualità PTT (rimossi per compatibilità)
+            // suppressLocalAudioPlayback: true,   // ❌ RIMOSSO: Potrebbe interferire con qualità audio
+            // googEchoCancellation2: true,        // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            // googNoiseSuppression2: true,        // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            // googHighpassFilter2: true,          // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            // googTypingNoiseDetection2: true,    // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            // googAudioMirroring2: false,         // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
+            // googAutoGainControl2: false,        // ❌ RIMOSSO: Non supportato in MediaTrackConstraints
           }
         })
         actualDeviceUsed = 'default'
@@ -662,16 +733,16 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
       
       frameCount++
       
-      // ✅ FIX: Processa audio solo ogni 2 frame per ridurre CPU usage
-      if (frameCount % 2 !== 0) {
+      // ✅ PERFORMANCE: Processa audio solo ogni 4 frame per ridurre CPU usage (15fps invece di 30fps)
+      if (frameCount % 4 !== 0) {
         animationFrameRef.current = requestAnimationFrame(monitor)
         return
       }
 
       analyserRef.current.getFloatTimeDomainData(dataArray)
       
-      // ✅ FIX: Ottimizza calcolo usando solo una parte del buffer
-      const step = Math.max(1, Math.floor(dataArray.length / 64)) // Usa solo 64 campioni
+      // ✅ PERFORMANCE: Ottimizza calcolo usando solo una parte del buffer
+      const step = Math.max(1, Math.floor(dataArray.length / 32)) // Usa solo 32 campioni (era 64)
       let sum = 0
       let count = 0
       for (let i = 0; i < dataArray.length; i += step) {
@@ -683,9 +754,9 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
 
       setAudioLevel(level)
 
-      // ✅ FIX: Invia audio level al server ogni 200ms per ridurre spam
+      // ✅ PERFORMANCE: Invia audio level al server ogni 500ms per ridurre spam (era 200ms)
       const now = Date.now()
-      if (wsRef.current?.readyState === WebSocket.OPEN && now % 200 < 16) {
+      if (wsRef.current?.readyState === WebSocket.OPEN && now % 500 < 32) {
         wsRef.current.send(JSON.stringify({
           type: 'audio-level',
           level: level
@@ -906,8 +977,44 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
 
   const startWebRTCConnection = async () => {
     try {
-      // Crea peer connection
-      peerConnectionRef.current = new RTCPeerConnection(rtcConfig)
+      // ✅ QUALITÀ PTT: Configurazione WebRTC ottimizzata per qualità audio massima
+      const optimizedRtcConfig = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' }
+        ],
+        iceCandidatePoolSize: 10, // ✅ OTTIMIZZATO: Più candidati ICE per connessione migliore
+        bundlePolicy: 'max-bundle' as RTCBundlePolicy, // ✅ OTTIMIZZATO: Bundle per efficienza
+        rtcpMuxPolicy: 'require' as RTCRtcpMuxPolicy, // ✅ OTTIMIZZATO: RTCP multiplexing obbligatorio
+        iceTransportPolicy: 'all' as RTCIceTransportPolicy, // ✅ OTTIMIZZATO: Usa tutti i trasporti ICE
+        iceConnectionTimeout: 30000, // ✅ OTTIMIZZATO: Timeout più lungo per connessione
+        iceGatheringTimeout: 10000, // ✅ OTTIMIZZATO: Timeout raccolta ICE
+        // ✅ QUALITÀ AUDIO: Configurazione codec audio per qualità massima
+        sdpSemantics: 'unified-plan', // ✅ OTTIMIZZATO: Piano unificato per migliore compatibilità
+      }
+      
+      // Crea peer connection con configurazione ottimizzata
+      peerConnectionRef.current = new RTCPeerConnection(optimizedRtcConfig)
+
+      // ✅ QUALITÀ PTT: Configurazione codec audio per qualità massima
+      const transceivers = peerConnectionRef.current.getTransceivers()
+      if (transceivers.length > 0) {
+        // Configura il primo transceiver per audio con codec ottimizzato
+        const audioTransceiver = transceivers.find(t => t.sender.track?.kind === 'audio')
+        if (audioTransceiver) {
+          // ✅ OTTIMIZZATO: Configurazione codec audio per qualità massima
+          audioTransceiver.setCodecPreferences([
+            { mimeType: 'audio/opus', clockRate: 48000, channels: 2 }, // ✅ OPUS 48kHz stereo per qualità massima
+            { mimeType: 'audio/opus', clockRate: 48000, channels: 1 }, // ✅ OPUS 48kHz mono per compatibilità
+            { mimeType: 'audio/PCMU', clockRate: 8000, channels: 1 },  // ✅ Fallback PCMU
+            { mimeType: 'audio/PCMA', clockRate: 8000, channels: 1 },  // ✅ Fallback PCMA
+          ])
+          console.log('🎤 [RemoteDJClient] ✅ Codec audio configurati per qualità massima')
+        }
+      }
 
       // ✅ NEW: Crea DataChannel per comunicazione con l'host
       const dataChannel = peerConnectionRef.current.createDataChannel('ducking', {
@@ -952,10 +1059,38 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
         console.error('📡 [DataChannel] Errore:', error)
       }
 
-      // Aggiungi stream locale
+      // ✅ QUALITÀ PTT: Aggiungi stream locale con configurazione ottimizzata
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => {
-          peerConnectionRef.current!.addTrack(track, localStreamRef.current!)
+          if (track.kind === 'audio') {
+            // ✅ CRITICAL FIX: Track audio DISABILITATO di default per PTT mode
+            track.enabled = false // ✅ PTT MODE: Microfono muto di default, si attiva solo con PTT
+            // track.muted = false  // ❌ RIMOSSO: Proprietà read-only
+            
+            // ✅ OTTIMIZZATO: Aggiungi track con configurazione ottimizzata
+            const sender = peerConnectionRef.current!.addTrack(track, localStreamRef.current!)
+            
+            // ✅ QUALITÀ PTT: Configurazione parametri di trasmissione per qualità massima
+            if (sender && sender.track) {
+              // Configura parametri di trasmissione per qualità audio massima
+              const params = sender.getParameters()
+              if (params.encodings && params.encodings.length > 0) {
+                // ✅ OTTIMIZZATO: Configurazione encoding per qualità massima
+                params.encodings[0].maxBitrate = 128000 // ✅ 128kbps per qualità massima
+                params.encodings[0].maxFramerate = 30   // ✅ 30fps per qualità massima
+                params.encodings[0].scaleResolutionDownBy = 1 // ✅ Nessuna riduzione risoluzione
+                // params.encodings[0].adaptivePtime = false // ❌ RIMOSSO: Proprietà non supportata
+                params.encodings[0].priority = 'high' // ✅ Priorità alta per qualità
+                params.encodings[0].networkPriority = 'high' // ✅ Priorità rete alta
+                
+                sender.setParameters(params)
+                console.log('🎤 [RemoteDJClient] ✅ Parametri audio configurati per qualità massima')
+              }
+            }
+          } else {
+            // Per track non audio, aggiungi normalmente
+            peerConnectionRef.current!.addTrack(track, localStreamRef.current!)
+          }
         })
       }
 
@@ -1032,15 +1167,65 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
         console.log('🔊 [RemoteDJ] Audio dell\'host riprodotto')
       }
 
-      // Crea offer
-      const offer = await peerConnectionRef.current.createOffer()
-      await peerConnectionRef.current.setLocalDescription(offer)
+      // ✅ QUALITÀ PTT: Crea offer con configurazione ottimizzata per qualità massima
+      const offer = await peerConnectionRef.current.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false,
+        // voiceActivityDetection: true, // ❌ RIMOSSO: Non supportato in RTCOfferOptions
+        iceRestart: false // ✅ OTTIMIZZATO: Non riavviare ICE per stabilità
+      })
+      
+      // ✅ QUALITÀ PTT: Ottimizza SDP per qualità audio massima
+      let optimizedSdp = offer.sdp || ''
+      
+      // ✅ OTTIMIZZATO: Configurazione OPUS per qualità massima
+      optimizedSdp = optimizedSdp.replace(
+        /a=fmtp:111 (.*)/g,
+        'a=fmtp:111 minptime=10;useinbandfec=1;stereo=1;maxplaybackrate=48000;maxaveragebitrate=128000'
+      )
+      
+      // ✅ OTTIMIZZATO: Configurazione OPUS per mono (fallback)
+      optimizedSdp = optimizedSdp.replace(
+        /a=fmtp:109 (.*)/g,
+        'a=fmtp:109 minptime=10;useinbandfec=1;stereo=0;maxplaybackrate=48000;maxaveragebitrate=128000'
+      )
+      
+      // ✅ OTTIMIZZATO: Configurazione PCMA/PCMU per qualità massima
+      optimizedSdp = optimizedSdp.replace(
+        /a=fmtp:8 (.*)/g,
+        'a=fmtp:8 ptime=20;maxptime=20'
+      )
+      optimizedSdp = optimizedSdp.replace(
+        /a=fmtp:0 (.*)/g,
+        'a=fmtp:0 ptime=20;maxptime=20'
+      )
+      
+      // ✅ OTTIMIZZATO: Configurazione generale per qualità massima
+      optimizedSdp = optimizedSdp.replace(
+        /a=rtcp-fb:111 (.*)/g,
+        'a=rtcp-fb:111 goog-remb\na=rtcp-fb:111 transport-cc\na=rtcp-fb:111 ccm fir\na=rtcp-fb:111 nack\na=rtcp-fb:111 nack pli'
+      )
+      
+      // ✅ OTTIMIZZATO: Configurazione bandwidth per qualità massima
+      optimizedSdp = optimizedSdp.replace(
+        /m=audio \d+ RTP\/SAVPF/g,
+        'm=audio 9 RTP/SAVPF 111 109 8 0'
+      )
+      
+      // Crea offer ottimizzato
+      const optimizedOffer = new RTCSessionDescription({
+        type: 'offer',
+        sdp: optimizedSdp
+      })
+      
+      await peerConnectionRef.current.setLocalDescription(optimizedOffer)
+      console.log('🎤 [RemoteDJClient] ✅ Offer SDP ottimizzato per qualità massima')
 
-      // Invia offer
+      // ✅ QUALITÀ PTT: Invia offer ottimizzato
       if (wsRef.current) {
         wsRef.current.send(JSON.stringify({
           type: 'webrtc-offer',
-          sdp: offer.sdp
+          sdp: optimizedSdp // ✅ OTTIMIZZATO: Usa SDP ottimizzato per qualità massima
         }))
       }
 
@@ -1057,13 +1242,41 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
 
     try {
       await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }))
-      const answer = await peerConnectionRef.current.createAnswer()
-      await peerConnectionRef.current.setLocalDescription(answer)
+      
+      // ✅ QUALITÀ PTT: Crea answer con configurazione ottimizzata
+      const answer = await peerConnectionRef.current.createAnswer({
+        // voiceActivityDetection: true, // ❌ RIMOSSO: Non supportato in RTCOfferOptions
+        iceRestart: false // ✅ OTTIMIZZATO: Non riavviare ICE per stabilità
+      })
+      
+      // ✅ QUALITÀ PTT: Ottimizza SDP answer per qualità audio massima
+      let optimizedAnswerSdp = answer.sdp || ''
+      
+      // ✅ OTTIMIZZATO: Configurazione OPUS per qualità massima
+      optimizedAnswerSdp = optimizedAnswerSdp.replace(
+        /a=fmtp:111 (.*)/g,
+        'a=fmtp:111 minptime=10;useinbandfec=1;stereo=1;maxplaybackrate=48000;maxaveragebitrate=128000'
+      )
+      
+      // ✅ OTTIMIZZATO: Configurazione OPUS per mono (fallback)
+      optimizedAnswerSdp = optimizedAnswerSdp.replace(
+        /a=fmtp:109 (.*)/g,
+        'a=fmtp:109 minptime=10;useinbandfec=1;stereo=0;maxplaybackrate=48000;maxaveragebitrate=128000'
+      )
+      
+      // Crea answer ottimizzato
+      const optimizedAnswer = new RTCSessionDescription({
+        type: 'answer',
+        sdp: optimizedAnswerSdp
+      })
+      
+      await peerConnectionRef.current.setLocalDescription(optimizedAnswer)
+      console.log('🎤 [RemoteDJClient] ✅ Answer SDP ottimizzato per qualità massima')
 
       if (wsRef.current) {
         wsRef.current.send(JSON.stringify({
           type: 'webrtc-answer',
-          sdp: answer.sdp
+          sdp: optimizedAnswerSdp // ✅ OTTIMIZZATO: Usa SDP ottimizzato per qualità massima
         }))
       }
 
@@ -1099,12 +1312,33 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
     // ✅ NEW: Clean up reconnection timeout
     resetReconnectionState()
     
+    // ✅ PERFORMANCE: Cleanup completo WebSocket
     if (wsRef.current) {
-      wsRef.current.close()
+      try {
+        wsRef.current.close(1000, 'Client disconnecting') // Codice di chiusura normale
+        wsRef.current.onopen = null
+        wsRef.current.onmessage = null
+        wsRef.current.onclose = null
+        wsRef.current.onerror = null
+      } catch (error) {
+        console.warn('⚠️ [RemoteDJClient] Errore chiusura WebSocket:', error)
+      }
+      wsRef.current = null
     }
+    
+    // ✅ PERFORMANCE: Cleanup completo WebRTC
     if (peerConnectionRef.current) {
-      peerConnectionRef.current.close()
+      try {
+        peerConnectionRef.current.close()
+        peerConnectionRef.current.ondatachannel = null
+        peerConnectionRef.current.onicecandidate = null
+        peerConnectionRef.current.onconnectionstatechange = null
+      } catch (error) {
+        console.warn('⚠️ [RemoteDJClient] Errore chiusura WebRTC:', error)
+      }
+      peerConnectionRef.current = null
     }
+    
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop())
     }
@@ -1123,16 +1357,19 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
     }
     console.log(`💬 [RemoteDJClient] Aggiungendo messaggio:`, newMessage)
     
-    // ✅ CRITICAL FIX: Usa functional update per evitare stale closure
+    // ✅ PERFORMANCE: Usa functional update per evitare stale closure
     setChatMessages(prevMessages => {
       console.log(`💬 [RemoteDJClient] Messaggi precedenti:`, prevMessages.length)
       const updatedMessages = [...prevMessages, newMessage]
-      console.log(`💬 [RemoteDJClient] Messaggi aggiornati:`, updatedMessages.length)
+      
+      // ✅ PERFORMANCE: Limita a 50 messaggi massimi per evitare memory leaks
+      const limitedMessages = updatedMessages.slice(-50)
+      console.log(`💬 [RemoteDJClient] Messaggi aggiornati:`, limitedMessages.length, `(limite: 50)`)
       
       // Salva in sessionStorage
-      sessionStorage.setItem('remoteDJ_chatMessages', JSON.stringify(updatedMessages))
+      sessionStorage.setItem('remoteDJ_chatMessages', JSON.stringify(limitedMessages))
       
-      return updatedMessages
+      return limitedMessages
     })
   }
 
@@ -1252,53 +1489,7 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
     // Il ducking deve essere gestito solo dall'host per mantenere la sincronizzazione
   }
 
-  // ✅ NEW: Handle host microphone change with clean reconnection
-  const handleHostMicrophoneChangeReconnect = async () => {
-    console.log('🔄 [RemoteDJClient] Inizio riconnessione pulita per cambio microfono host')
-    
-    try {
-      // Salva lo stato corrente
-      const currentHostId = hostIP
-      
-      if (!currentHostId) {
-        console.log('⚠️ [RemoteDJClient] Nessun host selezionato - nessuna riconnessione necessaria')
-        return
-      }
-      
-      // ✅ CRITICAL FIX: Non controllare isConnected perché potrebbe essere già false a causa della disconnessione
-      console.log('🔄 [RemoteDJClient] Host IP trovato, procedo con riconnessione automatica:', currentHostId)
-
-      console.log(`🔄 [RemoteDJClient] Disconnessione per riconnessione pulita da ${currentHostId}`)
-      
-      // Disconnetti completamente
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close()
-      }
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop())
-        localStreamRef.current = null
-      }
-      if (wsRef.current) {
-        wsRef.current.close()
-      }
-      
-      // Resetta tutti gli stati
-      setIsConnected(false)
-      peerConnectionRef.current = null
-      wsRef.current = null
-      
-      console.log('🔄 [RemoteDJClient] Disconnessione completata - riconnessione automatica in 2 secondi...')
-      
-      // Riconnetti automaticamente dopo un breve delay
-      setTimeout(() => {
-        console.log(`🔄 [RemoteDJClient] Inizio riconnessione automatica a ${currentHostId}`)
-        connectToHost()
-      }, 2000)
-      
-    } catch (error) {
-      console.error('❌ [RemoteDJClient] Errore durante riconnessione per cambio microfono:', error)
-    }
-  }
+  // ✅ RIMOSSO: handleHostMicrophoneChangeReconnect non più utilizzato
 
   // ✅ OLD: Handle microphone change renegotiation from host (DEPRECATA)
   const handleMicrophoneChangeRenegotiation_OLD = async () => {

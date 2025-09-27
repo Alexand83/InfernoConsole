@@ -263,9 +263,9 @@ const RebuiltDJConsole: React.FC = () => {
         }
       }
 
-      // ✅ OTTIMIZZATO: Aggiorna ogni 30 secondi per ridurre CPU usage
-      console.log('🔍 [LISTENERS] ✅ Creando interval per contatore automatico (ogni 30s)')
-      const interval = setInterval(updateListenerCount, 30000) // ✅ PERFORMANCE: Ridotto da 15000ms a 30000ms
+      // ✅ PERFORMANCE: Aggiorna ogni 60 secondi per ridurre CPU usage
+      console.log('🔍 [LISTENERS] ✅ Creando interval per contatore automatico (ogni 60s)')
+      const interval = setInterval(updateListenerCount, 60000) // ✅ PERFORMANCE: Ridotto da 30000ms a 60000ms
       console.log('🔍 [LISTENERS] ✅ Eseguendo primo aggiornamento immediato')
       updateListenerCount() // Aggiorna immediatamente
 

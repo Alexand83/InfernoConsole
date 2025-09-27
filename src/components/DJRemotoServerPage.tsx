@@ -1177,7 +1177,12 @@ const DJRemotoServerPage: React.FC = () => {
       timestamp: new Date(),
       isSystem
     }
-    updateChatMessages(prev => [...prev, newMessage])
+    
+    // ✅ PERFORMANCE: Limita a 50 messaggi massimi per evitare memory leaks
+    updateChatMessages(prev => {
+      const updatedMessages = [...prev, newMessage]
+      return updatedMessages.slice(-50) // Mantieni solo gli ultimi 50 messaggi
+    })
   }
 
   const handleSendChatMessage = (message: string) => {
@@ -1774,15 +1779,16 @@ const DJRemotoServerPage: React.FC = () => {
             // ✅ FINAL FIX: Usa replaceTrack() - è stato progettato per questo!
             await updateExistingWebRTCConnections_PROPER()
             
-            // Ripristina lo stato PTT se era attivo
+            // ✅ FIX: Ripristina lo stato PTT SOLO se era effettivamente attivo dall'utente
             if (wasPTTDJActive) {
               console.log('🔄 [DJRemotoServerPage] Ripristino PTT DJ dopo cambio settings')
               handlePTTDJPress()
             }
-            if (wasPTTLiveActive) {
-              console.log('🔄 [DJRemotoServerPage] Ripristino PTT Live dopo cambio settings')
-              handlePTTLivePress()
-            }
+            // ✅ CRITICAL FIX: NON riattivare automaticamente PTT Live - deve essere attivato manualmente dall'utente
+            // if (wasPTTLiveActive) {
+            //   console.log('🔄 [DJRemotoServerPage] Ripristino PTT Live dopo cambio settings')
+            //   handlePTTLivePress()
+            // }
           } catch (error) {
             console.error('❌ [DJRemotoServerPage] Errore ricreazione stream microfono:', error)
           }

@@ -142,10 +142,11 @@ const DJConsole = memo(() => {
     })
   }, [audioState.leftDeck.track?.id, audioState.rightDeck.track?.id, audioState.leftDeck.isPlaying, audioState.rightDeck.isPlaying])
 
-  // Log per tracciare i re-render (senza re-mount)
-  useEffect(() => {
-    console.log('🔄 [DJConsole] Component re-rendered (no unmount)')
-  })
+  // ✅ PERFORMANCE: Rimosso log di re-render per ridurre overhead CPU
+  // Log per tracciare i re-render (DISABILITATO per performance)
+  // useEffect(() => {
+  //   console.log('🔄 [DJConsole] Component re-rendered (no unmount)')
+  // })
 
   // Auto-advance listener (simplified for now)
   useEffect(() => {

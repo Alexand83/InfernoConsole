@@ -395,7 +395,7 @@ const Settings = () => {
             showSpectrum: true,
             showBeatGrid: false,
             animations: true,
-            autoAdvance: false,
+            autoAdvance: true,
             playlistLoop: true
           }
         }
@@ -418,7 +418,12 @@ const Settings = () => {
   }
 
   // ✅ FUNZIONI PER GESTIRE SERVER ICECAST
+  // ✅ FUTURE FEATURE: Funzionalità mantenuta per versioni future
   const addNewServer = async () => {
+    // ⚠️ DISABILITATO: Solo server Inferno disponibile in questa versione
+    console.log('🚫 [SETTINGS] Aggiunta server disabilitata - Solo server Inferno disponibile')
+    return
+    
     const newServer = {
       name: 'Nuovo Server',
       host: '',
@@ -442,7 +447,12 @@ const Settings = () => {
     }
   }
 
+  // ✅ FUTURE FEATURE: Funzionalità mantenuta per versioni future
   const updateServer = async (serverId: string, field: string, value: any) => {
+    // ⚠️ DISABILITATO: Server Inferno non modificabile in questa versione
+    console.log('🚫 [SETTINGS] Modifica server disabilitata - Server Inferno non modificabile')
+    return
+    
     try {
       await localDatabase.updateIcecastServer(serverId, { [field]: value })
       
@@ -454,7 +464,12 @@ const Settings = () => {
     }
   }
 
+  // ✅ FUTURE FEATURE: Funzionalità mantenuta per versioni future
   const deleteServer = async (serverId: string) => {
+    // ⚠️ DISABILITATO: Server Inferno non eliminabile in questa versione
+    console.log('🚫 [SETTINGS] Eliminazione server disabilitata - Server Inferno non eliminabile')
+    return
+    
     if (confirm('Sei sicuro di voler eliminare questo server?')) {
       try {
         await localDatabase.deleteIcecastServer(serverId)
@@ -1263,7 +1278,9 @@ const Settings = () => {
                     <h3 className="text-lg font-medium text-white">Server Icecast</h3>
                     <button
                       onClick={addNewServer}
-                      className="px-3 py-1 bg-dj-highlight text-dj-primary rounded text-sm font-medium hover:bg-dj-highlight/80 transition-colors"
+                      className="px-3 py-1 bg-gray-600 text-gray-400 rounded text-sm font-medium cursor-not-allowed opacity-50 transition-colors"
+                      disabled
+                      title="Funzionalità disabilitata - Solo server Inferno disponibile"
                     >
                       + Aggiungi Server
                     </button>
@@ -1288,7 +1305,9 @@ const Settings = () => {
                           </div>
                           <button
                             onClick={() => deleteServer(server.id)}
-                            className="text-red-400 hover:text-red-300 text-sm"
+                            className="text-gray-500 cursor-not-allowed text-sm opacity-50"
+                            disabled
+                            title="Funzionalità disabilitata - Server Inferno non eliminabile"
                           >
                             Elimina
                           </button>
@@ -1301,7 +1320,9 @@ const Settings = () => {
                               type="text"
                               value={server.name}
                               onChange={(e) => updateServer(server.id, 'name', e.target.value)}
-                              className="dj-input w-full text-sm"
+                              className="dj-input w-full text-sm bg-gray-700 text-gray-400 cursor-not-allowed opacity-50"
+                              disabled
+                              title="Server Inferno non modificabile"
                             />
                           </div>
                           <div>
@@ -1310,7 +1331,9 @@ const Settings = () => {
                               type="text"
                               value={server.host}
                               onChange={(e) => updateServer(server.id, 'host', e.target.value)}
-                              className="dj-input w-full text-sm"
+                              className="dj-input w-full text-sm bg-gray-700 text-gray-400 cursor-not-allowed opacity-50"
+                              disabled
+                              title="Server Inferno non modificabile"
                             />
                           </div>
                           <div>
@@ -1319,7 +1342,9 @@ const Settings = () => {
                               type="number"
                               value={server.port}
                               onChange={(e) => updateServer(server.id, 'port', parseInt(e.target.value) || 5040)}
-                              className="dj-input w-full text-sm"
+                              className="dj-input w-full text-sm bg-gray-700 text-gray-400 cursor-not-allowed opacity-50"
+                              disabled
+                              title="Server Inferno non modificabile"
                             />
                           </div>
                           <div>
@@ -1328,7 +1353,9 @@ const Settings = () => {
                               type="text"
                               value={server.mount}
                               onChange={(e) => updateServer(server.id, 'mount', e.target.value)}
-                              className="dj-input w-full text-sm"
+                              className="dj-input w-full text-sm bg-gray-700 text-gray-400 cursor-not-allowed opacity-50"
+                              disabled
+                              title="Server Inferno non modificabile"
                             />
                           </div>
                           <div>
@@ -1337,7 +1364,9 @@ const Settings = () => {
                               type="text"
                               value={server.username}
                               onChange={(e) => updateServer(server.id, 'username', e.target.value)}
-                              className="dj-input w-full text-sm"
+                              className="dj-input w-full text-sm bg-gray-700 text-gray-400 cursor-not-allowed opacity-50"
+                              disabled
+                              title="Server Inferno non modificabile"
                             />
                           </div>
                           <div>
@@ -1347,7 +1376,9 @@ const Settings = () => {
                                 type={showPassword ? 'text' : 'password'}
                                 value={server.password}
                                 onChange={(e) => updateServer(server.id, 'password', e.target.value)}
-                                className="dj-input w-full text-sm pr-8"
+                                className="dj-input w-full text-sm pr-8 bg-gray-700 text-gray-400 cursor-not-allowed opacity-50"
+                                disabled
+                                title="Server Inferno non modificabile"
                               />
                               <button
                                 type="button"
@@ -1367,9 +1398,11 @@ const Settings = () => {
                               type="checkbox"
                               checked={server.useSSL}
                               onChange={(e) => updateServer(server.id, 'useSSL', e.target.checked)}
-                              className="rounded border-dj-accent/30 bg-dj-primary text-dj-highlight focus:ring-dj-highlight"
+                              className="rounded border-dj-accent/30 bg-gray-700 text-gray-400 cursor-not-allowed opacity-50"
+                              disabled
+                              title="Server Inferno non modificabile"
                             />
-                            <span className="text-xs text-dj-light/60">SSL</span>
+                            <span className="text-xs text-gray-400">SSL</span>
                           </div>
                         </div>
                       </div>

@@ -264,21 +264,10 @@ interface PlaylistContextType {
 const PlaylistContext = createContext<PlaylistContextType | undefined>(undefined)
 
 export function PlaylistProvider({ children }: { children: React.ReactNode }) {
-  // Debug: Monitor re-render del context
-  const renderCount = useRef(0)
-  const lastRenderTime = useRef(Date.now())
-  
-  useEffect(() => {
-    renderCount.current++
-    const now = Date.now()
-    const timeSinceLastRender = now - lastRenderTime.current
-    lastRenderTime.current = now
-    
-    // Log solo ogni 10 re-render per ridurre spam nei log
-    if (renderCount.current % 10 === 0) {
-      console.log(`🔄 [PLAYLIST_CONTEXT] Re-render #${renderCount.current} - Time since last: ${timeSinceLastRender}ms`)
-    }
-  })
+  // ✅ PERFORMANCE: Rimossi log di re-render per ridurre overhead CPU
+  // Debug: Monitor re-render del context (DISABILITATO per performance)
+  // const renderCount = useRef(0)
+  // const lastRenderTime = useRef(Date.now())
 
   const [state, dispatch] = useReducer(playlistReducer, initialState)
 

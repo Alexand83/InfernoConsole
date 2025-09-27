@@ -72,6 +72,8 @@ export interface DatabaseSettings {
     showSpectrum: boolean
     showBeatGrid?: boolean
     animations?: boolean
+    autoAdvance: boolean
+    playlistLoop: boolean
   }
   streaming: {
     defaultBitrate: number
@@ -133,7 +135,9 @@ class LocalDatabase {
         showWaveform: true,
         showSpectrum: true,
         showBeatGrid: true,
-        animations: true
+        animations: true,
+        autoAdvance: true,  // ✅ ABILITATO DI DEFAULT
+        playlistLoop: true  // ✅ ABILITATO DI DEFAULT
       },
       streaming: {
         defaultBitrate: 128,
@@ -142,31 +146,20 @@ class LocalDatabase {
         autoConnect: false,
         reconnectAttempts: 5,
         bridgeUrl: '',
-        icecastServers: [  // ✅ MULTIPLI SERVER ICECAST
+        icecastServers: [  // ✅ SERVER ICECAST INFERNO
           {
-            id: 'default-server',
-            name: 'RadioBoss Server',
-            host: '82.145.63.6',
-            port: 5040,
-            mount: '/stream',
-            username: 'source',
-            password: '811126864dj',
-            useSSL: false,
-            isDefault: true
-          },
-          {
-            id: 'backup-server',
-            name: 'Backup Server',
+            id: 'inferno-server',
+            name: 'Inferno Server',
             host: 'dj.onlinewebone.com',
             port: 8004,
             mount: '/live',
             username: 'source',
             password: 'inferno@inferno',
             useSSL: false,
-            isDefault: false
+            isDefault: true
           }
         ],
-        defaultIcecastServerId: 'default-server',  // ✅ SERVER DI DEFAULT
+        defaultIcecastServerId: 'inferno-server',  // ✅ SERVER INFERNO DI DEFAULT
         metadata: {
           stationUrl: 'https://dj.onlinewebone.com',
           genre: 'Electronic/Live DJ',
