@@ -967,8 +967,25 @@ ipcMain.handle('install-update', async () => {
 ipcMain.handle('reset-updater-cache', async () => {
   try {
     const { autoUpdater } = require('electron-updater')
-    autoUpdater.clearCache()
-    console.log('✅ Cache auto-updater pulita')
+    
+    // ✅ FIX: Controlla se clearCache esiste prima di chiamarlo
+    if (typeof autoUpdater.clearCache === 'function') {
+      autoUpdater.clearCache()
+      console.log('✅ Cache auto-updater pulita')
+    } else {
+      console.log('⚠️ clearCache non disponibile, pulizia manuale...')
+      // Pulizia manuale della cache
+      const os = require('os')
+      const path = require('path')
+      const fs = require('fs')
+      
+      const cacheDir = path.join(os.tmpdir(), 'dj-console-updater')
+      if (fs.existsSync(cacheDir)) {
+        fs.rmSync(cacheDir, { recursive: true, force: true })
+        console.log('✅ Cache manuale pulita')
+      }
+    }
+    
     return { success: true }
   } catch (error) {
     console.error('Errore nel reset cache auto-updater:', error)
@@ -1029,8 +1046,23 @@ ipcMain.handle('force-check-updates', async () => {
   try {
     const { autoUpdater } = require('electron-updater')
     
-    // Pulisce la cache prima del controllo
-    autoUpdater.clearCache()
+    // ✅ FIX: Controlla se clearCache esiste prima di chiamarlo
+    if (typeof autoUpdater.clearCache === 'function') {
+      autoUpdater.clearCache()
+      console.log('✅ Cache auto-updater pulita')
+    } else {
+      console.log('⚠️ clearCache non disponibile, pulizia manuale...')
+      // Pulizia manuale della cache
+      const os = require('os')
+      const path = require('path')
+      const fs = require('fs')
+      
+      const cacheDir = path.join(os.tmpdir(), 'dj-console-updater')
+      if (fs.existsSync(cacheDir)) {
+        fs.rmSync(cacheDir, { recursive: true, force: true })
+        console.log('✅ Cache manuale pulita')
+      }
+    }
     
     // Controlla aggiornamenti
     const updateCheckResult = await autoUpdater.checkForUpdates()
@@ -1047,7 +1079,7 @@ ipcMain.handle('force-update-check', async () => {
     const AppUpdater = require('./updater')
     const updater = new AppUpdater()
     
-    // Forza il controllo con reset completo
+    // ✅ FIX: Usa il metodo sicuro per il controllo forzato
     updater.forceUpdateCheck()
     
     return { success: true, message: 'Controllo forzato avviato' }

@@ -267,9 +267,23 @@ class AppUpdater {
   resetUpdaterCache() {
     try {
       console.log('🧹 Reset cache auto-updater...')
-      // Pulisce la cache dell'auto-updater
-      autoUpdater.clearCache()
-      console.log('✅ Cache auto-updater pulita')
+      // ✅ FIX: Controlla se clearCache esiste prima di chiamarlo
+      if (typeof autoUpdater.clearCache === 'function') {
+        autoUpdater.clearCache()
+        console.log('✅ Cache auto-updater pulita')
+      } else {
+        console.log('⚠️ clearCache non disponibile, pulizia manuale...')
+        // Pulizia manuale della cache
+        const os = require('os')
+        const path = require('path')
+        const fs = require('fs')
+        
+        const cacheDir = path.join(os.tmpdir(), 'dj-console-updater')
+        if (fs.existsSync(cacheDir)) {
+          fs.rmSync(cacheDir, { recursive: true, force: true })
+          console.log('✅ Cache manuale pulita')
+        }
+      }
     } catch (error) {
       console.error('❌ Errore durante il reset cache:', error)
     }
@@ -293,8 +307,23 @@ class AppUpdater {
     try {
       console.log('🔄 Controllo forzato aggiornamenti con reset completo...')
       
-      // Reset completo della cache
-      autoUpdater.clearCache()
+      // ✅ FIX: Reset sicuro della cache
+      if (typeof autoUpdater.clearCache === 'function') {
+        autoUpdater.clearCache()
+        console.log('✅ Cache auto-updater pulita')
+      } else {
+        console.log('⚠️ clearCache non disponibile, pulizia manuale...')
+        // Pulizia manuale della cache
+        const os = require('os')
+        const path = require('path')
+        const fs = require('fs')
+        
+        const cacheDir = path.join(os.tmpdir(), 'dj-console-updater')
+        if (fs.existsSync(cacheDir)) {
+          fs.rmSync(cacheDir, { recursive: true, force: true })
+          console.log('✅ Cache manuale pulita')
+        }
+      }
       
       // Reset dello stato
       this.downloadState = {
