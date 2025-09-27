@@ -88,7 +88,9 @@ contextBridge.exposeInMainWorld('autoUpdater', {
   forceUpdateCheck: () => ipcRenderer.invoke('force-update-check'), // ✅ FIX: Nuovo metodo per reset completo
   checkGitHubFiles: () => ipcRenderer.invoke('check-github-files'), // ✅ NUOVO: Verifica file GitHub
   onDownloadProgress: (callback) => ipcRenderer.on('download-progress', callback),
-  removeDownloadProgressListener: (callback) => ipcRenderer.removeListener('download-progress', callback)
+  removeDownloadProgressListener: (callback) => ipcRenderer.removeListener('download-progress', callback),
+  onNavigateToSettings: (callback) => ipcRenderer.on('navigate-to-settings', callback), // ✅ NUOVO: Listener per navigazione
+  removeNavigateToSettingsListener: (callback) => ipcRenderer.removeListener('navigate-to-settings', callback)
 })
 
 // Simple logger bridge

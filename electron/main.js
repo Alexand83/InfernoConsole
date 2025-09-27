@@ -1105,6 +1105,17 @@ ipcMain.handle('check-github-files', async () => {
   }
 })
 
+// ✅ NUOVO: Listener per navigazione alle impostazioni
+ipcMain.on('navigate-to-settings', () => {
+  try {
+    if (mainWindow) {
+      mainWindow.webContents.send('navigate-to-settings')
+    }
+  } catch (error) {
+    console.error('Errore nella navigazione alle impostazioni:', error)
+  }
+})
+
 
 
 

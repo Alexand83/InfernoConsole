@@ -139,13 +139,16 @@ class AppUpdater {
       dialog.showMessageBox({
         type: 'info',
         title: 'Aggiornamento Disponibile',
-        message: `È disponibile una nuova versione (${info.version}).\nDimensione download: ${fileSizeMB} MB\n\nVuoi scaricare l'aggiornamento?`,
-        buttons: ['Scarica', 'Annulla']
+        message: `È disponibile una nuova versione (${info.version}).\nDimensione download: ${fileSizeMB} MB\n\nVai in Impostazioni > Info per scaricare e installare l'aggiornamento.`,
+        buttons: ['Vai alle Impostazioni', 'Annulla']
       }).then((result) => {
         if (result.response === 0) {
-          // Avvia il download
-          this.downloadState.isDownloading = true
-          autoUpdater.downloadUpdate()
+          // Invia messaggio al renderer per aprire Settings
+          const { BrowserWindow } = require('electron')
+          const mainWindow = BrowserWindow.getAllWindows()[0]
+          if (mainWindow) {
+            mainWindow.webContents.send('navigate-to-settings')
+          }
         }
       })
     })
@@ -350,16 +353,34 @@ class AppUpdater {
       console.log('🚀 Installazione aggiornamento...')
       this.downloadState.isInstalling = true
       
-      // ✅ FIX: Parametri corretti per macOS e Windows
-      if (process.platform === 'darwin') {
-        // macOS: force=false, isSilent=false per installazione corretta
-        console.log('🍎 macOS: Installazione aggiornamento...')
-        autoUpdater.quitAndInstall(false, false)
-      } else {
-        // Windows: force=true, isSilent=true per installazione silenziosa
-        console.log('🪟 Windows: Installazione aggiornamento...')
-        autoUpdater.quitAndInstall(true, true)
-      }
+      // ✅ NUOVO: Mostra percorso dell'app prima dell'installazione
+      const { app } = require('electron')
+      const appPath = app.getPath('exe')
+      const appDir = require('path').dirname(appPath)
+      
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Installazione Aggiornamento',
+        message: `L'app verrà chiusa e riavviata per applicare l'aggiornamento.\n\nDopo l'installazione:\n• L'app aggiornata si troverà in: ${appDir}\n• Un collegamento "Inferno Console" sarà creato sul desktop\n• Puoi lanciare l'app dal desktop o dal menu Start\n\nClicca OK per procedere.`,
+        buttons: ['OK', 'Annulla']
+      }).then((result) => {
+        if (result.response === 0) {
+          // ✅ FIX: Parametri corretti per macOS e Windows
+          if (process.platform === 'darwin') {
+            // macOS: force=false, isSilent=false per installazione corretta
+            console.log('🍎 macOS: Installazione aggiornamento...')
+            autoUpdater.quitAndInstall(false, false)
+          } else {
+            // Windows: force=true, isSilent=true per installazione silenziosa
+            console.log('🪟 Windows: Installazione aggiornamento...')
+            autoUpdater.quitAndInstall(true, true)
+          }
+        } else {
+          // Annulla installazione
+          this.downloadState.isInstalling = false
+          console.log('❌ Installazione annullata dall\'utente')
+        }
+      })
     } else {
       console.log('⚠️ Installazione non possibile:', {
         isDownloaded: this.downloadState.isDownloaded,
@@ -440,6 +461,35 @@ updaterCacheDirName: dj-console-updater`
     } catch (error) {
       console.error('❌ Errore nel controllo file GitHub:', error)
       throw error
+    }
+  }
+
+  // ✅ NUOVO: Metodo per creare collegamento sul desktop
+  createDesktopShortcut() {
+    try {
+      const { app } = require('electron')
+      const { shell } = require('electron')
+      const path = require('path')
+      const fs = require('fs')
+      
+      if (process.platform === 'win32') {
+        const desktopPath = path.join(require('os').homedir(), 'Desktop')
+        const shortcutPath = path.join(desktopPath, 'Inferno Console.lnk')
+        const appPath = app.getPath('exe')
+        
+        // Crea il collegamento usando PowerShell
+        const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut("${shortcutPath}"); $Shortcut.TargetPath = "${appPath}"; $Shortcut.Save()`
+        
+        require('child_process').exec(`powershell -Command "${psCommand}"`, (error) => {
+          if (error) {
+            console.error('❌ Errore creazione collegamento:', error)
+          } else {
+            console.log('✅ Collegamento desktop creato:', shortcutPath)
+          }
+        })
+      }
+    } catch (error) {
+      console.error('❌ Errore nella creazione del collegamento:', error)
     }
   }
 }

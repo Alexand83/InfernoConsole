@@ -8,11 +8,12 @@ win:
     - target: portable
       arch:
         - x64
-  artifactName: Inferno-Console-${version}-win.${ext}
+  artifactName: Inferno-Console-win.${ext}
   requestedExecutionLevel: asInvoker
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
   # ✅ FIX: compression spostata a livello globale
+  # ✅ Collegamenti gestiti via GitHub Actions
 
 # Configurazione per macOS
 mac:
@@ -77,12 +78,7 @@ generateUpdatesFilesForAllChannels: true
 compression: maximum
 
 # ✅ FIX: Configurazione esplicita per generare latest.yml
-nsis:
-  oneClick: false
-  perMachine: false
-  allowToChangeInstallationDirectory: true
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
+# NSIS rimosso - usiamo solo portable con collegamento via GitHub Actions
 
 # Configurazione auto-updater
 publish:

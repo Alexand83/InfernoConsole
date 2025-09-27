@@ -19,7 +19,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest]
+        # macOS commentato - da rifare in seguito
+        # os: [windows-latest, macos-latest]
 
     steps:
     - name: Checkout code
@@ -72,12 +74,40 @@ jobs:
         Write-Host "Generated latest.yml:"
         Get-Content latest.yml
 
-    - name: Build Electron app (macOS)
-      if: matrix.os == 'macos-latest'
-      run: npm run dist
-      env:
-        CSC_IDENTITY_AUTO_DISCOVERY: false
-        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    - name: Create Desktop Shortcut (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        Write-Host "Creating desktop shortcut for Windows..."
+        Set-Location dist-electron
+        
+        # Trova il file .exe generato
+        $EXE_FILE = Get-ChildItem -Name "*.exe" | Select-Object -First 1
+        $EXE_PATH = (Get-Item $EXE_FILE).FullName
+        
+        # Crea script PowerShell per creare collegamento
+        $shortcutScript = @"
+        `$WshShell = New-Object -comObject WScript.Shell
+        `$DesktopPath = [Environment]::GetFolderPath("Desktop")
+        `$ShortcutPath = Join-Path `$DesktopPath "Inferno Console.lnk"
+        `$Shortcut = `$WshShell.CreateShortcut(`$ShortcutPath)
+        `$Shortcut.TargetPath = "$EXE_PATH"
+        `$Shortcut.WorkingDirectory = (Split-Path "$EXE_PATH")
+        `$Shortcut.Description = "Inferno Console - Professional DJ Console"
+        `$Shortcut.Save()
+        Write-Host "Desktop shortcut created: `$ShortcutPath"
+        "@
+        
+        $shortcutScript | Out-File -FilePath "create_shortcut.ps1" -Encoding UTF8
+        Write-Host "Shortcut script created, ready for user to run"
+
+    # macOS build commentato - da rifare in seguito
+    # - name: Build Electron app (macOS)
+    #   if: matrix.os == 'macos-latest'
+    #   run: npm run dist
+    #   env:
+    #     CSC_IDENTITY_AUTO_DISCOVERY: false
+    #     GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
     - name: Create Release (Windows)
       if: matrix.os == 'windows-latest' && startsWith(github.ref, 'refs/tags/')
@@ -100,15 +130,16 @@ jobs:
           - Fix logging per debug del sistema di retry
           
           ### 📦 Download
-          Scegli la versione per il tuo sistema operativo:
-          
           **Windows**: Installa il file `.exe` per Windows 10/11
-          **macOS**: Installa il file `.dmg` per macOS 10.15+
           
           ### 🚀 Installazione
-          1. Scarica il file appropriato per il tuo sistema
-          2. Esegui l'installer (Windows/macOS)
+          1. Scarica il file `.exe` per Windows
+          2. Esegui l'installer
           3. Avvia Inferno Console e goditi la tua sessione DJ!
+          
+          ### 📝 Collegamento Desktop
+          - Un collegamento "Inferno Console" sarà creato sul desktop
+          - Puoi anche lanciare l'app dal menu Start
           
           ### 📝 Note
           - Versione sviluppata da Alessandro(NeverAgain)
@@ -117,6 +148,7 @@ jobs:
         files: |
           dist-electron/*.exe
           dist-electron/latest.yml
+          dist-electron/create_shortcut.ps1
         draft: false
         prerelease: false
         generate_release_notes: true
@@ -124,50 +156,51 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
       continue-on-error: true
 
-    - name: Create Release (macOS)
-      if: matrix.os == 'macos-latest' && startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ github.ref_name }}
-        name: Inferno Console ${{ github.ref_name }}
-        body: |
-          ## 🎵 Inferno Console ${{ github.ref_name }}
-          
-          ### ✨ Nuove Funzionalità
-          - Sistema di streaming continuo migliorato
-          - Fix auto-reconnessione dopo disconnessione manuale
-          - Nickname DJ personalizzabile per Icecast
-          - Interfaccia utente ottimizzata
-          
-          ### 🐛 Bug Fix
-          - Risolto problema di auto-reconnessione indesiderata
-          - Migliorato controllo deck audio durante disconnessione
-          - Fix logging per debug del sistema di retry
-          
-          ### 📦 Download
-          Scegli la versione per il tuo sistema operativo:
-          
-          **Windows**: Installa il file `.exe` per Windows 10/11
-          **macOS**: Installa il file `.dmg` per macOS 10.15+
-          
-          ### 🚀 Installazione
-          1. Scarica il file appropriato per il tuo sistema
-          2. Esegui l'installer (Windows/macOS)
-          3. Avvia Inferno Console e goditi la tua sessione DJ!
-          
-          ### 📝 Note
-          - Versione sviluppata da Alessandro(NeverAgain)
-          - Licenza MIT
-          - Supporto completo per streaming Icecast
-        files: |
-          dist-electron/*.dmg
-          dist-electron/*.zip
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-      continue-on-error: true
+    # macOS release commentato - da rifare in seguito
+    # - name: Create Release (macOS)
+    #   if: matrix.os == 'macos-latest' && startsWith(github.ref, 'refs/tags/')
+    #   uses: softprops/action-gh-release@v1
+    #   with:
+    #     tag_name: ${{ github.ref_name }}
+    #     name: Inferno Console ${{ github.ref_name }}
+    #     body: |
+    #       ## 🎵 Inferno Console ${{ github.ref_name }}
+    #       
+    #       ### ✨ Nuove Funzionalità
+    #       - Sistema di streaming continuo migliorato
+    #       - Fix auto-reconnessione dopo disconnessione manuale
+    #       - Nickname DJ personalizzabile per Icecast
+    #       - Interfaccia utente ottimizzata
+    #       
+    #       ### 🐛 Bug Fix
+    #       - Risolto problema di auto-reconnessione indesiderata
+    #       - Migliorato controllo deck audio durante disconnessione
+    #       - Fix logging per debug del sistema di retry
+    #       
+    #       ### 📦 Download
+    #       Scegli la versione per il tuo sistema operativo:
+    #       
+    #       **Windows**: Installa il file `.exe` per Windows 10/11
+    #       **macOS**: Installa il file `.dmg` per macOS 10.15+
+    #       
+    #       ### 🚀 Installazione
+    #       1. Scarica il file appropriato per il tuo sistema
+    #       2. Esegui l'installer (Windows/macOS)
+    #       3. Avvia Inferno Console e goditi la tua sessione DJ!
+    #       
+    #       ### 📝 Note
+    #       - Versione sviluppata da Alessandro(NeverAgain)
+    #       - Licenza MIT
+    #       - Supporto completo per streaming Icecast
+    #     files: |
+    #       dist-electron/*.dmg
+    #       dist-electron/*.zip
+    #     draft: false
+    #     prerelease: false
+    #     generate_release_notes: true
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+    #   continue-on-error: true
 
     - name: Upload Release Assets Manually
       if: failure()

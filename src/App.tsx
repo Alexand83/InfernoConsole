@@ -38,6 +38,24 @@ function App() {
     }
   }, [])
 
+  // ✅ NUOVO: Listener per navigazione alle impostazioni da auto-updater
+  React.useEffect(() => {
+    const handleNavigateToSettings = () => {
+      console.log('🔧 Navigazione alle impostazioni richiesta da auto-updater')
+      window.location.href = '/settings'
+    }
+    
+    if (window.autoUpdater) {
+      window.autoUpdater.onNavigateToSettings(handleNavigateToSettings)
+    }
+    
+    return () => {
+      if (window.autoUpdater) {
+        window.autoUpdater.removeNavigateToSettingsListener(handleNavigateToSettings)
+      }
+    }
+  }, [])
+
   // REF per forzare la stabilità - non cambia mai
   const stableRef = useRef({})
   
