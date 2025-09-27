@@ -158,15 +158,15 @@ const initialState: AudioState = {
     isPlaying: false,
     currentTime: 0,
     duration: 0,
-    volume: 0.8,
+    volume: 1.0,
     localVolume: 0.0
   },
-        rightDeck: { 
+  rightDeck: {
     track: null,
     isPlaying: false,
     currentTime: 0,
     duration: 0,
-    volume: 0.8,
+    volume: 1.0,
     localVolume: 0.0
   },
   masterVolume: 1.0,
@@ -722,9 +722,21 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const leftSource = mixContext.createMediaElementSource(leftStreamAudio)
             const leftStreamGain = mixContext.createGain()
             
-            // ✅ CROSSFADER: Applica il crossfader al deck sinistro
-            // Deck A: Volume = 1.0 - crossfader (0.0 = tutto A, 1.0 = tutto B)
-            const leftCrossfaderVolume = 1.0 - (state.crossfader || 0.5)
+            // ✅ CROSSFADER: Applica il crossfader al deck sinistro con logica deck vuoti
+            const leftDeckEmpty = !state.leftDeck.track
+            const rightDeckEmpty = !state.rightDeck.track
+            let leftCrossfaderVolume: number
+            
+            if (leftDeckEmpty && rightDeckEmpty) {
+              leftCrossfaderVolume = 0
+            } else if (leftDeckEmpty) {
+              leftCrossfaderVolume = 0
+            } else if (rightDeckEmpty) {
+              leftCrossfaderVolume = 1.0
+            } else {
+              leftCrossfaderVolume = 1.0 - (state.crossfader || 0.5)
+            }
+            
             leftStreamGain.gain.setValueAtTime(leftCrossfaderVolume, mixContext.currentTime)
             
             console.log('🔗 [STREAMING] Collegamento audio deck sinistro:', {
@@ -937,9 +949,21 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const rightSource = mixContext.createMediaElementSource(rightStreamAudio)
             const rightStreamGain = mixContext.createGain()
             
-            // ✅ CROSSFADER: Applica il crossfader al deck destro
-            // Deck B: Volume = crossfader (0.0 = tutto A, 1.0 = tutto B)
-            const rightCrossfaderVolume = state.crossfader || 0.5
+            // ✅ CROSSFADER: Applica il crossfader al deck destro con logica deck vuoti
+            const leftDeckEmpty = !state.leftDeck.track
+            const rightDeckEmpty = !state.rightDeck.track
+            let rightCrossfaderVolume: number
+            
+            if (leftDeckEmpty && rightDeckEmpty) {
+              rightCrossfaderVolume = 0
+            } else if (leftDeckEmpty) {
+              rightCrossfaderVolume = 1.0
+            } else if (rightDeckEmpty) {
+              rightCrossfaderVolume = 0
+            } else {
+              rightCrossfaderVolume = state.crossfader || 0.5
+            }
+            
             rightStreamGain.gain.setValueAtTime(rightCrossfaderVolume, mixContext.currentTime)
             
             rightSource.connect(rightStreamGain)
@@ -2186,9 +2210,33 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
+    // ✅ FIX CROSSFADER: Listener per pulizia deck da eventi esterni
+    const handleClearDeck = (event: CustomEvent) => {
+      const { deck } = event.detail
+      console.log(`🗑️ [AUDIO CONTEXT] Clear deck event:`, deck)
+      
+      try {
+        if (deck === 'left') {
+          console.log(`🗑️ [AUDIO CONTEXT] Clearing LEFT deck`)
+          dispatch({ type: 'SET_LEFT_DECK_TRACK', payload: null })
+          dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: false })
+          dispatch({ type: 'SET_LEFT_DECK_TIME', payload: 0 })
+        } else if (deck === 'right') {
+          console.log(`🗑️ [AUDIO CONTEXT] Clearing RIGHT deck`)
+          dispatch({ type: 'SET_RIGHT_DECK_TRACK', payload: null })
+          dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: false })
+          dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: 0 })
+        }
+      } catch (error) {
+        console.error('❌ [AUDIO CONTEXT] Errore nella pulizia deck:', error)
+      }
+    }
+
     window.addEventListener('djconsole:load-track', handleGlobalTrackLoad as EventListener)
+    window.addEventListener('djconsole:clear-deck', handleClearDeck as EventListener)
     return () => {
       window.removeEventListener('djconsole:load-track', handleGlobalTrackLoad as EventListener)
+      window.removeEventListener('djconsole:clear-deck', handleClearDeck as EventListener)
     }
   }, [playLeftTrack, playRightTrack, dispatch])
 
@@ -2697,16 +2745,93 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // ✅ CROSSFADER: Funzione per impostare il crossfader (solo per streaming)
   const setCrossfader = useCallback((value: number) => {
     const clampedValue = Math.max(0, Math.min(1, value))
-    console.log(`🎚️ [CROSSFADER] Crossfader impostato: ${Math.round(clampedValue * 100)}% (A=${Math.round((1-clampedValue)*100)}%, B=${Math.round(clampedValue*100)}%)`)
     
-    // Aggiorna lo stato
-    dispatch({ type: 'SET_CROSSFADER', payload: clampedValue })
+    // ✅ NUOVA LOGICA: Applica la logica intelligente per il cursore
+    const leftDeckEmpty = !state.leftDeck.track
+    const rightDeckEmpty = !state.rightDeck.track
+    
+    let displayValue: number
+    let leftVolume: number
+    let rightVolume: number
+    
+    if (leftDeckEmpty && rightDeckEmpty) {
+      // Entrambi i deck vuoti: cursore al centro ma volumi 0
+      displayValue = 0.5
+      leftVolume = 0
+      rightVolume = 0
+    } else if (leftDeckEmpty) {
+      // Solo deck A vuoto: cursore tutto a destra, deck B al 100%
+      displayValue = 1.0
+      leftVolume = 0
+      rightVolume = 1.0
+    } else if (rightDeckEmpty) {
+      // Solo deck B vuoto: cursore tutto a sinistra, deck A al 100%
+      displayValue = 0.0
+      leftVolume = 1.0
+      rightVolume = 0
+    } else {
+      // Entrambi i deck occupati: cursore normale
+      displayValue = clampedValue
+      leftVolume = 1.0 - clampedValue
+      rightVolume = clampedValue
+    }
+    
+    console.log(`🎚️ [CROSSFADER] Crossfader impostato: ${Math.round(displayValue * 100)}% (A=${Math.round(leftVolume * 100)}%, B=${Math.round(rightVolume * 100)}%)`)
+    
+    // Aggiorna lo stato con il valore di display
+    dispatch({ type: 'SET_CROSSFADER', payload: displayValue })
     
     // ✅ CROSSFADER: Aggiorna il crossfader per lo streaming se disponibile
     if (typeof window !== 'undefined' && (window as any).updateStreamingCrossfader) {
-      ;(window as any).updateStreamingCrossfader(clampedValue)
+      ;(window as any).updateStreamingCrossfader(displayValue)
     }
-  }, [])
+  }, [state.leftDeck.track, state.rightDeck.track])
+
+  // ✅ CROSSFADER: Aggiorna automaticamente il crossfader quando cambia lo stato dei deck
+  // ⚠️ FIX: Solo quando i deck cambiano da occupato a vuoto o viceversa, NON ad ogni movimento manuale
+  const prevDeckStateRef = useRef({ leftEmpty: false, rightEmpty: false })
+  
+  useEffect(() => {
+    // Calcola il nuovo valore del crossfader basato sui deck
+    const leftDeckEmpty = !state.leftDeck.track
+    const rightDeckEmpty = !state.rightDeck.track
+    
+    // ✅ FIX: Solo aggiorna se lo stato dei deck è effettivamente cambiato
+    const leftChanged = leftDeckEmpty !== prevDeckStateRef.current.leftEmpty
+    const rightChanged = rightDeckEmpty !== prevDeckStateRef.current.rightEmpty
+    
+    if (!leftChanged && !rightChanged) {
+      // Nessun cambio di stato dei deck, non fare nulla
+      return
+    }
+    
+    // Aggiorna il riferimento per il prossimo controllo
+    prevDeckStateRef.current = { leftEmpty: leftDeckEmpty, rightEmpty: rightDeckEmpty }
+    
+    let newCrossfaderValue: number
+    
+    if (leftDeckEmpty && rightDeckEmpty) {
+      // Entrambi i deck vuoti: cursore al centro
+      newCrossfaderValue = 0.5
+    } else if (leftDeckEmpty) {
+      // Solo deck A vuoto: cursore tutto a destra (100% B)
+      newCrossfaderValue = 1.0
+    } else if (rightDeckEmpty) {
+      // Solo deck B vuoto: cursore tutto a sinistra (100% A)
+      newCrossfaderValue = 0.0
+    } else {
+      // Entrambi i deck occupati: 50% (centro)
+      newCrossfaderValue = 0.5
+    }
+    
+    console.log(`🎚️ [CROSSFADER] Auto-aggiornamento per cambio deck: ${Math.round(newCrossfaderValue * 100)}% (A=${leftDeckEmpty ? 'vuoto' : 'occupato'}, B=${rightDeckEmpty ? 'vuoto' : 'occupato'})`)
+    dispatch({ type: 'SET_CROSSFADER', payload: newCrossfaderValue })
+    
+    // Aggiorna anche lo streaming
+    if (typeof window !== 'undefined' && (window as any).updateStreamingCrossfader) {
+      ;(window as any).updateStreamingCrossfader(newCrossfaderValue)
+    }
+  }, [state.leftDeck.track, state.rightDeck.track])
 
   // ✅ CRITICAL FIX: Funzione che controlla SOLO il volume del Live Stream nell'interfaccia
   const setLiveStreamVolume = useCallback((volume: number) => {
@@ -2741,20 +2866,80 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       console.log(`🎚️ [CROSSFADER] Aggiornamento crossfader streaming a ${Math.round(crossfaderValue * 100)}%`)
       
-      const leftGain = (window as any).leftDeckStreamGain
-      const rightGain = (window as any).rightDeckStreamGain
-      const context = (window as any).currentMixContext
+      // ✅ FIX: Prova a ottenere i gain nodes da diverse fonti
+      let leftGain = (window as any).leftDeckStreamGain
+      let rightGain = (window as any).rightDeckStreamGain
+      let context = (window as any).currentMixContext
+      
+      // Se non sono disponibili, prova a ottenerli dal mixer globale
+      if (!leftGain || !rightGain) {
+        console.log(`🔍 [CROSSFADER] Gain nodes non trovati, cerco nel mixer globale...`)
+        const mixerGain = (window as any).mixerGain
+        const audioContext = (window as any).audioContext
+        
+        console.log(`🔍 [CROSSFADER] DEBUG - mixerGain:`, !!mixerGain, `audioContext:`, !!audioContext)
+        
+        if (mixerGain && audioContext) {
+          // ✅ FIX: Crea gain nodes temporanei e salvali globalmente
+          if (!leftGain) {
+            leftGain = audioContext.createGain()
+            leftGain.gain.value = 1.0
+            ;(window as any).leftDeckStreamGain = leftGain
+            console.log(`🔧 [CROSSFADER] Creato e salvato leftGain temporaneo`)
+          }
+          if (!rightGain) {
+            rightGain = audioContext.createGain()
+            rightGain.gain.value = 1.0
+            ;(window as any).rightDeckStreamGain = rightGain
+            console.log(`🔧 [CROSSFADER] Creato e salvato rightGain temporaneo`)
+          }
+          context = audioContext
+          ;(window as any).currentMixContext = audioContext
+          console.log(`🔧 [CROSSFADER] Salvato currentMixContext`)
+        } else {
+          console.log(`⚠️ [CROSSFADER] Mixer globale non disponibile - mixerGain:`, !!mixerGain, `audioContext:`, !!audioContext)
+        }
+      }
       
       if (leftGain && rightGain && context) {
-        // Deck A: Volume = 1.0 - crossfader
-        const leftVolume = 1.0 - crossfaderValue
-        leftGain.gain.setValueAtTime(leftVolume, context.currentTime)
+        // ✅ NUOVA LOGICA: Controlla se i deck sono vuoti
+        const leftDeckEmpty = !state.leftDeck.track
+        const rightDeckEmpty = !state.rightDeck.track
         
-        // Deck B: Volume = crossfader
-        const rightVolume = crossfaderValue
+        let leftVolume: number
+        let rightVolume: number
+        
+        if (leftDeckEmpty && rightDeckEmpty) {
+          // Entrambi i deck vuoti: volume 0 per entrambi
+          leftVolume = 0
+          rightVolume = 0
+          console.log(`🎚️ [CROSSFADER] Entrambi i deck vuoti: A=0%, B=0%`)
+        } else if (leftDeckEmpty) {
+          // Solo deck A vuoto: deck B al 100%
+          leftVolume = 0
+          rightVolume = 1.0
+          console.log(`🎚️ [CROSSFADER] Solo deck A vuoto: A=0%, B=100%`)
+        } else if (rightDeckEmpty) {
+          // Solo deck B vuoto: deck A al 100%
+          leftVolume = 1.0
+          rightVolume = 0
+          console.log(`🎚️ [CROSSFADER] Solo deck B vuoto: A=100%, B=0%`)
+        } else {
+          // Entrambi i deck occupati: crossfader normale
+          leftVolume = 1.0 - crossfaderValue
+          rightVolume = crossfaderValue
+          console.log(`🎚️ [CROSSFADER] Entrambi i deck occupati: A=${Math.round(leftVolume * 100)}%, B=${Math.round(rightVolume * 100)}%`)
+        }
+        
+        leftGain.gain.setValueAtTime(leftVolume, context.currentTime)
         rightGain.gain.setValueAtTime(rightVolume, context.currentTime)
         
+        // ✅ DEBUG: Verifica i volumi effettivi dopo l'impostazione
+        const actualLeftGain = leftGain.gain.value
+        const actualRightGain = rightGain.gain.value
+        
         console.log(`🎚️ [CROSSFADER] Streaming aggiornato: A=${Math.round(leftVolume * 100)}%, B=${Math.round(rightVolume * 100)}%`)
+        console.log(`🔍 [CROSSFADER] DEBUG - Volumi effettivi: A=${Math.round(actualLeftGain * 100)}%, B=${Math.round(actualRightGain * 100)}%`)
       } else {
         console.warn('⚠️ [CROSSFADER] Gain nodes non disponibili per aggiornamento crossfader')
       }

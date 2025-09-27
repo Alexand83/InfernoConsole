@@ -215,6 +215,13 @@ const AutoAdvanceManager: React.FC<AutoAdvanceManagerProps> = ({
       return
     }
 
+    // ✅ FIX CROSSFADER: Prima pulisci il deck che ha finito la traccia
+    console.log(`🗑️ [AUTOPLAY] Pulizia deck ${fromDeck} che ha finito la traccia`)
+    const clearEvent = new CustomEvent('djconsole:clear-deck', {
+      detail: { deck: fromDeck }
+    })
+    window.dispatchEvent(clearEvent)
+
     // Carica la traccia nel deck target
     console.log(`🔄 [AUTOPLAY] ✅ Auto-advance: ${nextTrack.title} → Deck ${targetDeck.toUpperCase()}`)
     console.log(`🔄 [AUTOPLAY] Calling handleTrackLoadInternal with:`, { deck: targetDeck, track: nextTrack.title })

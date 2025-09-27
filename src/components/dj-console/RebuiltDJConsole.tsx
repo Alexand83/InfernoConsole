@@ -1257,14 +1257,6 @@ const RebuiltDJConsole: React.FC = () => {
         debugMessages={debugMessages}
       />
 
-      {/* Pannello DJ Remoti - Ora disponibile come pagina dedicata */}
-      <div className="mt-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-md">
-        <h4 className="text-blue-400 font-semibold mb-2">🎤 DJ Remoto Server</h4>
-        <div className="text-sm text-blue-300 space-y-1">
-          <div>Il server DJ Remoto è ora disponibile come pagina dedicata.</div>
-          <div>Clicca su "🎤 DJ Remoto Server" nella barra di navigazione in alto.</div>
-        </div>
-      </div>
 
       {/* Footer informativo */}
       <footer className="bg-dj-primary border-t border-dj-accent/30 p-4 mt-8">
