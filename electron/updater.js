@@ -270,7 +270,7 @@ class AppUpdater {
         const path = require('path')
         const fs = require('fs')
         
-        const cacheDir = path.join(os.tmpdir(), 'dj-console-updater')
+        const cacheDir = path.join(os.tmpdir(), 'inferno-console-updater')
         if (fs.existsSync(cacheDir)) {
           fs.rmSync(cacheDir, { recursive: true, force: true })
           console.log('✅ Cache manuale pulita')
@@ -310,7 +310,7 @@ class AppUpdater {
         const path = require('path')
         const fs = require('fs')
         
-        const cacheDir = path.join(os.tmpdir(), 'dj-console-updater')
+        const cacheDir = path.join(os.tmpdir(), 'inferno-console-updater')
         if (fs.existsSync(cacheDir)) {
           fs.rmSync(cacheDir, { recursive: true, force: true })
           console.log('✅ Cache manuale pulita')
@@ -363,9 +363,14 @@ class AppUpdater {
         console.log('🍎 macOS: Installazione aggiornamento...')
         autoUpdater.quitAndInstall(false, false)
       } else {
-        // Windows: force=true, isSilent=true per installazione silenziosa
+        // Windows: force=true, isSilent=false per mostrare progresso e chiudere correttamente
         console.log('🪟 Windows: Installazione aggiornamento...')
-        autoUpdater.quitAndInstall(true, true)
+        console.log('🔄 Chiudendo app per installazione...')
+        
+        // Chiudi l'app prima dell'installazione per evitare EPERM
+        setTimeout(() => {
+          autoUpdater.quitAndInstall(true, false)
+        }, 1000)
       }
     } else {
       console.log('⚠️ Installazione non possibile:', {
@@ -398,7 +403,7 @@ class AppUpdater {
       const configContent = `provider: github
 owner: Alexand83
 repo: InfernoConsole
-updaterCacheDirName: dj-console-updater`
+updaterCacheDirName: inferno-console-updater`
       
       fs.writeFileSync(configPath, configContent)
       console.log('✅ File di configurazione aggiornamento ricreato:', configPath)

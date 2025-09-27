@@ -984,7 +984,7 @@ ipcMain.handle('reset-updater-cache', async () => {
       const path = require('path')
       const fs = require('fs')
       
-      const cacheDir = path.join(os.tmpdir(), 'dj-console-updater')
+      const cacheDir = path.join(os.tmpdir(), 'inferno-console-updater')
       if (fs.existsSync(cacheDir)) {
         fs.rmSync(cacheDir, { recursive: true, force: true })
         console.log('✅ Cache manuale pulita')
@@ -1062,7 +1062,7 @@ ipcMain.handle('force-check-updates', async () => {
       const path = require('path')
       const fs = require('fs')
       
-      const cacheDir = path.join(os.tmpdir(), 'dj-console-updater')
+      const cacheDir = path.join(os.tmpdir(), 'inferno-console-updater')
       if (fs.existsSync(cacheDir)) {
         fs.rmSync(cacheDir, { recursive: true, force: true })
         console.log('✅ Cache manuale pulita')
