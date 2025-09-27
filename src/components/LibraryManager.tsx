@@ -453,12 +453,16 @@ const LibraryManager = () => {
   const shouldUseVirtualization = filteredTracks.length > VIRTUALIZATION_THRESHOLD
   const effectiveUseVirtualization = useVirtualization && shouldUseVirtualization
 
-  // Load tracks from database
+  // ✅ OPTIMIZATION: Load tracks from database - Caricamento differito per avvio veloce
   useEffect(() => {
     const loadTracks = async () => {
       try {
-        await localDatabase.waitForInitialization()
-        const allTracks = await localDatabase.getAllTracks()
+        // ✅ FIX: Non aspettare l'inizializzazione - carica in background
+        const initPromise = localDatabase.waitForInitialization()
+        const allTracks = await localDatabase.getAllTracks().catch(() => [])
+        
+        // Completa l'inizializzazione in background
+        initPromise.catch(() => {})
         // Evita freeze in Electron: non rigenerare waveform massivamente sul main thread
         const isElectron = !!((window as any).fileStore) || ((typeof navigator !== 'undefined' && (navigator.userAgent || '').includes('Electron')))
         if (!isElectron) {

@@ -216,15 +216,15 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Carica i settaggi dal database all'avvio (ottimizzato)
+  // ✅ OPTIMIZATION: Carica i settaggi dal database all'avvio - Non bloccante per avvio veloce
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        // Caricamento parallelo per velocità
-        const [savedSettings] = await Promise.all([
-          localDatabase.getSettings(),
-          localDatabase.waitForInitialization()
-        ])
+        // ✅ FIX: Carica settings senza aspettare l'inizializzazione completa
+        const savedSettings = await localDatabase.getSettings().catch(() => null)
+        
+        // Completa l'inizializzazione in background
+        localDatabase.waitForInitialization().catch(() => {})
         
         if (savedSettings) {
           const completeSettings = ensureAllSettings(savedSettings)

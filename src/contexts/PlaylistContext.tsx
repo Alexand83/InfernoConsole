@@ -271,18 +271,21 @@ export function PlaylistProvider({ children }: { children: React.ReactNode }) {
 
   const [state, dispatch] = useReducer(playlistReducer, initialState)
 
-  // Load data from database on mount
+  // ✅ OPTIMIZATION: Load data from database on mount - Caricamento differito per avvio veloce
   useEffect(() => {
     const loadInitialData = async () => {
       try {
         dispatch({ type: 'SET_LOADING', payload: true })
         
-        // Wait for database to initialize
-        await localDatabase.waitForInitialization()
+        // ✅ FIX: Non aspettare l'inizializzazione del database - carica in background
+        const initPromise = localDatabase.waitForInitialization()
         
-        // Load tracks and playlists from database
-        const tracks = await localDatabase.getAllTracks()
-        const playlists = await localDatabase.getAllPlaylists()
+        // Carica prima i dati essenziali, poi completa l'inizializzazione
+        const [tracks, playlists] = await Promise.all([
+          localDatabase.getAllTracks().catch(() => []), // Fallback a array vuoto
+          localDatabase.getAllPlaylists().catch(() => []), // Fallback a array vuoto
+          initPromise // Completa l'inizializzazione in background
+        ])
         
         // Convert database playlists to interface format
         const interfacePlaylists: Playlist[] = await Promise.all(

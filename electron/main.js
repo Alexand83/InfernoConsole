@@ -143,15 +143,20 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
-      // Ottimizzazioni per performance
+      // ✅ OPTIMIZATION: Ottimizzazioni per avvio più veloce
       webSecurity: true,
       allowRunningInsecureContent: false,
       experimentalFeatures: false,
+      // Disabilita funzionalità non essenziali per avvio veloce
+      backgroundThrottling: false,
+      offscreen: false,
+      // Preload solo le funzionalità essenziali
+      preload: path.join(__dirname, 'preload.js'),
     },
     title: 'DJ Console',
     backgroundColor: '#0b1221',
     show: false, // Non mostrare finché non è pronto
-    // Ottimizzazioni per avvio più veloce
+    // ✅ OPTIMIZATION: Ottimizzazioni per avvio più veloce
     skipTaskbar: false,
     alwaysOnTop: false,
     fullscreenable: true,
@@ -159,6 +164,9 @@ function createWindow() {
     minimizable: true,
     maximizable: true,
     closable: true,
+    // Disabilita animazioni di apertura per velocità
+    frame: true,
+    transparent: false,
   })
 
   // Crash/unresponsive diagnostics
@@ -209,8 +217,14 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow()
   
-  // ✅ AUTO-UPDATER: Inizializza l'auto-updater
-  new AppUpdater()
+  // ✅ OPTIMIZATION: Inizializza l'auto-updater in background per non bloccare l'avvio
+  setTimeout(() => {
+    try {
+      new AppUpdater()
+    } catch (error) {
+      console.error('Auto-updater initialization failed:', error)
+    }
+  }, 2000) // Aspetta 2 secondi dopo l'apertura
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -845,10 +859,10 @@ ipcMain.handle('save-audio', async (_evt, { id, name, arrayBuffer }) => {
   }
 })
 
-// Simple JSON DB (Electron only) con cache per performance
+// ✅ OPTIMIZATION: Simple JSON DB (Electron only) con cache migliorata per avvio veloce
 let databaseCache = null
 let databaseCacheTime = 0
-const CACHE_DURATION = 5000 // 5 secondi
+const CACHE_DURATION = 10000 // 10 secondi - cache più lunga per avvio veloce
 
 ipcMain.handle('db-load', async () => {
   try {

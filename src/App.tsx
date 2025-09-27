@@ -46,7 +46,7 @@ function App() {
   const memoizedDJConsole = useMemo(() => <NewDJConsole key="djconsole-v2-stable" />, [stableRef.current])
   const memoizedOldDJConsole = useMemo(() => <DJConsole key="djconsole-old-stable" />, [stableRef.current])
   
-  // LAZY LOADING per componenti pesanti
+  // ✅ LAZY LOADING per componenti pesanti - Ottimizzato per avvio veloce
   const LazyLibraryManager = useMemo(() => {
     return React.lazy(() => import('./components/LibraryManager'))
   }, [])
@@ -57,6 +57,16 @@ function App() {
   
   const LazyYouTubeDownloader = useMemo(() => {
     return React.lazy(() => import('./components/YouTubeDownloader/YouTubeDownloaderPage'))
+  }, [])
+
+  // ✅ LAZY LOADING per context pesanti - Caricamento differito
+  const LazyPlaylistProvider = useMemo(() => {
+    return React.lazy(() => import('./contexts/PlaylistContext').then(module => ({
+      default: ({ children }: { children: React.ReactNode }) => {
+        const { PlaylistProvider } = module
+        return <PlaylistProvider>{children}</PlaylistProvider>
+      }
+    })))
   }, [])
   
   const memoizedTestConsole = useMemo(() => <TestConsole key="test-stable" />, [stableRef.current])
