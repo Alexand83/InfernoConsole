@@ -70,3 +70,8 @@ publish:
   owner: Alexand83
   repo: InfernoConsole
   releaseType: release
+  private: false
+  token: ${{ secrets.GITHUB_TOKEN }}
+
+# Genera automaticamente latest.yml
+generateUpdatesFilesForAllChannels: true
