@@ -365,6 +365,9 @@ class AppUpdater {
         buttons: ['OK', 'Annulla']
       }).then((result) => {
         if (result.response === 0) {
+          // ✅ NUOVO: Crea collegamento desktop prima dell'installazione
+          this.createDesktopShortcut()
+          
           // ✅ FIX: Parametri corretti per macOS e Windows
           if (process.platform === 'darwin') {
             // macOS: force=false, isSilent=false per installazione corretta
