@@ -47,6 +47,8 @@ class AppUpdater {
     autoUpdater.on('update-available', (info) => {
       console.log('📦 Aggiornamento disponibile:', info.version)
       console.log('📦 Info aggiornamento:', JSON.stringify(info, null, 2))
+      console.log('📋 Versione corrente package.json:', require('../package.json').version)
+      console.log('📋 Version comparison:', info.version !== require('../package.json').version ? 'DIFFERENT - UPDATE NEEDED' : 'SAME - NO UPDATE NEEDED')
       
       // ✅ FIX: Controllo robusto dei file disponibili
       let fileSizeMB = 'N/A'
@@ -298,6 +300,11 @@ class AppUpdater {
   forceUpdateCheck() {
     try {
       console.log('🔄 Controllo forzato aggiornamenti con reset completo...')
+      console.log('📋 Versione corrente package.json:', require('../package.json').version)
+      
+      if (typeof autoUpdater.currentVersion !== 'undefined') {
+        console.log('📋 Versione auto-updater corrente:', autoUpdater.currentVersion)
+      }
       
       // ✅ FIX: Reset sicuro della cache
       if (typeof autoUpdater.clearCache === 'function') {
@@ -482,11 +489,22 @@ updaterCacheDirName: inferno-console-updater`
     }
   }
 
-  // ✅ NUOVO: Metodo separato per creare il collegamento
+  // ✅ METODO PRINCIPALE: Crea collegamento usando percorso corretto
   createShortcutWithPath(shortcutPath, appPath) {
     const path = require('path')
+    const { app } = require('electron')
     
-    const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${shortcutPath}'); $Shortcut.TargetPath = '${appPath}'; $Shortcut.WorkingDirectory = '${path.dirname(appPath)}'; $Shortcut.Description = 'Inferno Console - Console DJ professionale'; $Shortcut.IconLocation = '${appPath},0'; $Shortcut.Save(); Write-Host 'SUCCESS: Collegamento creato'`
+    // ✅ SEMPRE usa il percorso corretto dell'exe installato
+    const installedExePath = app.getPath('exe')
+    console.log('🔧 Percorso exe installato:', installedExePath)
+    console.log('🔧 Percorso richiesto (ignorato):', appPath)
+    
+    const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${shortcutPath}'); $Shortcut.TargetPath = '${installedExePath}'; $Shortcut.WorkingDirectory = '${path.dirname(installedExePath)}'; $Shortcut.Description = 'Inferno Console - Console DJ professionale'; $Shortcut.IconLocation = '${installedExePath},0'; $Shortcut.Save(); Write-Host 'SUCCESS: Collegamento creato'`
+    
+    console.log('🔧 PowerShell command:', psCommand)
+    console.log('🔧 Shortcut path:', shortcutPath)
+    console.log('🔧 App path (installato):', installedExePath)
+    console.log('🔧 Working directory:', path.dirname(installedExePath))
     
     require('child_process').exec(`powershell -Command "${psCommand}"`, (error, stdout, stderr) => {
       if (error) {
@@ -502,26 +520,28 @@ updaterCacheDirName: inferno-console-updater`
     })
   }
 
-  // ✅ FALLBACK: Crea collegamento con percorso FISSO di electron-builder
+  // ✅ FALLBACK: Crea collegamento con percorso corretto
   createFallbackShortcut(shortcutPath) {
     const path = require('path')
     const fs = require('fs')
+    const { app } = require('electron')
     
-    // PERCORSO FISSO dove electron-builder installa SEMPRE l'app aggiornata
-    const localAppData = process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local')
-    const fixedAppPath = path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno-Console-win.exe')
+    // ✅ SEMPRE usa il percorso corretto dell'exe installato
+    const installedExePath = app.getPath('exe')
+    console.log('🔄 FALLBACK: Usando percorso exe installato')
+    console.log('📁 Percorso exe installato:', installedExePath)
+    console.log('📁 App exists:', fs.existsSync(installedExePath))
+    console.log('📁 Desktop path:', shortcutPath)
+    console.log('📁 Desktop exists:', fs.existsSync(path.dirname(shortcutPath)))
     
-    console.log('🔄 FALLBACK: Usando percorso FISSO di electron-builder')
-    console.log('📁 Percorso fisso:', fixedAppPath)
-    console.log('📁 App exists:', fs.existsSync(fixedAppPath))
-    
-    if (fs.existsSync(fixedAppPath)) {
-      // App trovata nel percorso fisso - crea collegamento diretto
-      console.log('✅ App trovata nel percorso fisso, creo collegamento diretto')
-      this.createShortcutWithPath(shortcutPath, fixedAppPath)
+    if (installedExePath && fs.existsSync(installedExePath)) {
+      // App trovata - crea collegamento diretto
+      console.log('✅ App trovata, creo collegamento diretto')
+      this.createShortcutWithPath(shortcutPath, installedExePath)
     } else {
-      // App non ancora installata - crea collegamento che apre la cartella Programs
-      console.log('⚠️ App non ancora installata, creo collegamento che apre cartella Programs')
+      // App non trovata - crea collegamento che apre la cartella Programs
+      console.log('⚠️ App non trovata, creo collegamento che apre cartella Programs')
+      const localAppData = process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local')
       const programsDir = path.join(localAppData, 'Programs')
       const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${shortcutPath}'); $Shortcut.TargetPath = 'explorer.exe'; $Shortcut.Arguments = '/select,${programsDir}'; $Shortcut.Description = 'Inferno Console - Apri cartella installazione'; $Shortcut.Save(); Write-Host 'EXPLORER FALLBACK: Collegamento creato'`
       
