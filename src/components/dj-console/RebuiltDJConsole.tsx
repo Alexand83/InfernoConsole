@@ -97,6 +97,21 @@ const RebuiltDJConsole: React.FC = () => {
       return prev
     })
   }, [leftTrack, rightTrack])
+
+  // ✅ FIX: Sincronizza lo stato locale con lo stato Redux quando i deck vengono svuotati
+  useEffect(() => {
+    // Se il deck sinistro è stato svuotato nel Redux, svuota anche lo stato locale
+    if (!audioState.leftDeck.track && leftTrack) {
+      console.log(`🔄 [SYNC] Sincronizzazione: deck sinistro svuotato nel Redux, aggiorno stato locale`)
+      setLeftTrack(null)
+    }
+    
+    // Se il deck destro è stato svuotato nel Redux, svuota anche lo stato locale
+    if (!audioState.rightDeck.track && rightTrack) {
+      console.log(`🔄 [SYNC] Sincronizzazione: deck destro svuotato nel Redux, aggiorno stato locale`)
+      setRightTrack(null)
+    }
+  }, [audioState.leftDeck.track, audioState.rightDeck.track, leftTrack, rightTrack])
   
   const [duplicateDialog, setDuplicateDialog] = useState<{
     track: any | null

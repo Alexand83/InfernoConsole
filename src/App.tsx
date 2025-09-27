@@ -55,6 +55,10 @@ function App() {
     return React.lazy(() => import('./components/Settings'))
   }, [])
   
+  const LazyYouTubeDownloader = useMemo(() => {
+    return React.lazy(() => import('./components/YouTubeDownloader/YouTubeDownloaderPage'))
+  }, [])
+  
   const memoizedTestConsole = useMemo(() => <TestConsole key="test-stable" />, [stableRef.current])
   // const memoizedDJRemotoServerPage = useMemo(() => <DJRemotoServerPage key="dj-remoto-server-stable" />, [stableRef.current]) // Ora è un pannello
 
@@ -84,6 +88,7 @@ function App() {
                       <Route path="/old" element={memoizedOldDJConsole} />
                       <Route path="/library" element={<LazyLibraryManager />} />
                       <Route path="/settings" element={<LazySettings />} />
+                      <Route path="/youtube" element={<LazyYouTubeDownloader />} />
                       <Route path="/test" element={memoizedTestConsole} />
                     </Routes>
                   </React.Suspense>

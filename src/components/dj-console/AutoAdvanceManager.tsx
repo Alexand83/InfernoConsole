@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef } from 'react'
+import React, { useEffect, useCallback, useRef, useState } from 'react'
 import { useSettings } from '../../contexts/SettingsContext'
 import { usePlaylist } from '../../contexts/PlaylistContext'
 import { useAudio } from '../../contexts/AudioContext'
@@ -16,7 +16,7 @@ const AutoAdvanceManager: React.FC<AutoAdvanceManagerProps> = ({
 }) => {
   const { settings } = useSettings()
   const { state: playlistState } = usePlaylist()
-  const { state: audioState } = useAudio()
+  const { state: audioState, clearLeftDeck, clearRightDeck, dispatch } = useAudio()
   
   const pendingAdvanceRef = useRef<{deck: 'left' | 'right', track: any} | null>(null)
   const generalAdvanceTimeRef = useRef<number>(0)
@@ -106,29 +106,42 @@ const AutoAdvanceManager: React.FC<AutoAdvanceManagerProps> = ({
 
   // Trova il deck migliore per l'auto-avanzamento
   const getBestDeckForAutoAdvance = useCallback((fromDeck: 'left' | 'right'): 'left' | 'right' | null => {
-    // ✅ FIX: Usa sempre il deck SINISTRO (LEFT) per l'auto-advance
-    // Il deck destro (RIGHT) è riservato per il mixing manuale
-    const targetDeck = 'left'
+    console.log(`🔄 [AUTOPLAY] getBestDeckForAutoAdvance: fromDeck=${fromDeck}`)
     
-    console.log(`🔄 [AUTOPLAY] getBestDeckForAutoAdvance: fromDeck=${fromDeck}, targetDeck=${targetDeck} (sempre LEFT per auto-advance)`)
-    
-    // Se il deck sinistro è libero, usalo
-    if (isDeckFree(targetDeck)) {
-      console.log(`🔄 [AUTOPLAY] Target deck ${targetDeck} è libero, lo uso`)
-      return targetDeck
+    // ✅ LOGICA CORRETTA: Se il deck A (left) è libero, usalo sempre
+    if (isDeckFree('left')) {
+      console.log(`🔄 [AUTOPLAY] Deck A (left) è libero, lo uso`)
+      return 'left'
     }
     
-    // Se il deck sinistro è occupato, usa il destro solo come fallback
-    const fallbackDeck = 'right'
-    if (isDeckFree(fallbackDeck)) {
-      console.log(`🔄 [AUTOPLAY] Target deck ${targetDeck} occupato, uso fallback ${fallbackDeck}`)
-      return fallbackDeck
+    // ✅ LOGICA CORRETTA: Se il deck A è occupato ma il deck B è libero, usa il deck B
+    if (isDeckFree('right')) {
+      console.log(`🔄 [AUTOPLAY] Deck A occupato, uso deck B`)
+      return 'right'
     }
     
-    // Se entrambi sono occupati, usa comunque il sinistro (sovrascriverà)
-    console.log(`🔄 [AUTOPLAY] Entrambi i deck occupati, uso comunque ${targetDeck}`)
-    return targetDeck
-  }, [isDeckFree])
+    // ✅ LOGICA CORRETTA: Se il deck B ha finito di suonare, svuotalo e usa il deck A (se libero) o B (se A occupato)
+    if (fromDeck === 'right' && audioState.rightDeck.track && !audioState.rightDeck.isPlaying) {
+      console.log(`🔄 [AUTOPLAY] Deck B ha finito di suonare, lo svuoto`)
+      
+      // Svuota il deck B usando la funzione identica al bottone X
+      clearRightDeck()
+      console.log(`✅ [AUTOPLAY] Deck B svuotato con successo`)
+      
+      // Dopo aver svuotato B, controlla di nuovo A
+      if (isDeckFree('left')) {
+        console.log(`🔄 [AUTOPLAY] Dopo aver svuotato B, uso deck A`)
+        return 'left'
+      } else {
+        console.log(`🔄 [AUTOPLAY] Dopo aver svuotato B, A ancora occupato, uso B`)
+        return 'right'
+      }
+    }
+    
+    // Se entrambi sono occupati, usa comunque il deck A (sovrascriverà)
+    console.log(`🔄 [AUTOPLAY] Entrambi i deck occupati, uso comunque deck A`)
+    return 'left'
+  }, [isDeckFree, audioState.rightDeck.track, audioState.rightDeck.isPlaying, clearRightDeck])
 
   // Verifica se una traccia è duplicata
   const isTrackDuplicate = useCallback((track: any, targetDeck: 'left' | 'right'): boolean => {
@@ -168,6 +181,20 @@ const AutoAdvanceManager: React.FC<AutoAdvanceManagerProps> = ({
   // Gestisce l'auto-avanzamento
   const handleAutoAdvance = useCallback((fromDeck: 'left' | 'right') => {
     console.log(`🔄 [AUTOPLAY] handleAutoAdvance called for ${fromDeck} deck`)
+    console.log(`🔍 [DEBUG] Stato attuale dei deck:`, {
+      leftDeck: {
+        track: audioState.leftDeck.track?.title || 'null',
+        isPlaying: audioState.leftDeck.isPlaying,
+        currentTime: audioState.leftDeck.currentTime,
+        duration: audioState.leftDeck.duration
+      },
+      rightDeck: {
+        track: audioState.rightDeck.track?.title || 'null',
+        isPlaying: audioState.rightDeck.isPlaying,
+        currentTime: audioState.rightDeck.currentTime,
+        duration: audioState.rightDeck.duration
+      }
+    })
     
     if (!settings.interface.autoAdvance) {
       console.log('🔄 [AUTOPLAY] Auto-advance disabilitato nelle impostazioni')
@@ -215,12 +242,31 @@ const AutoAdvanceManager: React.FC<AutoAdvanceManagerProps> = ({
       return
     }
 
-    // ✅ FIX CROSSFADER: Prima pulisci il deck che ha finito la traccia
-    console.log(`🗑️ [AUTOPLAY] Pulizia deck ${fromDeck} che ha finito la traccia`)
-    const clearEvent = new CustomEvent('djconsole:clear-deck', {
-      detail: { deck: fromDeck }
-    })
-    window.dispatchEvent(clearEvent)
+    // ✅ LOGICA CORRETTA: Gestione intelligente della pulizia dei deck usando le funzioni del bottone X
+    if (fromDeck === 'right' && audioState.rightDeck.track && !audioState.rightDeck.isPlaying) {
+      // Se il deck B ha finito di suonare, svuotalo completamente
+      console.log(`🗑️ [AUTOPLAY] Deck B ha finito di suonare, lo svuoto completamente`)
+      console.log(`🔍 [DEBUG] Stato deck B prima della pulizia:`, {
+        track: audioState.rightDeck.track?.title,
+        isPlaying: audioState.rightDeck.isPlaying,
+        currentTime: audioState.rightDeck.currentTime,
+        duration: audioState.rightDeck.duration
+      })
+      
+      // Svuota il deck B usando la funzione del context
+      clearRightDeck()
+      console.log(`✅ [AUTOPLAY] Deck B svuotato con successo`)
+    } else if (fromDeck !== targetDeck) {
+      // Se il deck che ha finito è diverso dal target, pulisci quello che ha finito
+      console.log(`🗑️ [AUTOPLAY] Pulizia deck ${fromDeck} che ha finito la traccia`)
+      console.log(`🔍 [DEBUG] Chiamando clear${fromDeck === 'left' ? 'Left' : 'Right'}Deck()...`)
+      if (fromDeck === 'left') {
+        clearLeftDeck()
+      } else {
+        clearRightDeck()
+      }
+      console.log(`🔍 [DEBUG] clear${fromDeck === 'left' ? 'Left' : 'Right'}Deck() completata`)
+    }
 
     // Carica la traccia nel deck target
     console.log(`🔄 [AUTOPLAY] ✅ Auto-advance: ${nextTrack.title} → Deck ${targetDeck.toUpperCase()}`)
@@ -230,7 +276,7 @@ const AutoAdvanceManager: React.FC<AutoAdvanceManagerProps> = ({
     
     // Pulisci eventuali avanzamenti pendenti
     pendingAdvanceRef.current = null
-  }, [settings.interface.autoAdvance, audioState.leftDeck.track, audioState.rightDeck.track, getBestDeckForAutoAdvance, getNextNonDuplicateTrack, isDeckFree, handleTrackLoadInternal])
+  }, [settings.interface.autoAdvance, audioState.leftDeck.track, audioState.rightDeck.track, audioState.rightDeck.isPlaying, getBestDeckForAutoAdvance, getNextNonDuplicateTrack, isDeckFree, handleTrackLoadInternal, clearLeftDeck, clearRightDeck])
 
   // Gestisce gli avanzamenti pendenti quando un deck si libera
   useEffect(() => {
@@ -256,6 +302,7 @@ const AutoAdvanceManager: React.FC<AutoAdvanceManagerProps> = ({
       const { deckId } = event.detail
       const deck = deckId === 'A' ? 'left' : 'right'
       console.log(`🔄 [AUTOPLAY] ✅ Track ended event received for ${deck} deck (deckId: ${deckId})`)
+      console.log(`🔍 [DEBUG] Evento track-ended ricevuto:`, event.detail)
       console.log(`🔄 [AUTOPLAY] ✅ AutoAdvanceManager gestisce l'auto-advance (conflitto risolto)`)
       handleAutoAdvance(deck)
     }

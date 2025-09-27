@@ -51,6 +51,12 @@ export interface AppSettings {
       djName: string  // ✅ NICKNAME DEL DJ
     }
   }
+  youtube: {
+    downloadPath: string
+    defaultQuality: '128' | '192' | '320'
+    autoDownload: boolean
+    createSubfolders: boolean
+  }
 }
 
 type SettingsAction =
@@ -130,6 +136,12 @@ const defaultSettings: AppSettings = {
       genre: 'Electronic/Live DJ',
       djName: 'Inferno Console'  // ✅ NICKNAME DEFAULT
     }
+  },
+  youtube: {
+    downloadPath: './downloads/youtube/',
+    defaultQuality: '192',
+    autoDownload: false,
+    createSubfolders: true
   }
 }
 

@@ -6,6 +6,7 @@ const http = require('http')
 const https = require('https')
 const fs = require('fs')
 const WebRTCServer = require('./webrtc-server')
+const youtubedl = require('youtube-dl-exec')
 
 // Ottimizzazioni per performance e riduzione warning
 app.commandLine.appendSwitch('--disable-gpu-sandbox')
@@ -1357,6 +1358,208 @@ ipcMain.handle('get-webrtc-clients', async () => {
         ipcMain.handle('get-tunnel-url', async () => {
           return { success: true, url: tunnelUrl }
         })
+
+        // ✅ YOUTUBE DOWNLOADER APIs
+        ipcMain.handle('get-youtube-info', async (event, url) => {
+          try {
+            console.log(`🎵 [YOUTUBE] Recupero info per: ${url}`)
+            
+            const info = await youtubedl(url, {
+              dumpSingleJson: true,
+              noWarnings: true,
+              noCheckCertificates: true,
+              preferFreeFormats: true,
+              addHeader: [
+                'referer:youtube.com',
+                'user-agent:googlebot'
+              ]
+            })
+            
+            const videoInfo = {
+              title: info.title || 'Titolo non disponibile',
+              duration: formatDuration(info.duration || 0),
+              thumbnail: info.thumbnail || '',
+              uploader: info.uploader || 'Canale sconosciuto',
+              view_count: formatNumber(info.view_count || 0),
+              duration_seconds: info.duration || 0
+            }
+            
+            console.log(`✅ [YOUTUBE] Info recuperate: ${videoInfo.title}`)
+            return { success: true, data: videoInfo }
+          } catch (error) {
+            console.error('❌ [YOUTUBE] Errore recupero info:', error)
+            return { success: false, error: error.message || 'Errore nel recupero delle informazioni video' }
+          }
+        })
+
+        ipcMain.handle('download-youtube-audio', async (event, { url, quality, outputPath, downloadId }) => {
+          try {
+            console.log(`🎵 [YOUTUBE] Download audio: ${url} (${quality}kbps) -> ${outputPath}`)
+            
+            // Crea la cartella se non esiste
+            if (!fs.existsSync(outputPath)) {
+              fs.mkdirSync(outputPath, { recursive: true })
+            }
+            
+            const outputTemplate = path.join(outputPath, '%(title)s.%(ext)s')
+            
+            // Ottieni info video per il titolo
+            let videoInfo = null
+            try {
+              videoInfo = await youtubedl(url, {
+                dumpSingleJson: true,
+                noWarnings: true,
+                noCheckCertificates: true
+              })
+            } catch (infoError) {
+              console.warn('⚠️ [YOUTUBE] Errore recupero info video:', infoError.message)
+            }
+            
+            // Avvia download con progresso
+            const downloadPromise = youtubedl(url, {
+              extractAudio: true,
+              audioFormat: 'mp3',
+              audioQuality: quality,
+              output: outputTemplate,
+              noWarnings: true,
+              noCheckCertificates: true,
+              addHeader: [
+                'referer:youtube.com',
+                'user-agent:googlebot'
+              ]
+            })
+            
+            // Simula progresso realistico (youtube-dl-exec non supporta callback di progresso)
+            let currentProgress = 0
+            const progressInterval = setInterval(() => {
+              if (downloadId) {
+                // Incrementa progresso gradualmente
+                currentProgress += Math.random() * 15 + 5 // 5-20% per volta
+                currentProgress = Math.min(95, currentProgress)
+                
+                event.sender.send('youtube-download-progress', {
+                  downloadId,
+                  percentage: Math.round(currentProgress),
+                  speed: 'N/A',
+                  eta: 'N/A'
+                })
+              }
+            }, 2000)
+            
+            await downloadPromise
+            clearInterval(progressInterval)
+            
+            // Invia progresso finale
+            if (downloadId) {
+              event.sender.send('youtube-download-progress', {
+                downloadId,
+                percentage: 100,
+                speed: 'N/A',
+                eta: 'N/A'
+              })
+            }
+            
+            console.log(`✅ [YOUTUBE] Download completato`)
+            return { 
+              success: true, 
+              filePath: outputPath,
+              title: videoInfo?.title || 'Unknown Title',
+              artist: videoInfo?.uploader || 'Unknown Artist',
+              duration: videoInfo?.duration || 0
+            }
+          } catch (error) {
+            console.error('❌ [YOUTUBE] Errore download:', error)
+            return { success: false, error: error.message || 'Errore durante il download' }
+          }
+        })
+
+        ipcMain.handle('select-folder', async (event, type) => {
+          try {
+            const { dialog } = require('electron')
+            const result = await dialog.showOpenDialog(mainWindow, {
+              properties: ['openDirectory'],
+              title: `Seleziona cartella per ${type === 'youtube' ? 'YouTube downloads' : 'file'}`
+            })
+            
+            if (!result.canceled && result.filePaths.length > 0) {
+              return { success: true, path: result.filePaths[0] }
+            } else {
+              return { success: false, error: 'Nessuna cartella selezionata' }
+            }
+          } catch (error) {
+            console.error('❌ [FOLDER] Errore selezione cartella:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('open-folder', async (event, folderPath) => {
+          try {
+            const { shell } = require('electron')
+            await shell.showItemInFolder(folderPath)
+            return { success: true }
+          } catch (error) {
+            console.error('❌ [FOLDER] Errore apertura cartella:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('refresh-file-manager', async (event, folderPath) => {
+          try {
+            console.log(`🔄 [FILE MANAGER] Refresh richiesto per: ${folderPath}`)
+            // Invia evento al renderer per aggiornare il file manager
+            mainWindow.webContents.send('file-manager-refresh', folderPath)
+            return { success: true }
+          } catch (error) {
+            console.error('❌ [FILE MANAGER] Errore refresh:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('add-to-library', async (event, { filePath, title, artist, duration }) => {
+          try {
+            console.log(`📚 [LIBRARY] Aggiunta traccia: ${title} - ${artist}`)
+            
+            // Crea la traccia per la libreria
+            const track = {
+              id: Date.now().toString(),
+              title: title || 'Unknown Title',
+              artist: artist || 'Unknown Artist',
+              duration: duration || 0,
+              filePath: filePath,
+              addedAt: new Date().toISOString(),
+              source: 'youtube'
+            }
+            
+            // Invia evento al renderer per aggiungere alla libreria
+            mainWindow.webContents.send('library-add-track', track)
+            
+            return { success: true, track }
+          } catch (error) {
+            console.error('❌ [LIBRARY] Errore aggiunta traccia:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        // Funzioni helper
+        function formatDuration(seconds) {
+          const hours = Math.floor(seconds / 3600)
+          const minutes = Math.floor((seconds % 3600) / 60)
+          const secs = seconds % 60
+          
+          if (hours > 0) {
+            return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+          }
+          return `${minutes}:${secs.toString().padStart(2, '0')}`
+        }
+
+        function formatNumber(num) {
+          if (num >= 1000000) {
+            return (num / 1000000).toFixed(1) + 'M'
+          } else if (num >= 1000) {
+            return (num / 1000).toFixed(1) + 'K'
+          }
+          return num.toString()
+        }
 
 // Esporta la funzione per l'updater
 module.exports = { getMainWindow }

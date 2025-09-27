@@ -24,6 +24,7 @@ const TopNav = () => {
   const items = [
     { path: '/', label: t('nav.console') },
     { path: '/library', label: 'Libreria & Playlist' },
+    { path: '/youtube', label: '🎵 YouTube Downloader' },
     { path: '/settings', label: t('nav.settings') },
   ]
 

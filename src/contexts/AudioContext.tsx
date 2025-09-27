@@ -2217,16 +2217,23 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       
       try {
         if (deck === 'left') {
-          console.log(`🗑️ [AUDIO CONTEXT] Clearing LEFT deck`)
+          console.log(`🗑️ [AUDIO CONTEXT] Clearing LEFT deck completely`)
           dispatch({ type: 'SET_LEFT_DECK_TRACK', payload: null })
           dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: false })
           dispatch({ type: 'SET_LEFT_DECK_TIME', payload: 0 })
+          dispatch({ type: 'SET_LEFT_DECK_DURATION', payload: 0 })
+          dispatch({ type: 'SET_LEFT_DECK_VOLUME', payload: 1.0 })
+          dispatch({ type: 'SET_LEFT_DECK_LOCAL_VOLUME', payload: 0.0 })
         } else if (deck === 'right') {
-          console.log(`🗑️ [AUDIO CONTEXT] Clearing RIGHT deck`)
+          console.log(`🗑️ [AUDIO CONTEXT] Clearing RIGHT deck completely`)
           dispatch({ type: 'SET_RIGHT_DECK_TRACK', payload: null })
           dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: false })
           dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: 0 })
+          dispatch({ type: 'SET_RIGHT_DECK_DURATION', payload: 0 })
+          dispatch({ type: 'SET_RIGHT_DECK_VOLUME', payload: 1.0 })
+          dispatch({ type: 'SET_RIGHT_DECK_LOCAL_VOLUME', payload: 0.0 })
         }
+        console.log(`✅ [AUDIO CONTEXT] Deck ${deck} completamente svuotato`)
       } catch (error) {
         console.error('❌ [AUDIO CONTEXT] Errore nella pulizia deck:', error)
       }
@@ -2713,10 +2720,13 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // ✅ NUOVO: Funzioni per liberare i deck
   const clearLeftDeck = useCallback(() => {
-    console.log('🗑️ [DECK CLEAR] Liberando deck sinistro')
+    console.log('🗑️ [DECK CLEAR] Liberando deck sinistro completamente')
     dispatch({ type: 'SET_LEFT_DECK_TRACK', payload: null })
     dispatch({ type: 'SET_LEFT_DECK_PLAYING', payload: false })
     dispatch({ type: 'SET_LEFT_DECK_TIME', payload: 0 })
+    dispatch({ type: 'SET_LEFT_DECK_DURATION', payload: 0 })
+    dispatch({ type: 'SET_LEFT_DECK_VOLUME', payload: 1.0 })
+    dispatch({ type: 'SET_LEFT_DECK_LOCAL_VOLUME', payload: 0.0 })
     
     // Ferma l'audio se è in riproduzione
     const leftAudio = document.querySelector('audio[data-deck="A"]') as HTMLAudioElement
@@ -2725,13 +2735,17 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       leftAudio.currentTime = 0
       leftAudio.src = ''
     }
+    console.log('✅ [DECK CLEAR] Deck sinistro completamente svuotato')
   }, [])
 
   const clearRightDeck = useCallback(() => {
-    console.log('🗑️ [DECK CLEAR] Liberando deck destro')
+    console.log('🗑️ [DECK CLEAR] Liberando deck destro completamente')
     dispatch({ type: 'SET_RIGHT_DECK_TRACK', payload: null })
     dispatch({ type: 'SET_RIGHT_DECK_PLAYING', payload: false })
     dispatch({ type: 'SET_RIGHT_DECK_TIME', payload: 0 })
+    dispatch({ type: 'SET_RIGHT_DECK_DURATION', payload: 0 })
+    dispatch({ type: 'SET_RIGHT_DECK_VOLUME', payload: 1.0 })
+    dispatch({ type: 'SET_RIGHT_DECK_LOCAL_VOLUME', payload: 0.0 })
     
     // Ferma l'audio se è in riproduzione
     const rightAudio = document.querySelector('audio[data-deck="B"]') as HTMLAudioElement
@@ -2740,6 +2754,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       rightAudio.currentTime = 0
       rightAudio.src = ''
     }
+    console.log('✅ [DECK CLEAR] Deck destro completamente svuotato')
   }, [])
 
   // ✅ CROSSFADER: Funzione per impostare il crossfader (solo per streaming)

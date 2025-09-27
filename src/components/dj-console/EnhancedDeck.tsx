@@ -64,7 +64,8 @@ const EnhancedDeck: React.FC<EnhancedDeckProps> = ({
 
   // Stato del deck attuale dal context
   const deckState = side === 'left' ? audioState.leftDeck : audioState.rightDeck
-  const currentTrack = deckState.track || track
+  // ✅ FIX: Usa solo lo stato Redux, non il prop track
+  const currentTrack = deckState.track
   const isPlaying = deckState.isPlaying
   const currentTime = deckState.currentTime || 0
   

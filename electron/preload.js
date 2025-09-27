@@ -32,6 +32,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ✅ NUOVO: Listener per progresso download aggiornamenti
   on: (event, callback) => ipcRenderer.on(event, callback),
   removeListener: (event, callback) => ipcRenderer.removeListener(event, callback),
+  // ===== YOUTUBE DOWNLOADER API =====
+  getYouTubeInfo: (url) => ipcRenderer.invoke('get-youtube-info', url),
+  downloadYouTubeAudio: (options) => ipcRenderer.invoke('download-youtube-audio', options),
+  selectFolder: (type) => ipcRenderer.invoke('select-folder', type),
+  openFolder: (path) => ipcRenderer.invoke('open-folder', path),
+  refreshFileManager: (path) => ipcRenderer.invoke('refresh-file-manager', path),
+  addToLibrary: (trackData) => ipcRenderer.invoke('add-to-library', trackData),
   // ===== WEBRTC SERVER API =====
   webrtcServerAPI: {
     startServer: (options) => ipcRenderer.invoke('start-webrtc-server', options),
