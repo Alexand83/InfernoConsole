@@ -79,7 +79,9 @@ jobs:
           - Versione sviluppata da Alessandro(NeverAgain)
           - Licenza MIT
           - Supporto completo per streaming Icecast
-        files: dist-electron/*.exe
+        files: |
+          dist-electron/*.exe
+          dist-electron/latest.yml
         draft: false
         prerelease: false
         generate_release_notes: true
