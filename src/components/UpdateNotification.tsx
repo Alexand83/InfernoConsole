@@ -136,7 +136,7 @@ const UpdateNotification: React.FC = () => {
         </div>
 
         <div className="text-sm text-dj-light/80 mb-3">
-          <p>Versione {updateInfo.version} ({updateInfo.size})</p>
+          <p>Versione {updateInfo.version} - {updateInfo.size}</p>
           {updateInfo.isDownloading && updateInfo.progress !== undefined && (
             <div className="mt-2">
               <div className="w-full bg-dj-secondary/30 rounded-full h-2">

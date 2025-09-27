@@ -211,6 +211,9 @@ class AppUpdater {
         mainWindow.webContents.send('download-complete')
       }
       
+      // ✅ NUOVO: Crea/aggiorna collegamento desktop dopo download
+      this.createDesktopShortcut()
+      
       // ✅ FIX: Verifica il tipo di download in base alla piattaforma
       let downloadType = 'completo'
       if (process.platform === 'darwin') {
@@ -458,31 +461,16 @@ updaterCacheDirName: dj-console-updater`
         const desktopPath = path.join(require('os').homedir(), 'Desktop')
         const shortcutPath = path.join(desktopPath, 'Inferno Console.lnk')
         
-        // ✅ FIX: Verifica se il collegamento esiste già
-        if (fs.existsSync(shortcutPath)) {
-          console.log('✅ Collegamento desktop già esistente:', shortcutPath)
-          return
-        }
-        
-        // ✅ FIX: Percorso corretto per electron-builder Windows
-        // electron-builder installa in: %LOCALAPPDATA%\Programs\Inferno Console\
-        const localAppData = process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local')
-        const updatedAppPath = path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno Console.exe')
-        
         console.log('🔗 Creazione collegamento desktop...')
         console.log('📁 Percorso collegamento:', shortcutPath)
-        console.log('📁 Percorso app aggiornata:', updatedAppPath)
-        console.log('📁 LOCALAPPDATA:', localAppData)
         
-        // Verifica che il percorso esista prima di creare il collegamento
-        if (!fs.existsSync(updatedAppPath)) {
-          console.log('⚠️ App non ancora installata, creo collegamento con percorso corrente')
-          // Usa il percorso corrente come fallback
-          const currentAppPath = app.getPath('exe')
-          this.createShortcutWithPath(shortcutPath, currentAppPath)
-        } else {
-          this.createShortcutWithPath(shortcutPath, updatedAppPath)
-        }
+        // ✅ FIX: Usa sempre il percorso corrente per ora
+        // Il collegamento verrà aggiornato dopo l'installazione
+        const currentAppPath = app.getPath('exe')
+        console.log('📁 Percorso app corrente:', currentAppPath)
+        
+        // Crea il collegamento con il percorso corrente
+        this.createShortcutWithPath(shortcutPath, currentAppPath)
       }
     } catch (error) {
       console.error('❌ Errore nella creazione del collegamento:', error)
@@ -513,9 +501,56 @@ updaterCacheDirName: dj-console-updater`
       if (error) {
         console.error('❌ Errore creazione collegamento:', error)
         console.error('❌ Stderr:', stderr)
+        
+        // ✅ FALLBACK: Crea collegamento con percorso fisso di aggiornamento
+        this.createFallbackShortcut(shortcutPath)
       } else {
         console.log('✅ Collegamento desktop creato con successo')
         console.log('📋 Output:', stdout)
+      }
+    })
+  }
+
+  // ✅ FALLBACK: Crea collegamento con percorso fisso di aggiornamento
+  createFallbackShortcut(shortcutPath) {
+    const path = require('path')
+    
+    // Percorso fisso dove electron-builder installa sempre l'app
+    const localAppData = process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local')
+    const fallbackAppPath = path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno Console.exe')
+    
+    console.log('🔄 FALLBACK: Creazione collegamento con percorso fisso')
+    console.log('📁 Percorso fallback:', fallbackAppPath)
+    
+    const psCommand = `
+      try {
+        $WshShell = New-Object -comObject WScript.Shell
+        $Shortcut = $WshShell.CreateShortcut("${shortcutPath}")
+        $Shortcut.TargetPath = "${fallbackAppPath}"
+        $Shortcut.WorkingDirectory = "${path.dirname(fallbackAppPath)}"
+        $Shortcut.Description = "Inferno Console - Console DJ professionale (Aggiornato)"
+        $Shortcut.IconLocation = "${fallbackAppPath},0"
+        $Shortcut.Save()
+        Write-Host "FALLBACK SUCCESS: Collegamento creato con percorso fisso"
+      } catch {
+        Write-Host "FALLBACK ERROR: $($_.Exception.Message)"
+        # Ultimo tentativo: crea collegamento che apre la cartella
+        $Shortcut = $WshShell.CreateShortcut("${shortcutPath}")
+        $Shortcut.TargetPath = "explorer.exe"
+        $Shortcut.Arguments = "/select,`"${fallbackAppPath}`""
+        $Shortcut.Description = "Inferno Console - Apri cartella installazione"
+        $Shortcut.Save()
+        Write-Host "EXPLORER FALLBACK: Collegamento che apre cartella"
+      }
+    `
+    
+    require('child_process').exec(`powershell -Command "${psCommand}"`, (fallbackError, fallbackStdout, fallbackStderr) => {
+      if (fallbackError) {
+        console.error('❌ Anche il fallback è fallito:', fallbackError)
+        console.error('❌ Fallback Stderr:', fallbackStderr)
+      } else {
+        console.log('✅ Fallback collegamento creato con successo')
+        console.log('📋 Fallback Output:', fallbackStdout)
       }
     })
   }
