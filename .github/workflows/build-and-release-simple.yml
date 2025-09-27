@@ -54,16 +54,16 @@ jobs:
         EXE_SHA512=$(sha512sum "$EXE_FILE" 2>/dev/null | cut -d' ' -f1 || shasum -a 512 "$EXE_FILE" 2>/dev/null | cut -d' ' -f1 || echo "placeholder")
         
         # Crea latest.yml
-        cat > latest.yml << EOF
-version: ${{ github.ref_name }}
-files:
-  - url: $EXE_FILE
-    sha512: $EXE_SHA512
-    size: $EXE_SIZE
-path: $EXE_FILE
-sha512: $EXE_SHA512
-releaseDate: '$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'
-EOF
+        cat > latest.yml << 'EOF'
+        version: ${{ github.ref_name }}
+        files:
+          - url: $EXE_FILE
+            sha512: $EXE_SHA512
+            size: $EXE_SIZE
+        path: $EXE_FILE
+        sha512: $EXE_SHA512
+        releaseDate: '$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'
+        EOF
         
         echo "Generated latest.yml:"
         cat latest.yml
