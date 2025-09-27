@@ -1,4 +1,4 @@
-name: Build and Release Simple
+name: Build and Release Inferno Console
 
 on:
   push:
@@ -84,9 +84,9 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ github.ref_name }}
-        name: DJ Console Pro ${{ github.ref_name }}
+        name: Inferno Console ${{ github.ref_name }}
         body: |
-          ## 🎵 DJ Console Pro ${{ github.ref_name }}
+          ## 🎵 Inferno Console ${{ github.ref_name }}
           
           ### ✨ Nuove Funzionalità
           - Sistema di streaming continuo migliorato
@@ -108,7 +108,7 @@ jobs:
           ### 🚀 Installazione
           1. Scarica il file appropriato per il tuo sistema
           2. Esegui l'installer (Windows/macOS)
-          3. Avvia DJ Console Pro e goditi la tua sessione DJ!
+          3. Avvia Inferno Console e goditi la tua sessione DJ!
           
           ### 📝 Note
           - Versione sviluppata da Alessandro(NeverAgain)
@@ -129,9 +129,9 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ github.ref_name }}
-        name: DJ Console Pro ${{ github.ref_name }}
+        name: Inferno Console ${{ github.ref_name }}
         body: |
-          ## 🎵 DJ Console Pro ${{ github.ref_name }}
+          ## 🎵 Inferno Console ${{ github.ref_name }}
           
           ### ✨ Nuove Funzionalità
           - Sistema di streaming continuo migliorato
@@ -153,7 +153,7 @@ jobs:
           ### 🚀 Installazione
           1. Scarica il file appropriato per il tuo sistema
           2. Esegui l'installer (Windows/macOS)
-          3. Avvia DJ Console Pro e goditi la tua sessione DJ!
+          3. Avvia Inferno Console e goditi la tua sessione DJ!
           
           ### 📝 Note
           - Versione sviluppata da Alessandro(NeverAgain)
