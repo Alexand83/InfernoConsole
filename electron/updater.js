@@ -537,7 +537,7 @@ updaterCacheDirName: dj-console-updater`
         # Ultimo tentativo: crea collegamento che apre la cartella
         $Shortcut = $WshShell.CreateShortcut("${shortcutPath}")
         $Shortcut.TargetPath = "explorer.exe"
-        $Shortcut.Arguments = "/select,`"${fallbackAppPath}`""
+        $Shortcut.Arguments = "/select,${fallbackAppPath}"
         $Shortcut.Description = "Inferno Console - Apri cartella installazione"
         $Shortcut.Save()
         Write-Host "EXPLORER FALLBACK: Collegamento che apre cartella"
