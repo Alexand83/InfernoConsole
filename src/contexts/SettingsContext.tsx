@@ -220,10 +220,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        // ✅ FIX: Carica settings senza aspettare l'inizializzazione completa
+        // ✅ OPTIMIZATION: Caricamento settings ultra-veloce
         const savedSettings = await localDatabase.getSettings().catch(() => null)
         
-        // Completa l'inizializzazione in background
+        // Inizializzazione database completamente in background
         localDatabase.waitForInitialization().catch(() => {})
         
         if (savedSettings) {

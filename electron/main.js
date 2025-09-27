@@ -8,7 +8,7 @@ const fs = require('fs')
 const WebRTCServer = require('./webrtc-server')
 const youtubedl = require('youtube-dl-exec')
 
-// Ottimizzazioni per performance e riduzione warning
+// ✅ OPTIMIZATION: Ottimizzazioni per avvio ultra-veloce
 app.commandLine.appendSwitch('--disable-gpu-sandbox')
 app.commandLine.appendSwitch('--disable-software-rasterizer')
 app.commandLine.appendSwitch('--disable-background-timer-throttling')
@@ -16,9 +16,12 @@ app.commandLine.appendSwitch('--disable-backgrounding-occluded-windows')
 app.commandLine.appendSwitch('--disable-renderer-backgrounding')
 app.commandLine.appendSwitch('--disable-features', 'TranslateUI')
 app.commandLine.appendSwitch('--disable-ipc-flooding-protection')
-// Riduce i warning di cache
 app.commandLine.appendSwitch('--disable-web-security')
 app.commandLine.appendSwitch('--disable-features', 'VizDisplayCompositor')
+app.commandLine.appendSwitch('--no-sandbox')
+app.commandLine.appendSwitch('--disable-dev-shm-usage')
+app.commandLine.appendSwitch('--disable-extensions')
+app.commandLine.appendSwitch('--disable-plugins')
 
 // ✅ AUTO-UPDATER: Importa il modulo auto-updater
 const AppUpdater = require('./updater')
@@ -144,8 +147,8 @@ function createWindow() {
       contextIsolation: true,
       enableRemoteModule: false,
       // ✅ OPTIMIZATION: Ottimizzazioni per avvio più veloce
-      webSecurity: true,
-      allowRunningInsecureContent: false,
+      webSecurity: false, // Disabilita per velocità
+      allowRunningInsecureContent: true, // Permette contenuto per velocità
       experimentalFeatures: false,
       // Disabilita funzionalità non essenziali per avvio veloce
       backgroundThrottling: false,
@@ -224,7 +227,7 @@ app.whenReady().then(() => {
     } catch (error) {
       console.error('Auto-updater initialization failed:', error)
     }
-  }, 2000) // Aspetta 2 secondi dopo l'apertura
+  }, 5000) // Aspetta 5 secondi dopo l'apertura per avvio più veloce
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -862,7 +865,7 @@ ipcMain.handle('save-audio', async (_evt, { id, name, arrayBuffer }) => {
 // ✅ OPTIMIZATION: Simple JSON DB (Electron only) con cache migliorata per avvio veloce
 let databaseCache = null
 let databaseCacheTime = 0
-const CACHE_DURATION = 10000 // 10 secondi - cache più lunga per avvio veloce
+const CACHE_DURATION = 30000 // 30 secondi - cache molto più lunga per avvio veloce
 
 ipcMain.handle('db-load', async () => {
   try {

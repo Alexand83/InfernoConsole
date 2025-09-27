@@ -463,11 +463,16 @@ const LibraryManager = () => {
         
         // Completa l'inizializzazione in background
         initPromise.catch(() => {})
-        // Evita freeze in Electron: non rigenerare waveform massivamente sul main thread
-        const isElectron = !!((window as any).fileStore) || ((typeof navigator !== 'undefined' && (navigator.userAgent || '').includes('Electron')))
-        if (!isElectron) {
-          // In browser è ok rigenerare (meno rischio di blocchi)
-          for (const t of allTracks) {
+        // ✅ OPTIMIZATION: Waveform generation completamente differita per avvio veloce
+        // Non rigenerare waveform all'avvio - solo quando necessario
+        try { 
+          (window as any).log?.info?.('Waveform generation deferred for faster startup') 
+        } catch {}
+        
+        // Genera waveform solo per i primi 5 track per avvio veloce
+        const tracksToProcess = allTracks.slice(0, 5)
+        setTimeout(async () => {
+          for (const t of tracksToProcess) {
             if ((!t.waveform || t.waveform.length === 0) && t.blobId) {
               try {
                 const blob = await getBlob(t.blobId)
@@ -481,9 +486,7 @@ const LibraryManager = () => {
               } catch {}
             }
           }
-        } else {
-          try { (window as any).log?.info?.('Waveform regen skipped in Electron to keep UI responsive') } catch {}
-        }
+        }, 1000) // Differito di 1 secondo
         setTracks(allTracks)
         setFilteredTracks(allTracks)
       } catch (error) {

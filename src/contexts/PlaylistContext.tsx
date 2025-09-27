@@ -277,15 +277,14 @@ export function PlaylistProvider({ children }: { children: React.ReactNode }) {
       try {
         dispatch({ type: 'SET_LOADING', payload: true })
         
-        // ✅ FIX: Non aspettare l'inizializzazione del database - carica in background
-        const initPromise = localDatabase.waitForInitialization()
-        
-        // Carica prima i dati essenziali, poi completa l'inizializzazione
+        // ✅ OPTIMIZATION: Caricamento ultra-veloce - solo dati essenziali
         const [tracks, playlists] = await Promise.all([
           localDatabase.getAllTracks().catch(() => []), // Fallback a array vuoto
-          localDatabase.getAllPlaylists().catch(() => []), // Fallback a array vuoto
-          initPromise // Completa l'inizializzazione in background
+          localDatabase.getAllPlaylists().catch(() => []) // Fallback a array vuoto
         ])
+        
+        // Inizializzazione database completamente in background
+        localDatabase.waitForInitialization().catch(() => {})
         
         // Convert database playlists to interface format
         const interfacePlaylists: Playlist[] = await Promise.all(
