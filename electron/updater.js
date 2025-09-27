@@ -48,30 +48,66 @@ class AppUpdater {
       console.log('📦 Aggiornamento disponibile:', info.version)
       console.log('📦 Info aggiornamento:', JSON.stringify(info, null, 2))
       
-      // ✅ FIX: Calcola la dimensione del file in base alla piattaforma
+      // ✅ FIX: Controllo robusto dei file disponibili
       let fileSizeMB = 'N/A'
+      let selectedFile = null
+      
       if (info.files && info.files.length > 0) {
+        console.log('📁 File disponibili:', info.files.map(f => ({ url: f.url, size: f.size })))
+        
         if (process.platform === 'win32') {
-          // Windows: usa il file completo portable
-          const portableFile = info.files.find(file => 
-            file.url && file.url.includes('.exe')
+          // Windows: cerca file .exe, .msi, o qualsiasi file Windows
+          selectedFile = info.files.find(file => 
+            file.url && (
+              file.url.includes('.exe') || 
+              file.url.includes('.msi') ||
+              file.url.includes('win') ||
+              file.url.includes('windows')
+            )
           )
-          if (portableFile && portableFile.size) {
-            fileSizeMB = (portableFile.size / (1024 * 1024)).toFixed(1)
-          } else {
-            fileSizeMB = (info.files[0].size / (1024 * 1024)).toFixed(1)
+          
+          // Se non trova file specifici Windows, usa il primo file disponibile
+          if (!selectedFile) {
+            selectedFile = info.files[0]
+            console.log('⚠️ File Windows specifico non trovato, uso il primo disponibile:', selectedFile.url)
           }
         } else {
-          // macOS: cerca il file delta (.nupkg)
-          const deltaFile = info.files.find(file => 
-            file.url && (file.url.includes('.nupkg') || file.url.includes('delta'))
+          // macOS: cerca file .dmg, .pkg, o qualsiasi file macOS
+          selectedFile = info.files.find(file => 
+            file.url && (
+              file.url.includes('.dmg') || 
+              file.url.includes('.pkg') ||
+              file.url.includes('mac') ||
+              file.url.includes('macos')
+            )
           )
-          if (deltaFile && deltaFile.size) {
-            fileSizeMB = (deltaFile.size / (1024 * 1024)).toFixed(1)
-          } else {
-            fileSizeMB = (info.files[0].size / (1024 * 1024)).toFixed(1)
+          
+          // Se non trova file specifici macOS, usa il primo file disponibile
+          if (!selectedFile) {
+            selectedFile = info.files[0]
+            console.log('⚠️ File macOS specifico non trovato, uso il primo disponibile:', selectedFile.url)
           }
         }
+        
+        if (selectedFile && selectedFile.size) {
+          fileSizeMB = (selectedFile.size / (1024 * 1024)).toFixed(1)
+          console.log('✅ File selezionato per download:', selectedFile.url, `(${fileSizeMB} MB)`)
+        } else {
+          console.error('❌ Nessun file valido trovato per il download')
+          // Mostra errore invece di "Release non ancora disponibile"
+          dialog.showErrorBox(
+            'Errore Aggiornamento',
+            `Nessun file di aggiornamento valido trovato per ${process.platform}.\n\nFile disponibili:\n${info.files.map(f => f.url).join('\n')}`
+          )
+          return
+        }
+      } else {
+        console.error('❌ Nessun file disponibile per il download')
+        dialog.showErrorBox(
+          'Errore Aggiornamento',
+          'Nessun file di aggiornamento disponibile per il download.'
+        )
+        return
       }
       
       // Controlla se è già stato scaricato
@@ -116,6 +152,7 @@ class AppUpdater {
 
     autoUpdater.on('update-not-available', (info) => {
       console.log('✅ App aggiornata alla versione più recente')
+      console.log('📦 Info versione corrente:', JSON.stringify(info, null, 2))
     })
 
     autoUpdater.on('error', (err) => {
@@ -251,6 +288,33 @@ class AppUpdater {
     }
   }
 
+  // ✅ FIX: Metodo per forzare il controllo aggiornamenti con reset completo
+  forceUpdateCheck() {
+    try {
+      console.log('🔄 Controllo forzato aggiornamenti con reset completo...')
+      
+      // Reset completo della cache
+      autoUpdater.clearCache()
+      
+      // Reset dello stato
+      this.downloadState = {
+        isDownloading: false,
+        isDownloaded: false,
+        isInstalling: false
+      }
+      
+      // Forza il controllo aggiornamenti
+      autoUpdater.checkForUpdates().then((result) => {
+        console.log('✅ Controllo forzato completato:', result)
+      }).catch((error) => {
+        console.error('❌ Errore controllo forzato:', error)
+      })
+      
+    } catch (error) {
+      console.error('❌ Errore durante il controllo forzato:', error)
+    }
+  }
+
   // Metodo per installare l'aggiornamento scaricato
   installUpdate() {
     if (this.downloadState.isDownloaded && !this.downloadState.isInstalling) {
@@ -310,6 +374,43 @@ updaterCacheDirName: dj-console-updater`
       
     } catch (error) {
       console.error('❌ Errore nel ricreare il file di configurazione:', error)
+    }
+  }
+
+  // ✅ NUOVO: Metodo per verificare manualmente i file disponibili su GitHub
+  async checkGitHubFiles() {
+    try {
+      const https = require('https')
+      const url = 'https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest'
+      
+      return new Promise((resolve, reject) => {
+        https.get(url, {
+          headers: {
+            'User-Agent': 'DJ-Console-Updater',
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        }, (res) => {
+          let data = ''
+          res.on('data', (chunk) => data += chunk)
+          res.on('end', () => {
+            try {
+              const release = JSON.parse(data)
+              console.log('🔍 Release GitHub trovata:', release.tag_name)
+              console.log('📁 Assets disponibili:', release.assets.map(a => ({
+                name: a.name,
+                size: a.size,
+                download_url: a.browser_download_url
+              })))
+              resolve(release)
+            } catch (err) {
+              reject(err)
+            }
+          })
+        }).on('error', reject)
+      })
+    } catch (error) {
+      console.error('❌ Errore nel controllo file GitHub:', error)
+      throw error
     }
   }
 }

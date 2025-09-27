@@ -1038,6 +1038,38 @@ ipcMain.handle('force-check-updates', async () => {
   }
 })
 
+// ✅ FIX: Handler per forzare controllo aggiornamenti con reset completo
+ipcMain.handle('force-update-check', async () => {
+  try {
+    const AppUpdater = require('./updater')
+    const updater = new AppUpdater()
+    
+    // Forza il controllo con reset completo
+    updater.forceUpdateCheck()
+    
+    return { success: true, message: 'Controllo forzato avviato' }
+  } catch (error) {
+    console.error('Errore nel controllo forzato aggiornamenti:', error)
+    throw error
+  }
+})
+
+// ✅ NUOVO: Handler per verificare file GitHub direttamente
+ipcMain.handle('check-github-files', async () => {
+  try {
+    const AppUpdater = require('./updater')
+    const updater = new AppUpdater()
+    
+    // Verifica i file disponibili su GitHub
+    const release = await updater.checkGitHubFiles()
+    
+    return { success: true, release }
+  } catch (error) {
+    console.error('Errore nel controllo file GitHub:', error)
+    throw error
+  }
+})
+
 
 
 

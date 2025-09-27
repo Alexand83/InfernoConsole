@@ -1528,23 +1528,98 @@ const Settings = () => {
                       {isCheckingUpdates ? 'Controllo aggiornamenti...' : 'Controlla aggiornamenti'}
                     </button>
                     
-                    {/* ✅ NUOVO: Pulsante per forzare refresh */}
+                    {/* ✅ FIX: Pulsante per forzare refresh con reset cache auto-updater */}
                     <button
-                      onClick={() => {
-                        refreshVersionInfo()
-                        handleCheckUpdates()
+                      onClick={async () => {
+                        try {
+                          // Reset cache auto-updater
+                          if (window.autoUpdater) {
+                            await window.autoUpdater.resetCache()
+                            console.log('✅ Cache auto-updater pulita')
+                          }
+                          
+                          // Refresh version info
+                          refreshVersionInfo()
+                          
+                          // Controlla aggiornamenti
+                          await handleCheckUpdates()
+                        } catch (error) {
+                          console.error('❌ Errore nel refresh:', error)
+                        }
                       }}
                       disabled={isCheckingUpdates}
                       className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Forza il refresh delle informazioni di versione (ignora cache)"
+                      title="Forza il refresh delle informazioni di versione (ignora cache auto-updater)"
                     >
                       🔄 Refresh
+                    </button>
+                    
+                    {/* ✅ NUOVO: Pulsante per reset completo auto-updater */}
+                    <button
+                      onClick={async () => {
+                        try {
+                          setIsCheckingUpdates(true)
+                          
+                          // Reset completo auto-updater
+                          if (window.autoUpdater) {
+                            await window.autoUpdater.forceCheckUpdates()
+                            console.log('✅ Reset completo auto-updater avviato')
+                          }
+                          
+                          // Attendi e ricarica
+                          setTimeout(() => {
+                            window.location.reload()
+                          }, 3000)
+                        } catch (error) {
+                          console.error('❌ Errore nel reset completo:', error)
+                          setIsCheckingUpdates(false)
+                        }
+                      }}
+                      disabled={isCheckingUpdates}
+                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Reset completo dell'auto-updater (risolve problemi di 'build in corso')"
+                    >
+                      🔥 Reset Completo
+                    </button>
+                    
+                    {/* ✅ NUOVO: Pulsante per verificare file GitHub */}
+                    <button
+                      onClick={async () => {
+                        try {
+                          setIsCheckingUpdates(true)
+                          
+                          if (window.autoUpdater && (window.autoUpdater as any).checkGitHubFiles) {
+                            const result = await (window.autoUpdater as any).checkGitHubFiles()
+                            console.log('🔍 File GitHub verificati:', result)
+                            
+                            // Mostra i file disponibili
+                            if (result.release && result.release.assets) {
+                              const files = result.release.assets.map((a: any) => `${a.name} (${(a.size / 1024 / 1024).toFixed(1)} MB)`).join('\n')
+                              alert(`File disponibili su GitHub:\n\n${files}`)
+                            }
+                          } else {
+                            alert('Metodo checkGitHubFiles non disponibile')
+                          }
+                        } catch (error) {
+                          console.error('❌ Errore nel controllo file GitHub:', error)
+                          alert('Errore nel controllo file GitHub: ' + error.message)
+                        } finally {
+                          setIsCheckingUpdates(false)
+                        }
+                      }}
+                      disabled={isCheckingUpdates}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Verifica i file disponibili su GitHub (debug)"
+                    >
+                      🔍 Verifica GitHub
                     </button>
                   </div>
                   
                   {/* Messaggio di aiuto */}
                   <div className="text-xs text-dj-light/60 bg-dj-secondary/50 p-2 rounded">
-                    <p><strong>💡 Suggerimento:</strong> Se vedi versioni errate, usa "Refresh" per forzare il controllo</p>
+                    <p><strong>💡 Suggerimento:</strong> Se vedi "Release non ancora disponibile", usa "Refresh" o "Reset Completo" per forzare il controllo</p>
+                    <p><strong>🔥 Reset Completo:</strong> Risolve problemi di cache auto-updater e "build in corso"</p>
+                    <p><strong>🔍 Verifica GitHub:</strong> Controlla direttamente i file disponibili su GitHub (debug)</p>
                   </div>
                   
                   {versionInfo?.isUpdateAvailable && (

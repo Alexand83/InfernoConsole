@@ -85,6 +85,8 @@ contextBridge.exposeInMainWorld('autoUpdater', {
   installUpdate: () => ipcRenderer.invoke('install-update'),
   resetCache: () => ipcRenderer.invoke('reset-updater-cache'),
   forceCheckUpdates: () => ipcRenderer.invoke('force-check-updates'),
+  forceUpdateCheck: () => ipcRenderer.invoke('force-update-check'), // ✅ FIX: Nuovo metodo per reset completo
+  checkGitHubFiles: () => ipcRenderer.invoke('check-github-files'), // ✅ NUOVO: Verifica file GitHub
   onDownloadProgress: (callback) => ipcRenderer.on('download-progress', callback),
   removeDownloadProgressListener: (callback) => ipcRenderer.removeListener('download-progress', callback)
 })

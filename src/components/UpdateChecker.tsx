@@ -135,6 +135,31 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({
     }
   }
 
+  // ✅ FIX: Controllo forzato con reset completo
+  const forceUpdateCheck = async () => {
+    setIsChecking(true)
+    setError('')
+    
+    try {
+      if (window.autoUpdater) {
+        await window.autoUpdater.forceUpdateCheck()
+        console.log('✅ Controllo forzato con reset completo avviato')
+        setError('Controllo forzato avviato. Attendi qualche secondo...')
+        // Ricarica la pagina dopo il controllo forzato
+        setTimeout(() => {
+          window.location.reload()
+        }, 3000)
+      } else {
+        setError('Auto-updater non disponibile')
+      }
+    } catch (err) {
+      console.error('❌ Errore nel controllo forzato con reset:', err)
+      setError('Errore nel controllo forzato con reset completo')
+    } finally {
+      setIsChecking(false)
+    }
+  }
+
   // Funzione per confrontare le versioni (es. "1.2.3" vs "1.2.4")
   const compareVersions = (version1: string, version2: string): number => {
     const v1Parts = version1.split('.').map(Number)
@@ -209,12 +234,21 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({
             
             <button
               onClick={forceCheckUpdates}
+              className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              title="Forza il controllo aggiornamenti (ignora cache)"
+            >
+              <Download className="w-4 h-4" />
+              <span>Forza Controllo</span>
+            </button>
+            
+            <button
+              onClick={forceUpdateCheck}
               disabled={isChecking}
               className="flex items-center space-x-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               title="Forza il controllo aggiornamenti ignorando la cache"
             >
               <AlertCircle className="w-4 h-4" />
-              <span>Forza Controllo</span>
+              <span>Reset Completo</span>
             </button>
             
             {lastChecked && (
