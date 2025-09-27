@@ -93,11 +93,7 @@ publish:
   # Configurazione per auto-updater
   publishAutoUpdate: true
 
-# ✅ FIX: Forza generazione file di aggiornamento
-updater:
-  provider: github
-  owner: Alexand83
-  repo: InfernoConsole
+# ✅ FIX: Forza generazione file di aggiornamento tramite publish
 
 
 # Configurazione per download differenziali
