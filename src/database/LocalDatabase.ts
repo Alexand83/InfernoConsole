@@ -72,8 +72,6 @@ export interface DatabaseSettings {
     showSpectrum: boolean
     showBeatGrid?: boolean
     animations?: boolean
-    autoAdvance: boolean
-    playlistLoop: boolean
   }
   streaming: {
     defaultBitrate: number
@@ -135,9 +133,7 @@ class LocalDatabase {
         showWaveform: true,
         showSpectrum: true,
         showBeatGrid: true,
-        animations: true,
-        autoAdvance: true,  // ✅ ABILITATO DI DEFAULT
-        playlistLoop: true  // ✅ ABILITATO DI DEFAULT
+        animations: true
       },
       streaming: {
         defaultBitrate: 128,
