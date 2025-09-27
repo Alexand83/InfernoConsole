@@ -76,7 +76,13 @@ npmRebuild: false
 generateUpdatesFilesForAllChannels: true
 compression: maximum
 
-# Configurazione per generare app-update.yml (solo per portable)
+# ✅ FIX: Configurazione esplicita per generare latest.yml
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
 
 # Configurazione auto-updater
 publish:
@@ -86,6 +92,12 @@ publish:
   releaseType: release
   # Configurazione per auto-updater
   publishAutoUpdate: true
+
+# ✅ FIX: Forza generazione file di aggiornamento
+updater:
+  provider: github
+  owner: Alexand83
+  repo: InfernoConsole
 
 
 # Configurazione per download differenziali

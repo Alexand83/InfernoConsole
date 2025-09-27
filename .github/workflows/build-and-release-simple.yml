@@ -10,6 +10,12 @@ jobs:
   build-and-release:
     runs-on: ${{ matrix.os }}
     
+    # ✅ FIX: Permessi per il token GitHub
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    
     strategy:
       fail-fast: false
       matrix:
@@ -36,6 +42,31 @@ jobs:
       run: npm run dist:win:portable
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+    - name: Generate latest.yml for Windows
+      if: matrix.os == 'windows-latest'
+      run: |
+        echo "Generating latest.yml for Windows..."
+        cd dist-electron
+        # Trova il file .exe generato
+        EXE_FILE=$(ls *.exe | head -1)
+        EXE_SIZE=$(stat -c%s "$EXE_FILE" 2>/dev/null || stat -f%z "$EXE_FILE" 2>/dev/null || echo "0")
+        EXE_SHA512=$(sha512sum "$EXE_FILE" 2>/dev/null | cut -d' ' -f1 || shasum -a 512 "$EXE_FILE" 2>/dev/null | cut -d' ' -f1 || echo "placeholder")
+        
+        # Crea latest.yml
+        cat > latest.yml << EOF
+version: ${{ github.ref_name }}
+files:
+  - url: $EXE_FILE
+    sha512: $EXE_SHA512
+    size: $EXE_SIZE
+path: $EXE_FILE
+sha512: $EXE_SHA512
+releaseDate: '$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'
+EOF
+        
+        echo "Generated latest.yml:"
+        cat latest.yml
 
     - name: Build Electron app (macOS)
       if: matrix.os == 'macos-latest'
