@@ -26,7 +26,7 @@ const StreamingControl: React.FC<StreamingControlProps> = ({
   // Debug state
   const [debugLines, setDebugLines] = useState<string[]>([])
   const [metadata, setMetadata] = useState<StreamMetadata>({
-    title: 'DJ Console Pro',
+    title: 'Inferno Console',
     artist: 'Live Stream',
     album: 'Live Session',
     genre: 'Electronic'

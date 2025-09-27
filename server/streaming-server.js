@@ -13,7 +13,7 @@ class StreamingServer {
     this.clients = new Set()
     this.streams = new Map()
     this.currentMetadata = {
-      title: 'DJ Console Pro',
+      title: 'Inferno Console',
       artist: 'Live Stream',
       album: 'Live Session'
     }
@@ -78,7 +78,7 @@ class StreamingServer {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'icy-name': 'DJ Console Pro',
+        'icy-name': 'Inferno Console',
         'icy-genre': 'Electronic',
         'icy-url': 'http://localhost:8000',
         'icy-description': 'Professional DJ Console Live Stream'

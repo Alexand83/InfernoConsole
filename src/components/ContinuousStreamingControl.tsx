@@ -24,7 +24,7 @@ const ContinuousStreamingControl: React.FC<ContinuousStreamingControlProps> = ({
   const [streamStatus, setStreamStatus] = useState('disconnected')
   const [debugLines, setDebugLines] = useState<string[]>([])
   const [metadata, setMetadata] = useState({
-    title: 'DJ Console Pro - LIVE',
+    title: 'Inferno Console - LIVE',
     artist: 'Continuous Stream',
     album: 'Live Session',
     genre: 'Electronic'

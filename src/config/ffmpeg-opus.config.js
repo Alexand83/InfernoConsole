@@ -22,8 +22,8 @@ export const ffmpegOpusConfig = {
   
   // Icecast metadata
   icecast: {
-    name: 'DJ Console Pro - Live',
-    description: 'Live DJ Set from DJ Console Pro',
+    name: 'Inferno Console - Live',
+    description: 'Live DJ Set from Inferno Console',
     genre: 'Electronic/Live DJ',
     url: 'https://dj.onlinewebone.com',
     public: '1',
@@ -45,8 +45,8 @@ export const ffmpegOpusConfig = {
     '-packet_loss', '0',      // ✅ FIX: Disabilita gestione perdita pacchetti
     '-compression_level', '5', // ✅ FIX: Compressione bilanciata
     '-content_type', 'audio/ogg',
-    '-ice_name', 'DJ Console Pro - Live',
-    '-ice_description', 'Live DJ Set from DJ Console Pro',
+    '-ice_name', 'Inferno Console - Live',
+    '-ice_description', 'Live DJ Set from Inferno Console',
     '-ice_genre', 'Electronic/Live DJ',
     '-ice_url', 'https://dj.onlinewebone.com',
     '-ice_public', '1',

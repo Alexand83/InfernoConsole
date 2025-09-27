@@ -18,7 +18,7 @@
     "live",
     "audio"
   ],
-  "author": "DJ Console Pro",
+  "author": "Inferno Console",
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",

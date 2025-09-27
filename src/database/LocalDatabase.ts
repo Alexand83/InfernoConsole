@@ -159,7 +159,7 @@ class LocalDatabase {
         metadata: {
           stationUrl: 'https://dj.onlinewebone.com',
           genre: 'Electronic/Live DJ',
-          djName: 'DJ Console Pro'
+          djName: 'Inferno Console'
         }
       }
     }
