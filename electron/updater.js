@@ -486,21 +486,7 @@ updaterCacheDirName: inferno-console-updater`
   createShortcutWithPath(shortcutPath, appPath) {
     const path = require('path')
     
-    const psCommand = `
-      try {
-        $WshShell = New-Object -comObject WScript.Shell
-        $Shortcut = $WshShell.CreateShortcut("${shortcutPath}")
-        $Shortcut.TargetPath = "${appPath}"
-        $Shortcut.WorkingDirectory = "${path.dirname(appPath)}"
-        $Shortcut.Description = "Inferno Console - Console DJ professionale"
-        $Shortcut.IconLocation = "${appPath},0"
-        $Shortcut.Save()
-        Write-Host "SUCCESS: Collegamento creato in ${shortcutPath}"
-      } catch {
-        Write-Host "ERROR: $($_.Exception.Message)"
-        exit 1
-      }
-    `
+    const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${shortcutPath}'); $Shortcut.TargetPath = '${appPath}'; $Shortcut.WorkingDirectory = '${path.dirname(appPath)}'; $Shortcut.Description = 'Inferno Console - Console DJ professionale'; $Shortcut.IconLocation = '${appPath},0'; $Shortcut.Save(); Write-Host 'SUCCESS: Collegamento creato'`
     
     require('child_process').exec(`powershell -Command "${psCommand}"`, (error, stdout, stderr) => {
       if (error) {
@@ -516,48 +502,39 @@ updaterCacheDirName: inferno-console-updater`
     })
   }
 
-  // ✅ FALLBACK: Crea collegamento con percorso fisso di aggiornamento
+  // ✅ FALLBACK: Crea collegamento con percorso FISSO di electron-builder
   createFallbackShortcut(shortcutPath) {
     const path = require('path')
+    const fs = require('fs')
     
-    // Percorso fisso dove electron-builder installa sempre l'app
+    // PERCORSO FISSO dove electron-builder installa SEMPRE l'app aggiornata
     const localAppData = process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local')
-    const fallbackAppPath = path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno Console.exe')
+    const fixedAppPath = path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno-Console-win.exe')
     
-    console.log('🔄 FALLBACK: Creazione collegamento con percorso fisso')
-    console.log('📁 Percorso fallback:', fallbackAppPath)
+    console.log('🔄 FALLBACK: Usando percorso FISSO di electron-builder')
+    console.log('📁 Percorso fisso:', fixedAppPath)
+    console.log('📁 App exists:', fs.existsSync(fixedAppPath))
     
-    const psCommand = `
-      try {
-        $WshShell = New-Object -comObject WScript.Shell
-        $Shortcut = $WshShell.CreateShortcut("${shortcutPath}")
-        $Shortcut.TargetPath = "${fallbackAppPath}"
-        $Shortcut.WorkingDirectory = "${path.dirname(fallbackAppPath)}"
-        $Shortcut.Description = "Inferno Console - Console DJ professionale (Aggiornato)"
-        $Shortcut.IconLocation = "${fallbackAppPath},0"
-        $Shortcut.Save()
-        Write-Host "FALLBACK SUCCESS: Collegamento creato con percorso fisso"
-      } catch {
-        Write-Host "FALLBACK ERROR: $($_.Exception.Message)"
-        # Ultimo tentativo: crea collegamento che apre la cartella
-        $Shortcut = $WshShell.CreateShortcut("${shortcutPath}")
-        $Shortcut.TargetPath = "explorer.exe"
-        $Shortcut.Arguments = "/select,${fallbackAppPath}"
-        $Shortcut.Description = "Inferno Console - Apri cartella installazione"
-        $Shortcut.Save()
-        Write-Host "EXPLORER FALLBACK: Collegamento che apre cartella"
-      }
-    `
-    
-    require('child_process').exec(`powershell -Command "${psCommand}"`, (fallbackError, fallbackStdout, fallbackStderr) => {
-      if (fallbackError) {
-        console.error('❌ Anche il fallback è fallito:', fallbackError)
-        console.error('❌ Fallback Stderr:', fallbackStderr)
-      } else {
-        console.log('✅ Fallback collegamento creato con successo')
-        console.log('📋 Fallback Output:', fallbackStdout)
-      }
-    })
+    if (fs.existsSync(fixedAppPath)) {
+      // App trovata nel percorso fisso - crea collegamento diretto
+      console.log('✅ App trovata nel percorso fisso, creo collegamento diretto')
+      this.createShortcutWithPath(shortcutPath, fixedAppPath)
+    } else {
+      // App non ancora installata - crea collegamento che apre la cartella Programs
+      console.log('⚠️ App non ancora installata, creo collegamento che apre cartella Programs')
+      const programsDir = path.join(localAppData, 'Programs')
+      const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${shortcutPath}'); $Shortcut.TargetPath = 'explorer.exe'; $Shortcut.Arguments = '/select,${programsDir}'; $Shortcut.Description = 'Inferno Console - Apri cartella installazione'; $Shortcut.Save(); Write-Host 'EXPLORER FALLBACK: Collegamento creato'`
+      
+      require('child_process').exec(`powershell -Command "${psCommand}"`, (fallbackError, fallbackStdout, fallbackStderr) => {
+        if (fallbackError) {
+          console.error('❌ Anche il fallback è fallito:', fallbackError)
+          console.error('❌ Fallback Stderr:', fallbackStderr)
+        } else {
+          console.log('✅ Fallback collegamento creato con successo')
+          console.log('📋 Fallback Output:', fallbackStdout)
+        }
+      })
+    }
   }
 }
 
