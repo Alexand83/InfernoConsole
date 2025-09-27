@@ -4,9 +4,12 @@ const path = require('path')
 
 class AppUpdater {
   constructor() {
-    // ✅ DEV: Abilita controllo aggiornamenti anche in modalità sviluppo
+    // ✅ FIX: Configurazione corretta per auto-updater
     if (process.env.NODE_ENV === 'development') {
       autoUpdater.updateConfigPath = path.join(__dirname, 'dev-app-update.yml')
+    } else {
+      // Produzione: usa app-update.yml
+      autoUpdater.updateConfigPath = path.join(__dirname, 'app-update.yml')
     }
     
     // ✅ NUOVO: Configurazione per delta updates
@@ -117,6 +120,14 @@ class AppUpdater {
 
     autoUpdater.on('error', (err) => {
       console.error('❌ Errore durante il controllo aggiornamenti:', err)
+      
+      // ✅ FIX: Gestione errore ENOENT per file di configurazione
+      if (err.message && err.message.includes('ENOENT')) {
+        console.error('❌ File di configurazione aggiornamento non trovato')
+        console.log('🔄 Tentativo di ricreare il file di configurazione...')
+        this.recreateUpdateConfig()
+        return
+      }
       
       // Se l'errore è "build in corso", prova a controllare di nuovo dopo un po'
       if (err.message && err.message.includes('build')) {
@@ -272,6 +283,34 @@ class AppUpdater {
       isInstalling: false
     }
     console.log('🔄 Stato download resettato')
+  }
+
+  // ✅ FIX: Metodo per ricreare il file di configurazione
+  recreateUpdateConfig() {
+    try {
+      const fs = require('fs')
+      const path = require('path')
+      
+      const configPath = process.env.NODE_ENV === 'development' 
+        ? path.join(__dirname, 'dev-app-update.yml')
+        : path.join(__dirname, 'app-update.yml')
+      
+      const configContent = `provider: github
+owner: Alexand83
+repo: InfernoConsole
+updaterCacheDirName: dj-console-updater`
+      
+      fs.writeFileSync(configPath, configContent)
+      console.log('✅ File di configurazione aggiornamento ricreato:', configPath)
+      
+      // Riprova il controllo aggiornamenti
+      setTimeout(() => {
+        this.checkForUpdates()
+      }, 1000)
+      
+    } catch (error) {
+      console.error('❌ Errore nel ricreare il file di configurazione:', error)
+    }
   }
 }
 

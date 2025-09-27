@@ -1,0 +1,4 @@
+provider: github
+owner: Alexand83
+repo: InfernoConsole
+updaterCacheDirName: dj-console-updater
