@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Search, Music, Plus, Upload, Trash2, Edit3, X } from 'lucide-react'
 import { useAudio } from '../contexts/AudioContext'
 import { localDatabase, DatabaseTrack } from '../database/LocalDatabase'
@@ -7,6 +7,8 @@ import { generateWaveformPeaksFromBlob } from '../utils/AudioAnalysis'
 import FileUploadManager, { UploadProgress } from '../utils/FileUploadManager'
 import FolderImporter from './FolderImporter'
 import AdvancedSearch, { SearchFilters } from './AdvancedSearch'
+import LazyWaveform from './LazyWaveform'
+import VirtualizedTrackList from './VirtualizedTrackList'
 
 interface Playlist {
   id: string
@@ -15,11 +17,112 @@ interface Playlist {
   createdAt: Date
 }
 
+// ✅ MEMOIZZAZIONE: Componente ottimizzato per track items
+const TrackItem = React.memo(({ 
+  track, 
+  isSelected, 
+  onSelect, 
+  onDelete, 
+  onDoubleClick,
+  onDragStart
+}: {
+  track: DatabaseTrack
+  isSelected: boolean
+  onSelect: (id: string) => void
+  onDelete: (id: string) => void
+  onDoubleClick: (track: DatabaseTrack) => void
+  onDragStart: (track: DatabaseTrack) => void
+}) => {
+  const handleClick = useCallback(() => {
+    onSelect(track.id)
+  }, [track.id, onSelect])
+
+  const handleDelete = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    onDelete(track.id)
+  }, [track.id, onDelete])
+
+  const handleDoubleClick = useCallback(() => {
+    onDoubleClick(track)
+  }, [track, onDoubleClick])
+
+  const handleDragStart = useCallback((e: React.DragEvent) => {
+    onDragStart(track)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('application/json', JSON.stringify(track))
+  }, [track, onDragStart])
+
+  return (
+    <div
+      draggable
+      onDragStart={handleDragStart}
+      onDoubleClick={handleDoubleClick}
+      className={`p-4 hover:bg-dj-primary/20 transition-all cursor-move ${
+        isSelected ? 'bg-dj-accent/10 border-l-4 border-dj-accent' : ''
+      }`}
+      onClick={handleClick}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex-1 min-w-0">
+          <h4 className="font-medium text-white truncate">{track.title}</h4>
+          <p className="text-sm text-dj-light/60 truncate">{track.artist}</p>
+          {track.album && (
+            <p className="text-xs text-dj-light/40 truncate">{track.album}</p>
+          )}
+          
+          {/* ✅ LAZY LOADING WAVEFORM: Carica solo quando visibile */}
+          <div className="mt-2">
+            <LazyWaveform
+              track={track}
+              height={16}
+              color="#3b82f6"
+              className="opacity-60"
+            />
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-3 ml-4">
+          <div className="text-right">
+            <div className="text-sm text-dj-light/60">
+              {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, '0')}
+            </div>
+            {track.playCount > 0 && (
+              <div className="text-xs text-dj-accent">▶ {track.playCount}</div>
+            )}
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleDelete}
+              className="p-2 bg-red-500/20 hover:bg-red-500/30 rounded transition-all"
+              title="Elimina traccia"
+            >
+              <Trash2 size={16} className="text-red-400" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}, (prevProps, nextProps) => {
+  // Solo re-render se cambiano props specifiche
+  return (
+    prevProps.track.id === nextProps.track.id &&
+    prevProps.track.title === nextProps.track.title &&
+    prevProps.track.artist === nextProps.track.artist &&
+    prevProps.track.album === nextProps.track.album &&
+    prevProps.track.duration === nextProps.track.duration &&
+    prevProps.track.playCount === nextProps.track.playCount &&
+    prevProps.isSelected === nextProps.isSelected
+  )
+})
+
 const LibraryManager = () => {
   // const { addToDeck } = useAudio() // Rimosso perché non usato
   const [tracks, setTracks] = useState<DatabaseTrack[]>([])
   const [filteredTracks, setFilteredTracks] = useState<DatabaseTrack[]>([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({
     genre: '',
     artist: '',
@@ -40,6 +143,14 @@ const LibraryManager = () => {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // ✅ PAGINAZIONE: Gestione pagine per performance
+  const [currentPage, setCurrentPage] = useState(0)
+  const ITEMS_PER_PAGE = 50 // 50 file per pagina per fluidità massima
+
+  // ✅ VIRTUALIZZAZIONE: Abilita/disabilita virtualizzazione
+  const [useVirtualization, setUseVirtualization] = useState(false)
+  const VIRTUALIZATION_THRESHOLD = 100 // Usa virtualizzazione se > 100 file
 
   // Nuove variabili per playlist
   const [playlists, setPlaylists] = useState<Playlist[]>([])
@@ -141,6 +252,25 @@ const LibraryManager = () => {
     }
   }
 
+  // ✅ MEMOIZZAZIONE: Callback ottimizzati per track items
+  const handleTrackSelect = useCallback((trackId: string) => {
+    setSelectedTrack(trackId)
+  }, [])
+
+  const handleTrackDelete = useCallback(async (trackId: string) => {
+    await deleteTrack(trackId)
+  }, [])
+
+  const handleTrackDoubleClick = useCallback((track: DatabaseTrack) => {
+    console.log('🎵 [DOUBLE CLICK] Track double clicked:', track.title)
+    console.log('🎵 [DOUBLE CLICK] Active playlist:', activePlaylist)
+    addTrackToSelectedPlaylist(track)
+  }, [activePlaylist, playlists])
+
+  const handleTrackDragStart = useCallback((track: DatabaseTrack) => {
+    setDraggedTrack(track)
+  }, [])
+
   // NUOVO: Funzione per aggiungere traccia alla playlist selezionata
   const addTrackToSelectedPlaylist = async (track: DatabaseTrack) => {
     if (!activePlaylist) {
@@ -209,13 +339,22 @@ const LibraryManager = () => {
   }
 
 
+  // ✅ DEBOUNCED SEARCH: Aspetta 300ms prima di cercare
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery)
+    }, 300) // 300ms di delay per evitare ricerche continue
+    
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
   // Filter and sort tracks
   useEffect(() => {
     let filtered = [...tracks]
 
-    // Apply search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
+    // Apply search filter (usa debouncedQuery invece di searchQuery)
+    if (debouncedQuery) {
+      const query = debouncedQuery.toLowerCase()
       filtered = filtered.filter(track =>
         track.title.toLowerCase().includes(query) ||
         track.artist.toLowerCase().includes(query) ||
@@ -296,7 +435,23 @@ const LibraryManager = () => {
     })
 
     setFilteredTracks(filtered)
-  }, [tracks, searchQuery, searchFilters, sortBy, sortOrder])
+    // Reset alla prima pagina quando cambiano i filtri
+    setCurrentPage(0)
+  }, [tracks, debouncedQuery, searchFilters, sortBy, sortOrder])
+
+  // ✅ PAGINAZIONE: Calcola i track da mostrare per la pagina corrente
+  const paginatedTracks = useMemo(() => {
+    const start = currentPage * ITEMS_PER_PAGE
+    const end = start + ITEMS_PER_PAGE
+    return filteredTracks.slice(start, end)
+  }, [filteredTracks, currentPage, ITEMS_PER_PAGE])
+
+  // ✅ PAGINAZIONE: Calcola il numero totale di pagine
+  const totalPages = Math.ceil(filteredTracks.length / ITEMS_PER_PAGE)
+
+  // ✅ VIRTUALIZZAZIONE: Decidi se usare virtualizzazione o paginazione
+  const shouldUseVirtualization = filteredTracks.length > VIRTUALIZATION_THRESHOLD
+  const effectiveUseVirtualization = useVirtualization && shouldUseVirtualization
 
   // Load tracks from database
   useEffect(() => {
@@ -718,6 +873,35 @@ const LibraryManager = () => {
       
       console.log('✅ Traccia eliminata e sincronizzata con tutte le playlist')
       
+      // ✅ FIX: Ricarica le playlist per aggiornare l'interfaccia
+      const reloadedPlaylists = await localDatabase.getAllPlaylists()
+      if (reloadedPlaylists && reloadedPlaylists.length > 0) {
+        const reconstructedPlaylists = await Promise.all(
+          reloadedPlaylists.map(async (playlist) => {
+            try {
+              const fullTracks = await Promise.all(
+                playlist.tracks.map(async (trackId) => {
+                  try {
+                    const fullTrack = await localDatabase.getTrack(trackId)
+                    return fullTrack
+                  } catch (error) {
+                    console.error(`❌ Error loading track ${trackId}:`, error)
+                    return null
+                  }
+                })
+              )
+              const validTracks = fullTracks.filter(track => track !== null) as DatabaseTrack[]
+              return { ...playlist, tracks: validTracks }
+            } catch (error) {
+              console.error(`❌ Error reconstructing playlist ${playlist.id}:`, error)
+              return { ...playlist, tracks: [] }
+            }
+          })
+        )
+        setPlaylists(reconstructedPlaylists)
+        console.log('🔄 Playlists ricaricate dopo cancellazione:', reconstructedPlaylists.length)
+      }
+      
       // Sincronizzazione diretta senza eventi che causano loop
       
     } catch (error) {
@@ -914,6 +1098,8 @@ const LibraryManager = () => {
                 accept="audio/*"
                 onChange={(e) => e.target.files && handleUpload(e.target.files)}
                 className="dj-input w-full"
+                aria-label="Seleziona file audio da caricare"
+                title="Seleziona file audio da caricare"
               />
             </div>
             <div>
@@ -950,6 +1136,8 @@ const LibraryManager = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="dj-input w-full pl-10"
+                aria-label="Cerca canzoni, artisti, album"
+                title="Cerca canzoni, artisti, album"
               />
             </div>
 
@@ -993,9 +1181,36 @@ const LibraryManager = () => {
           {/* Tracks List */}
           <div className="bg-dj-secondary rounded-xl border border-dj-accent/20 overflow-hidden">
             <div className="p-4 border-b border-dj-accent/20">
-              <h3 className="text-lg font-dj font-bold text-white">
-                Libreria ({filteredTracks.length} tracce)
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-dj font-bold text-white">
+                  Libreria ({filteredTracks.length} tracce)
+                  {!effectiveUseVirtualization && totalPages > 1 && (
+                    <span className="text-sm text-dj-light/60 ml-2">
+                      - Pagina {currentPage + 1} di {totalPages}
+                    </span>
+                  )}
+                  {effectiveUseVirtualization && (
+                    <span className="text-sm text-dj-accent ml-2">
+                      - Virtualizzato
+                    </span>
+                  )}
+                </h3>
+                
+                {/* ✅ VIRTUALIZZAZIONE: Toggle per abilitare/disabilitare */}
+                {shouldUseVirtualization && (
+                  <button
+                    onClick={() => setUseVirtualization(!useVirtualization)}
+                    className={`px-3 py-1 rounded text-sm transition-all ${
+                      useVirtualization
+                        ? 'bg-dj-accent text-white'
+                        : 'bg-dj-accent/20 text-dj-light/80 hover:bg-dj-accent/30'
+                    }`}
+                    title={useVirtualization ? 'Disabilita virtualizzazione' : 'Abilita virtualizzazione'}
+                  >
+                    {useVirtualization ? '📊 Virtualizzato' : '📄 Paginato'}
+                  </button>
+                )}
+              </div>
             </div>
             
             <div className="max-h-[600px] overflow-y-auto">
@@ -1005,55 +1220,69 @@ const LibraryManager = () => {
                   <p className="text-lg mb-2">Nessuna traccia trovata</p>
                   <p className="text-sm">Prova a modificare i filtri di ricerca o carica nuovi file</p>
                 </div>
+              ) : effectiveUseVirtualization ? (
+                // ✅ VIRTUALIZZAZIONE: Lista virtualizzata per performance massime
+                <VirtualizedTrackList
+                  tracks={filteredTracks}
+                  selectedTrack={selectedTrack}
+                  onTrackSelect={handleTrackSelect}
+                  onTrackDelete={handleTrackDelete}
+                  onTrackDoubleClick={handleTrackDoubleClick}
+                  onTrackDragStart={handleTrackDragStart}
+                  height={600}
+                  itemHeight={80}
+                  TrackItemComponent={TrackItem}
+                />
               ) : (
-                <div className="divide-y divide-dj-accent/10">
-                  {filteredTracks.map((track) => (
-                    <div
-                      key={track.id}
-                      draggable
-                      onDragStart={() => handleDragStart(track)}
-                      onDoubleClick={() => addTrackToSelectedPlaylist(track)}
-                      className={`p-4 hover:bg-dj-primary/20 transition-all cursor-move ${
-                        selectedTrack === track.id ? 'bg-dj-accent/10 border-l-4 border-dj-accent' : ''
-                      }`}
-                      onClick={() => setSelectedTrack(track.id)}
-                    >
+                // ✅ PAGINAZIONE: Lista paginata per file < 100
+                <>
+                  <div className="divide-y divide-dj-accent/10">
+                    {paginatedTracks.map((track) => (
+                      <TrackItem
+                        key={track.id}
+                        track={track}
+                        isSelected={selectedTrack === track.id}
+                        onSelect={handleTrackSelect}
+                        onDelete={handleTrackDelete}
+                        onDoubleClick={handleTrackDoubleClick}
+                        onDragStart={handleTrackDragStart}
+                      />
+                    ))}
+                  </div>
+                  
+                  {/* ✅ PAGINAZIONE: Controlli di navigazione */}
+                  {totalPages > 1 && (
+                    <div className="p-4 border-t border-dj-accent/20 bg-dj-primary/20">
                       <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-white truncate">{track.title}</h4>
-                          <p className="text-sm text-dj-light/60 truncate">{track.artist}</p>
-                          {track.album && (
-                            <p className="text-xs text-dj-light/40 truncate">{track.album}</p>
-                          )}
+                        <div className="text-sm text-dj-light/60">
+                          Mostrando {currentPage * ITEMS_PER_PAGE + 1}-{Math.min((currentPage + 1) * ITEMS_PER_PAGE, filteredTracks.length)} di {filteredTracks.length} tracce
                         </div>
                         
-                        <div className="flex items-center space-x-3 ml-4">
-                          <div className="text-right">
-                            <div className="text-sm text-dj-light/60">
-                              {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, '0')}
-                            </div>
-                            {track.playCount > 0 && (
-                              <div className="text-xs text-dj-accent">▶ {track.playCount}</div>
-                            )}
-                          </div>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+                            disabled={currentPage === 0}
+                            className="px-3 py-1 bg-dj-accent/20 hover:bg-dj-accent/30 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm"
+                          >
+                            ← Precedente
+                          </button>
                           
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                deleteTrack(track.id)
-                              }}
-                              className="p-2 bg-red-500/20 hover:bg-red-500/30 rounded transition-all"
-                              title="Elimina traccia"
-                            >
-                              <Trash2 size={16} className="text-red-400" />
-                            </button>
-                          </div>
+                          <span className="px-3 py-1 text-sm text-dj-light/80">
+                            {currentPage + 1} / {totalPages}
+                          </span>
+                          
+                          <button
+                            onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
+                            disabled={currentPage >= totalPages - 1}
+                            className="px-3 py-1 bg-dj-accent/20 hover:bg-dj-accent/30 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm"
+                          >
+                            Successiva →
+                          </button>
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -1075,12 +1304,24 @@ const LibraryManager = () => {
           <div className="bg-dj-primary border border-dj-accent/30 rounded-lg">
             <div className="p-4 border-b border-dj-accent/20">
               <h3 className="text-lg font-dj font-bold text-white mb-2">Playlist</h3>
-              <p className="text-sm text-dj-light/60">{playlists.length} playlist create</p>
+              <p className="text-sm text-dj-light/60">
+                {playlists.length} playlist create
+                {playlists.length === 0 && (
+                  <span className="text-dj-warning ml-2">⚠️ Nessuna playlist trovata</span>
+                )}
+              </p>
             </div>
             
             <div className="p-4 space-y-2">
               {/* Lista Playlist */}
-              {playlists.map(playlist => (
+              {playlists.length === 0 ? (
+                <div className="text-center py-8 text-dj-light/60">
+                  <div className="w-16 h-16 mx-auto mb-4 opacity-50">🎵</div>
+                  <p className="text-lg mb-2">Nessuna playlist creata</p>
+                  <p className="text-sm">Crea una playlist per iniziare ad aggiungere canzoni</p>
+                </div>
+              ) : (
+                playlists.map(playlist => (
                 <div
                   key={playlist.id}
                   className={`w-full p-3 rounded-lg text-left transition-all ${
@@ -1164,7 +1405,8 @@ const LibraryManager = () => {
                     </div>
                   </div>
                 </div>
-              ))}
+                ))
+              )}
               
               {/* Nuova Playlist */}
               {isCreatingPlaylist ? (
