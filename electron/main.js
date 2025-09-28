@@ -8,20 +8,25 @@ const fs = require('fs')
 const WebRTCServer = require('./webrtc-server')
 const youtubedl = require('youtube-dl-exec')
 
-// ✅ OPTIMIZATION: Ottimizzazioni per avvio ultra-veloce
-app.commandLine.appendSwitch('--disable-gpu-sandbox')
-app.commandLine.appendSwitch('--disable-software-rasterizer')
-app.commandLine.appendSwitch('--disable-background-timer-throttling')
-app.commandLine.appendSwitch('--disable-backgrounding-occluded-windows')
-app.commandLine.appendSwitch('--disable-renderer-backgrounding')
-app.commandLine.appendSwitch('--disable-features', 'TranslateUI')
-app.commandLine.appendSwitch('--disable-ipc-flooding-protection')
-app.commandLine.appendSwitch('--disable-web-security')
-app.commandLine.appendSwitch('--disable-features', 'VizDisplayCompositor')
-app.commandLine.appendSwitch('--no-sandbox')
-app.commandLine.appendSwitch('--disable-dev-shm-usage')
-app.commandLine.appendSwitch('--disable-extensions')
-app.commandLine.appendSwitch('--disable-plugins')
+  // ✅ OPTIMIZATION: Ottimizzazioni per avvio ultra-veloce
+  app.commandLine.appendSwitch('--disable-gpu-sandbox')
+  app.commandLine.appendSwitch('--disable-software-rasterizer')
+  app.commandLine.appendSwitch('--disable-background-timer-throttling')
+  app.commandLine.appendSwitch('--disable-backgrounding-occluded-windows')
+  app.commandLine.appendSwitch('--disable-renderer-backgrounding')
+  app.commandLine.appendSwitch('--disable-features', 'TranslateUI')
+  app.commandLine.appendSwitch('--disable-ipc-flooding-protection')
+  app.commandLine.appendSwitch('--disable-web-security')
+  app.commandLine.appendSwitch('--disable-features', 'VizDisplayCompositor')
+  app.commandLine.appendSwitch('--no-sandbox')
+  app.commandLine.appendSwitch('--disable-dev-shm-usage')
+  app.commandLine.appendSwitch('--disable-extensions')
+  app.commandLine.appendSwitch('--disable-plugins')
+  
+  // ✅ DEBUG: Apri DevTools del main process per debug
+  if (process.env.NODE_ENV === 'development') {
+    app.commandLine.appendSwitch('--remote-debugging-port', '9222')
+  }
 
 // ✅ AUTO-UPDATER: Importa il modulo auto-updater
 const AppUpdater = require('./updater')
@@ -227,7 +232,9 @@ app.whenReady().then(() => {
       
       // ✅ NUOVO: Crea collegamento desktop all'avvio se non esiste
       if (process.platform === 'win32') {
+        console.log('🔧 [MAIN] Creazione collegamento desktop all\'avvio...')
         updater.createDesktopShortcut()
+        console.log('🔧 [MAIN] Collegamento desktop richiesto')
       }
     } catch (error) {
       console.error('Auto-updater initialization failed:', error)
