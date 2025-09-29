@@ -12,6 +12,50 @@ class AppUpdater {
       autoUpdater.updateConfigPath = path.join(__dirname, 'app-update.yml')
     }
     
+    // ✅ NUOVO: Configurazione path di download personalizzato
+    const os = require('os')
+    const packageJson = require('../package.json')
+    
+    // Leggi i path personalizzati dal package.json
+    let customUpdateDir = packageJson.updater?.downloadPath || '%USERPROFILE%\\Desktop\\Inferno Console\\Updates'
+    let customInstallDir = packageJson.updater?.installPath || '%USERPROFILE%\\Desktop\\Inferno Console'
+    
+    // Espandi le variabili d'ambiente (es. %USERPROFILE%)
+    customUpdateDir = customUpdateDir.replace(/%([^%]+)%/g, (match, envVar) => {
+      return process.env[envVar] || match
+    })
+    customInstallDir = customInstallDir.replace(/%([^%]+)%/g, (match, envVar) => {
+      return process.env[envVar] || match
+    })
+    
+    // Fallback sicuro se i path non sono validi
+    if (!customUpdateDir || customUpdateDir.includes('%')) {
+      customUpdateDir = path.join(os.homedir(), 'Desktop', 'Inferno Console', 'Updates')
+    }
+    if (!customInstallDir || customInstallDir.includes('%')) {
+      customInstallDir = path.join(os.homedir(), 'Desktop', 'Inferno Console')
+    }
+    
+    // Salva i path per uso futuro
+    this.customInstallDir = customInstallDir
+    
+    // Crea la directory se non esiste
+    const fs = require('fs')
+    if (!fs.existsSync(customUpdateDir)) {
+      try {
+        fs.mkdirSync(customUpdateDir, { recursive: true })
+        console.log('📁 Directory aggiornamenti creata:', customUpdateDir)
+      } catch (error) {
+        console.error('❌ Errore creazione directory aggiornamenti:', error)
+        // Fallback al path di default
+        console.log('🔄 Usando path di default per aggiornamenti')
+      }
+    }
+    
+    // Imposta il path personalizzato
+    autoUpdater.downloadPath = customUpdateDir
+    console.log('📁 Path download aggiornamenti:', customUpdateDir)
+    
     // ✅ NUOVO: Configurazione per delta updates
     autoUpdater.allowDowngrade = false
     autoUpdater.allowPrerelease = false
@@ -499,15 +543,54 @@ updaterCacheDirName: inferno-console-updater`
   createShortcutWithPath(shortcutPath, appPath) {
     const path = require('path')
     const { app } = require('electron')
+    const fs = require('fs')
     
-    // ✅ FIX: Usa SEMPRE il percorso installato fisso (sia dev che prod)
-    const os = require('os')
-    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
-    const installedExePath = path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno-Console-win.exe')
+    // ✅ NUOVO: Usa il path personalizzato dalla configurazione
+    const customInstallDir = this.customInstallDir || path.join(require('os').homedir(), 'Desktop', 'Inferno Console')
+    const installedExePath = path.join(customInstallDir, 'Inferno-Console-win.exe')
     
-    console.log('🔧 [FIXED] Usando SEMPRE percorso installato fisso:', installedExePath)
-    console.log('🔧 [FIXED] Percorso exe corrente (ignorato):', app.getPath('exe'))
-    console.log('🔧 [FIXED] Percorso richiesto (ignorato):', appPath)
+    console.log('🔧 [DESKTOP] Usando percorso installazione desktop:', installedExePath)
+    console.log('🔧 [DESKTOP] Percorso exe corrente (ignorato):', app.getPath('exe'))
+    console.log('🔧 [DESKTOP] Percorso richiesto (ignorato):', appPath)
+    
+    // ✅ NUOVO: Verifica che il file installato esista
+    if (!fs.existsSync(installedExePath)) {
+      console.error('❌ File installato non trovato:', installedExePath)
+      console.log('🔄 Tentativo di trovare il file installato...')
+      
+      // Cerca in percorsi alternativi (prima desktop, poi AppData)
+      const alternativePaths = [
+        // Percorsi desktop
+        path.join(customInstallDir, 'Inferno-Console-win.exe'),
+        path.join(customInstallDir, 'Inferno Console.exe'),
+        path.join(customInstallDir, 'Inferno Console', 'Inferno-Console-win.exe'),
+        path.join(customInstallDir, 'Inferno Console', 'Inferno Console.exe'),
+        // Percorsi AppData (fallback)
+        path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno-Console-win.exe'),
+        path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno Console.exe'),
+        path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno Console', 'Inferno-Console-win.exe'),
+        path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno Console', 'Inferno Console.exe')
+      ]
+      
+      let foundPath = null
+      for (const altPath of alternativePaths) {
+        if (fs.existsSync(altPath)) {
+          foundPath = altPath
+          console.log('✅ File installato trovato in:', foundPath)
+          break
+        }
+      }
+      
+      if (!foundPath) {
+        console.error('❌ Nessun file installato trovato, creo shortcut che apre la cartella')
+        this.createFallbackShortcut(shortcutPath)
+        return
+      }
+      
+      // Usa il path trovato
+      this.createShortcutWithPath(shortcutPath, foundPath)
+      return
+    }
     
     const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${shortcutPath}'); $Shortcut.TargetPath = '${installedExePath}'; $Shortcut.WorkingDirectory = '${path.dirname(installedExePath)}'; $Shortcut.Description = 'Inferno Console - Console DJ professionale'; $Shortcut.IconLocation = '${installedExePath},0'; $Shortcut.Save(); Write-Host 'SUCCESS: Collegamento creato'`
     
@@ -539,9 +622,9 @@ updaterCacheDirName: inferno-console-updater`
     const fs = require('fs')
     const os = require('os')
     
-    // ✅ FIX: Usa SEMPRE il percorso installato fisso
-    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
-    const installedExePath = path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno-Console-win.exe')
+    // ✅ NUOVO: Usa il path personalizzato dalla configurazione
+    const customInstallDir = this.customInstallDir || path.join(os.homedir(), 'Desktop', 'Inferno Console')
+    const installedExePath = path.join(customInstallDir, 'Inferno-Console-win.exe')
     
     console.log('🔄 FALLBACK: Usando percorso installato fisso')
     console.log('📁 Percorso installato fisso:', installedExePath)
@@ -554,10 +637,10 @@ updaterCacheDirName: inferno-console-updater`
       console.log('✅ App trovata, creo collegamento diretto')
       this.createShortcutWithPath(shortcutPath, installedExePath)
     } else {
-      // App non trovata - crea collegamento che apre la cartella Programs
-      console.log('⚠️ App non trovata, creo collegamento che apre cartella Programs')
-      const programsDir = path.join(localAppData, 'Programs')
-      const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${shortcutPath}'); $Shortcut.TargetPath = 'explorer.exe'; $Shortcut.Arguments = '/select,${programsDir}'; $Shortcut.Description = 'Inferno Console - Apri cartella installazione'; $Shortcut.Save(); Write-Host 'EXPLORER FALLBACK: Collegamento creato'`
+      // App non trovata - crea collegamento che apre la cartella desktop
+      console.log('⚠️ App non trovata, creo collegamento che apre cartella desktop')
+      const desktopDir = customInstallDir
+      const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${shortcutPath}'); $Shortcut.TargetPath = 'explorer.exe'; $Shortcut.Arguments = '/select,${desktopDir}'; $Shortcut.Description = 'Inferno Console - Apri cartella installazione'; $Shortcut.Save(); Write-Host 'EXPLORER FALLBACK: Collegamento creato'`
       
       require('child_process').exec(`powershell -Command "${psCommand}"`, (fallbackError, fallbackStdout, fallbackStderr) => {
         if (fallbackError) {

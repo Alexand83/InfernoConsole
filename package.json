@@ -4,6 +4,10 @@
   "buildDate": "2025-09-29T17:06:49.848Z",
   "description": "Inferno Console - Console DJ professionale con mixaggio audio avanzato, capacità di streaming e effetti in tempo reale",
   "main": "electron/main.js",
+  "updater": {
+    "downloadPath": "%USERPROFILE%\\Desktop\\Inferno Console\\Updates",
+    "installPath": "%USERPROFILE%\\Desktop\\Inferno Console"
+  },
   "scripts": {
     "dev": "vite",
     "build": "node scripts/update-build-date.js && cross-env BUILD_DATE=\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\" vite build",
