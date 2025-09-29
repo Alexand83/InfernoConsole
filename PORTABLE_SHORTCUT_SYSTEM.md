@@ -16,7 +16,16 @@
 
 ## 🔧 **Come Funziona**
 
-### 1. **Update Downloaded**
+### 1. **Avvio App (Creazione Condizionale)**
+```javascript
+// Controlla se lo shortcut esiste già
+if (!fs.existsSync(desktopPath)) {
+  // Crea shortcut solo se non esiste (per versioni vecchie che si aggiornano)
+  shortcut.create(desktopPath, { ... })
+}
+```
+
+### 2. **Update Downloaded**
 ```javascript
 autoUpdater.on('update-downloaded', (info) => {
   // Crea shortcut automaticamente con percorso corretto
@@ -32,7 +41,7 @@ autoUpdater.on('update-downloaded', (info) => {
 })
 ```
 
-### 2. **Update Installed**
+### 3. **Update Installed**
 ```javascript
 autoUpdater.on('update-installed', (info) => {
   // Ricrea shortcut anche dopo il riavvio
@@ -43,12 +52,12 @@ autoUpdater.on('update-installed', (info) => {
 ## 🎯 **Vantaggi**
 
 ### ✅ **Portabile**
-- **Nessun shortcut fisso**: Solo creato quando necessario
+- **Creazione condizionale**: Solo se non esiste già
 - **Percorso corretto**: Punta sempre all'exe aggiornato
 - **Automatico**: Nessun intervento manuale richiesto
 
 ### ✅ **Pulito**
-- **Nessuna creazione all'avvio**: App si avvia più velocemente
+- **Creazione intelligente**: Solo quando necessario
 - **Nessun metodo manuale**: Codice più semplice
 - **Dipendenze minime**: Solo quando necessario
 
@@ -79,17 +88,17 @@ autoUpdater.on('update-installed', (info) => {
 ## 🚀 **Risultato Finale**
 
 ### **Sistema Completamente Portatile**
-1. **App si avvia** senza creare shortcut
+1. **App si avvia** → Controlla se shortcut esiste, se no lo crea
 2. **Update disponibile** → Download automatico
-3. **Update scaricato** → Shortcut creato automaticamente
+3. **Update scaricato** → Shortcut creato/aggiornato automaticamente
 4. **App riavviata** → Shortcut punta alla nuova versione
 5. **Ciclo completo** → Sempre aggiornato e corretto
 
 ### **Zero Intervento Manuale**
 - ❌ Nessun bottone "Crea Shortcut"
-- ❌ Nessuna creazione all'avvio
+- ✅ Creazione condizionale all'avvio (solo se necessario)
 - ❌ Nessun metodo manuale
-- ✅ Solo automatico post-update
+- ✅ Automatico post-update + condizionale all'avvio
 
 ## 🎵 **Perfetto per DJ Console!**
 

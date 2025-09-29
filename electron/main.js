@@ -230,7 +230,34 @@ app.whenReady().then(() => {
     try {
       const updater = new AppUpdater()
       
-      // ✅ RIMOSSO: Creazione automatica shortcut all'avvio - solo post-update
+      // ✅ NUOVO: Creazione condizionale shortcut all'avvio (solo se non esiste)
+      if (process.platform === 'win32') {
+        try {
+          const exePath = process.execPath
+          const desktopPath = path.join(app.getPath('desktop'), 'Inferno Console.lnk')
+          
+          // Controlla se lo shortcut esiste già
+          if (!fs.existsSync(desktopPath)) {
+            console.log('🔗 [SHORTCUT] Shortcut non trovato, creazione all\'avvio...')
+            
+            // Importa windows-shortcuts dinamicamente
+            const shortcut = require('windows-shortcuts')
+            
+            shortcut.create(desktopPath, {
+              target: exePath,
+              desc: 'Inferno Console - DJ Software',
+              icon: exePath,
+              workingDir: path.dirname(exePath)
+            })
+            
+            console.log('✅ [SHORTCUT] Shortcut creato all\'avvio!')
+          } else {
+            console.log('🔗 [SHORTCUT] Shortcut già esistente, nessuna creazione necessaria')
+          }
+        } catch (error) {
+          console.error('❌ [SHORTCUT] Errore creazione shortcut all\'avvio:', error)
+        }
+      }
 
       // ✅ NUOVO: Intercetta update-downloaded per ricreare shortcut automaticamente
       const { autoUpdater } = require('electron-updater')
