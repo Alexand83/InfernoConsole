@@ -530,24 +530,16 @@ const RemoteDJHost: React.FC = () => {
                   })
                 }
                 
-                // ✅ CRITICAL FIX: Gestisci il ducking e lo streaming quando il client attiva/disattiva PTT Live
+                // ✅ CRITICAL FIX: Gestisci SOLO l'audio del client nel live streaming - NON attivare PTT Live dell'host
                 if (command.active) {
                   // ✅ STEP 1: Aggiungi client alla lista PTT Live attivi
-                  setClientsWithPTTLive(prev => new Set([...prev, clientId]))
-                  console.log(`🎤 [PTT Live Client] Client ${djName} aggiunto alla lista PTT Live attivi`)
+                  setClientsWithPTTLive(prev => {
+                    const newSet = new Set([...prev, clientId])
+                    console.log(`🎤 [PTT Live Client] Client ${djName} aggiunto alla lista PTT Live attivi (totale: ${newSet.size})`)
+                    return newSet
+                  })
                   
-                  // ✅ STEP 2: Attiva PTT Live dell'host (ducking + live streaming) SOLO se è il primo client
-                  if (clientsWithPTTLive.size === 0) {
-                    console.log(`🎤 [PTT Live Client] Primo client PTT Live - attivazione PTT Live host`)
-                    
-                    // Attiva il PTT Live dell'host usando il sistema AudioContext
-                    if (typeof (window as any).updatePTTVolumesOnly === 'function') {
-                      (window as any).updatePTTVolumesOnly(true).catch(console.error)
-                      console.log(`🎤 [PTT Live Client] PTT Live host attivato per client ${djName}`)
-                    }
-                  }
-                  
-                  // ✅ STEP 3: Aggiungi lo stream del client al live streaming
+                  // ✅ STEP 2: Aggiungi lo stream del client al live streaming
                   const peerConnection = peerConnectionsRef.current.get(clientId)
                   if (peerConnection) {
                     const receivers = peerConnection.getReceivers()
@@ -561,32 +553,36 @@ const RemoteDJHost: React.FC = () => {
                     })
                   }
                   
-                  console.log(`🎤 [PTT Live Client] Sistema completo attivato per client ${djName}`)
+                  // ✅ CRITICAL FIX: NON attivare PTT Live dell'host - il client gestisce il suo PTT Live
+                  console.log(`🎤 [PTT Live Client] Client ${djName} gestisce il suo PTT Live - host NON coinvolto`)
+                  
+                  console.log(`🎤 [PTT Live Client] Sistema attivato per client ${djName} - solo audio client nel live streaming`)
                 } else {
                   // ✅ STEP 1: Rimuovi client dalla lista PTT Live attivi
                   setClientsWithPTTLive(prev => {
                     const newSet = new Set(prev)
                     newSet.delete(clientId)
+                    console.log(`🎤 [PTT Live Client] Client ${djName} rimosso dalla lista PTT Live attivi (rimanenti: ${newSet.size})`)
                     return newSet
                   })
-                  console.log(`🎤 [PTT Live Client] Client ${djName} rimosso dalla lista PTT Live attivi`)
                   
                   // ✅ STEP 2: Rimuovi lo stream del client dal live streaming
                   removeRemoteDJStream(clientId)
                   console.log(`🎤 [PTT Live Client] Stream del client ${djName} rimosso dal live streaming`)
                   
-                  // ✅ STEP 3: Disattiva PTT Live dell'host SOLO se non ci sono più client attivi
-                  if (clientsWithPTTLive.size <= 1) {
-                    console.log(`🎤 [PTT Live Client] Ultimo client PTT Live - disattivazione PTT Live host`)
-                    
-                    if (typeof (window as any).updatePTTVolumesOnly === 'function') {
-                      (window as any).updatePTTVolumesOnly(false).catch(console.error)
-                      console.log(`🎤 [PTT Live Client] PTT Live host disattivato per client ${djName}`)
-                    }
-                  }
+                  // ✅ CRITICAL FIX: NON disattivare PTT Live dell'host - il client gestisce il suo PTT Live
+                  console.log(`🎤 [PTT Live Client] Client ${djName} gestisce il suo PTT Live - host NON coinvolto`)
                   
-                  console.log(`🎤 [PTT Live Client] Sistema completo disattivato per client ${djName}`)
+                  console.log(`🎤 [PTT Live Client] Sistema disattivato per client ${djName} - solo audio client nel live streaming`)
                 }
+              } else if (command.type === 'pttLiveAudio') {
+                // ✅ NEW: Gestisci audio PTT Live ricevuto dal client
+                console.log(`🎤 [PTT Live Audio] Ricevuto audio da ${djName}: ${command.audioSize} bytes`)
+                handlePTTLiveAudioFromClient(clientId, djName, command.audioData, command.audioSize)
+              } else if (command.type === 'pttLiveAudioChunk') {
+                // ✅ NEW: Gestisci chunk audio PTT Live ricevuto dal client
+                console.log(`🎤 [PTT Live Audio Chunk] Ricevuto chunk ${command.chunkIndex + 1}/${command.totalChunks} da ${djName}: ${command.chunkSize} bytes`)
+                handlePTTLiveAudioChunkFromClient(clientId, djName, command)
               }
             } catch (error) {
               console.error(`📡 [DataChannel] Errore parsing comando da ${djName}:`, error)
@@ -1093,6 +1089,250 @@ const RemoteDJHost: React.FC = () => {
         console.warn(`📡 [DataChannel] DataChannel non disponibile per ${clientId}`)
       }
     })
+  }
+
+  // ✅ NEW: PTT Live Audio Management Functions
+  const pttLiveAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
+  const pttLiveAudioChunksRef = useRef<Map<string, { chunks: Uint8Array[], totalChunks: number, totalSize: number, djName: string }>>(new Map())
+
+  const handlePTTLiveAudioFromClient = (clientId: string, djName: string, audioData: number[], audioSize: number) => {
+    try {
+      console.log(`🎤 [PTT Live Audio] Elaborazione audio da ${djName}: ${audioSize} bytes`)
+      
+      // Converte l'array di numeri in Uint8Array
+      const uint8Array = new Uint8Array(audioData)
+      
+      // Crea un blob dall'audio ricevuto
+      const audioBlob = new Blob([uint8Array], { type: 'audio/webm;codecs=opus' })
+      
+      // Crea un URL per il blob
+      const audioUrl = URL.createObjectURL(audioBlob)
+      
+      // Crea un elemento audio per riprodurre l'audio PTT Live
+      const audioElement = document.createElement('audio')
+      audioElement.src = audioUrl
+      audioElement.volume = 1.0 // Volume al 100% per l'audio PTT Live
+      audioElement.style.display = 'none'
+      document.body.appendChild(audioElement)
+      
+      // Salva l'elemento audio per cleanup successivo
+      pttLiveAudioElementsRef.current.set(clientId, audioElement)
+      
+      // Gestisce la fine della riproduzione
+      audioElement.onended = () => {
+        console.log(`🎤 [PTT Live Audio] Riproduzione completata per ${djName}`)
+        cleanupPTTLiveAudio(clientId)
+      }
+      
+      // Gestisce errori di riproduzione
+      audioElement.onerror = (error) => {
+        console.error(`❌ [PTT Live Audio] Errore riproduzione audio per ${djName}:`, error)
+        cleanupPTTLiveAudio(clientId)
+      }
+      
+      // Avvia la riproduzione
+      audioElement.play().then(() => {
+        console.log(`🎤 [PTT Live Audio] Riproduzione avviata per ${djName}`)
+        
+        // ✅ CRITICAL: Aggiungi automaticamente l'audio PTT Live al destination stream
+        addPTTLiveAudioToDestinationStream(audioElement, clientId, djName)
+      }).catch(error => {
+        console.error(`❌ [PTT Live Audio] Errore avvio riproduzione per ${djName}:`, error)
+        cleanupPTTLiveAudio(clientId)
+      })
+      
+    } catch (error) {
+      console.error(`❌ [PTT Live Audio] Errore elaborazione audio da ${djName}:`, error)
+    }
+  }
+
+  // ✅ NEW: Gestisci chunk audio PTT Live ricevuti dal client
+  const handlePTTLiveAudioChunkFromClient = (clientId: string, djName: string, command: any) => {
+    try {
+      const { audioId, chunkIndex, totalChunks, chunkData, chunkSize, totalSize } = command
+      
+      // Inizializza la struttura per questo audio se non esiste
+      if (!pttLiveAudioChunksRef.current.has(audioId)) {
+        pttLiveAudioChunksRef.current.set(audioId, {
+          chunks: new Array(totalChunks),
+          totalChunks: totalChunks,
+          totalSize: totalSize,
+          djName: djName
+        })
+        console.log(`🎤 [PTT Live Audio Chunk] Inizializzato buffer per audio ${audioId} da ${djName} (${totalChunks} chunk, ${totalSize} bytes)`)
+      }
+      
+      // Salva il chunk nella posizione corretta
+      const audioBuffer = pttLiveAudioChunksRef.current.get(audioId)!
+      audioBuffer.chunks[chunkIndex] = new Uint8Array(chunkData)
+      
+      console.log(`🎤 [PTT Live Audio Chunk] Chunk ${chunkIndex + 1}/${totalChunks} salvato per audio ${audioId}`)
+      
+      // Controlla se tutti i chunk sono stati ricevuti
+      const receivedChunks = audioBuffer.chunks.filter(chunk => chunk !== undefined).length
+      if (receivedChunks === totalChunks) {
+        console.log(`🎤 [PTT Live Audio Chunk] Tutti i chunk ricevuti per audio ${audioId} - ricostruzione audio`)
+        
+        // Ricostruisci l'audio completo
+        const completeAudioData = new Uint8Array(totalSize)
+        let offset = 0
+        
+        for (let i = 0; i < totalChunks; i++) {
+          const chunk = audioBuffer.chunks[i]
+          completeAudioData.set(chunk, offset)
+          offset += chunk.length
+        }
+        
+        console.log(`🎤 [PTT Live Audio Chunk] Audio ricostruito: ${completeAudioData.length} bytes`)
+        
+        // Elabora l'audio ricostruito
+        processReconstructedAudio(clientId, djName, completeAudioData, totalSize)
+        
+        // Pulisci il buffer
+        pttLiveAudioChunksRef.current.delete(audioId)
+      }
+      
+    } catch (error) {
+      console.error(`❌ [PTT Live Audio Chunk] Errore elaborazione chunk da ${djName}:`, error)
+    }
+  }
+
+  // ✅ NEW: Elabora l'audio ricostruito dai chunk
+  const processReconstructedAudio = (clientId: string, djName: string, audioData: Uint8Array, audioSize: number) => {
+    try {
+      console.log(`🎤 [PTT Live Audio] Elaborazione audio ricostruito da ${djName}: ${audioSize} bytes`)
+      
+      // Crea un blob dall'audio ricostruito
+      const audioBlob = new Blob([audioData], { type: 'audio/webm;codecs=opus' })
+      
+      // Crea un URL per il blob
+      const audioUrl = URL.createObjectURL(audioBlob)
+      
+      // Crea un elemento audio per riprodurre l'audio PTT Live
+      const audioElement = document.createElement('audio')
+      audioElement.src = audioUrl
+      audioElement.volume = 1.0 // Volume al 100% per l'audio PTT Live
+      audioElement.style.display = 'none'
+      document.body.appendChild(audioElement)
+      
+      // Salva l'elemento audio per cleanup successivo
+      pttLiveAudioElementsRef.current.set(clientId, audioElement)
+      
+      // Gestisce la fine della riproduzione
+      audioElement.onended = () => {
+        console.log(`🎤 [PTT Live Audio] Riproduzione completata per ${djName}`)
+        cleanupPTTLiveAudio(clientId)
+      }
+      
+      // Gestisce errori di riproduzione
+      audioElement.onerror = (error) => {
+        console.error(`❌ [PTT Live Audio] Errore riproduzione audio per ${djName}:`, error)
+        cleanupPTTLiveAudio(clientId)
+      }
+      
+      // Avvia la riproduzione
+      audioElement.play().then(() => {
+        console.log(`🎤 [PTT Live Audio] Riproduzione avviata per ${djName}`)
+        
+        // ✅ CRITICAL: Aggiungi automaticamente l'audio PTT Live al destination stream
+        addPTTLiveAudioToDestinationStream(audioElement, clientId, djName)
+      }).catch(error => {
+        console.error(`❌ [PTT Live Audio] Errore avvio riproduzione per ${djName}:`, error)
+        cleanupPTTLiveAudio(clientId)
+      })
+      
+    } catch (error) {
+      console.error(`❌ [PTT Live Audio] Errore elaborazione audio ricostruito da ${djName}:`, error)
+    }
+  }
+
+  const addPTTLiveAudioToDestinationStream = (audioElement: HTMLAudioElement, _clientId: string, djName: string) => {
+    try {
+      console.log(`🎤 [PTT Live Audio] Aggiunta al destination stream per ${djName}`)
+      
+      // Verifica che l'AudioContext e il destination stream siano disponibili
+      const audioContext = (window as any).globalAudioContext
+      const destinationStream = (window as any).destinationStream
+      const mixerGain = (window as any).mixerGain
+      
+      if (!audioContext || !destinationStream || !mixerGain) {
+        console.warn(`⚠️ [PTT Live Audio] AudioContext o destination stream non disponibili per ${djName}`)
+        return
+      }
+      
+      // ✅ NEW: Attiva ducking per l'audio PTT Live usando le impostazioni dell'host
+      const duckingPercent = settings?.microphone?.duckingPercent ?? 75
+      console.log(`🎤 [PTT Live Audio] Attivazione ducking per ${djName}: ${duckingPercent}%`)
+      
+      // Attiva il ducking globale per abbassare la musica
+      if (typeof (window as any).updatePTTVolumesOnly === 'function') {
+        (window as any).updatePTTVolumesOnly(true)
+        console.log(`🎤 [PTT Live Audio] Ducking attivato per ${djName} - musica abbassata al ${100 - duckingPercent}%`)
+      }
+      
+      // Crea un source node dall'elemento audio
+      const sourceNode = audioContext.createMediaElementSource(audioElement)
+      
+      // ✅ CRITICAL FIX: Crea un gain node con volume fisso al 100% per evitare che il ducking influenzi l'audio PTT Live
+      const gainNode = audioContext.createGain()
+      gainNode.gain.setValueAtTime(1.0, audioContext.currentTime) // Volume fisso al 100%
+      
+      // ✅ CRITICAL FIX: Collega DIRETTAMENTE al destination stream, bypassando il mixer per evitare ducking
+      sourceNode.connect(gainNode)
+      gainNode.connect(destinationStream) // Collegamento diretto, non tramite mixerGain
+      
+      console.log(`✅ [PTT Live Audio] Audio PTT Live di ${djName} collegato DIRETTAMENTE al destination stream (bypass ducking)`)
+      
+      // Salva i riferimenti per cleanup
+      ;(audioElement as any).pttLiveSourceNode = sourceNode
+      ;(audioElement as any).pttLiveGainNode = gainNode
+      
+    } catch (error) {
+      console.error(`❌ [PTT Live Audio] Errore aggiunta al destination stream per ${djName}:`, error)
+    }
+  }
+
+  const cleanupPTTLiveAudio = (clientId: string) => {
+    const audioElement = pttLiveAudioElementsRef.current.get(clientId)
+    if (audioElement) {
+      try {
+        // ✅ NEW: Disattiva ducking quando l'audio PTT Live finisce
+        console.log(`🎤 [PTT Live Audio] Disattivazione ducking per client ${clientId}`)
+        if (typeof (window as any).updatePTTVolumesOnly === 'function') {
+          (window as any).updatePTTVolumesOnly(false)
+          console.log(`🎤 [PTT Live Audio] Ducking disattivato - musica ripristinata al 100%`)
+        }
+        
+        // Pausa e pulisci l'elemento audio
+        audioElement.pause()
+        audioElement.src = ''
+        
+        // Cleanup dei nodi audio se esistono
+        if ((audioElement as any).pttLiveSourceNode) {
+          (audioElement as any).pttLiveSourceNode.disconnect()
+        }
+        if ((audioElement as any).pttLiveGainNode) {
+          (audioElement as any).pttLiveGainNode.disconnect()
+        }
+        
+        // Rimuovi dall'DOM
+        if (audioElement.parentNode) {
+          audioElement.parentNode.removeChild(audioElement)
+        }
+        
+        // Revoca l'URL del blob
+        if (audioElement.src) {
+          URL.revokeObjectURL(audioElement.src)
+        }
+        
+        // Rimuovi dalla mappa
+        pttLiveAudioElementsRef.current.delete(clientId)
+        
+        console.log(`🧹 [PTT Live Audio] Cleanup completato per client ${clientId}`)
+      } catch (error) {
+        console.error(`❌ [PTT Live Audio] Errore cleanup per client ${clientId}:`, error)
+      }
+    }
   }
 
   const setDJVolume = (clientId: string, volume: number) => {

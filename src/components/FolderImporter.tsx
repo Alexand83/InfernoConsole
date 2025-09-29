@@ -15,6 +15,7 @@ interface ImportSettings {
   delayBetweenBatches: number
   skipWaveformGeneration: boolean
   maxConcurrentFiles: number
+  preset: 'ultra-light' | 'light' | 'balanced' | 'performance' | 'custom'
 }
 
 const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => {
@@ -27,75 +28,131 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
   const [currentBatch, setCurrentBatch] = useState(0)
   const [totalBatches, setTotalBatches] = useState(0)
   const [importSettings, setImportSettings] = useState<ImportSettings>({
-    batchSize: 50, // Processa 50 file alla volta
-    delayBetweenBatches: 100, // 100ms di pausa tra batch
-    skipWaveformGeneration: false, // Genera sempre i waveform per qualità audio
-    maxConcurrentFiles: 5 // Massimo 5 file processati contemporaneamente
+    batchSize: 1, // ✅ ULTRA-LEGGERO: Solo 1 file alla volta per PC vecchissimi
+    delayBetweenBatches: 2000, // ✅ ULTRA-LEGGERO: 2 secondi di pausa tra file
+    skipWaveformGeneration: true, // ✅ ULTRA-LEGGERO: ZERO waveform generation
+    maxConcurrentFiles: 1, // ✅ ULTRA-LEGGERO: SEMPRE 1 file alla volta
+    preset: 'ultra-light' // ✅ DEFAULT: PC vecchissimi (4GB RAM)
   })
   const folderInputRef = useRef<HTMLInputElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const lastSelectedFilesRef = useRef<File[] | null>(null)
   
   // Crea un singolo FileUploadManager per tutta l'operazione
   const uploadManagerRef = useRef<FileUploadManager | null>(null)
 
-  // Calcola automaticamente le impostazioni ULTRA-SICURE per stabilità massima
+  // ✅ PRESET: Configurazioni predefinite per diversi tipi di PC
+  const importPresets = {
+    'ultra-light': {
+      name: 'PC Vecchissimi (4GB RAM)',
+      description: 'Massima stabilità, 1 file alla volta, zero waveform',
+      settings: {
+        batchSize: 1,
+        delayBetweenBatches: 2000,
+        skipWaveformGeneration: true,
+        maxConcurrentFiles: 1
+      }
+    },
+    'light': {
+      name: 'PC Vecchi (8GB RAM)',
+      description: 'Stabilità alta, 2 file alla volta, waveform opzionali',
+      settings: {
+        batchSize: 2,
+        delayBetweenBatches: 1000,
+        skipWaveformGeneration: true,
+        maxConcurrentFiles: 1
+      }
+    },
+    'balanced': {
+      name: 'PC Medi (16GB RAM)',
+      description: 'Bilanciato, 5 file alla volta, waveform completi',
+      settings: {
+        batchSize: 5,
+        delayBetweenBatches: 500,
+        skipWaveformGeneration: false,
+        maxConcurrentFiles: 2
+      }
+    },
+    'performance': {
+      name: 'PC Potenti (32GB+ RAM)',
+      description: 'Massima velocità, 10 file alla volta, waveform completi',
+      settings: {
+        batchSize: 10,
+        delayBetweenBatches: 200,
+        skipWaveformGeneration: false,
+        maxConcurrentFiles: 3
+      }
+    }
+  }
+
+  // ✅ PRESET HANDLERS: Gestione preset e impostazioni personalizzate
+  const applyPreset = useCallback((presetKey: keyof typeof importPresets) => {
+    const preset = importPresets[presetKey]
+    console.log(`🎛️ [PRESET] Applicando preset: ${presetKey}`, preset.settings)
+    setImportSettings({
+      batchSize: preset.settings.batchSize,
+      delayBetweenBatches: preset.settings.delayBetweenBatches,
+      skipWaveformGeneration: preset.settings.skipWaveformGeneration,
+      maxConcurrentFiles: preset.settings.maxConcurrentFiles,
+      preset: presetKey
+    })
+  }, [])
+
+  const updateCustomSettings = useCallback((updates: Partial<ImportSettings>) => {
+    setImportSettings(prev => ({
+      ...prev,
+      ...updates,
+      preset: 'custom'
+    }))
+  }, [])
+
+  // ✅ ULTRA-LEGGERO: Calcola impostazioni per PC VECCHISSIMI (DEPRECATED - ora usiamo preset)
   const calculateOptimalSettings = useCallback((fileCount: number): ImportSettings => {
-    // STRATEGIA ULTRA-SICURA: Processamento SERIALE per evitare crash
-    if (fileCount <= 5) {
-      // Librerie minuscole
+    // STRATEGIA ULTRA-LEGGERA: Processamento SERIALE per PC con 4GB RAM
+    if (fileCount <= 10) {
+      // Librerie minuscole - 1 file alla volta
       return {
-        batchSize: 50, // 50 file per volta per velocità massima
-        delayBetweenBatches: 500, // Pausa di 0.5 secondi
-        skipWaveformGeneration: false, // ABILITA waveform
-        maxConcurrentFiles: 1 // SEMPRE 1 file alla volta
+        batchSize: 1, // ✅ ULTRA-LEGGERO: Solo 1 file alla volta
+        delayBetweenBatches: 1000, // Pausa di 1 secondo
+        skipWaveformGeneration: true, // ✅ ULTRA-LEGGERO: ZERO waveform
+        maxConcurrentFiles: 1 // ✅ ULTRA-LEGGERO: SEMPRE 1 file alla volta
       }
-    } else if (fileCount <= 100) {
-      // Librerie piccole
+    } else if (fileCount <= 50) {
+      // Librerie piccole - 1 file alla volta con pause più lunghe
       return {
-        batchSize: 50, // 50 file per volta per velocità massima
-        delayBetweenBatches: 400, // Pausa di 0.4 secondi
-        skipWaveformGeneration: false, // ABILITA waveform
-        maxConcurrentFiles: 1 // SEMPRE 1 file alla volta
+        batchSize: 1, // ✅ ULTRA-LEGGERO: Solo 1 file alla volta
+        delayBetweenBatches: 2000, // Pausa di 2 secondi
+        skipWaveformGeneration: true, // ✅ ULTRA-LEGGERO: ZERO waveform
+        maxConcurrentFiles: 1 // ✅ ULTRA-LEGGERO: SEMPRE 1 file alla volta
       }
-    } else if (fileCount <= 500) {
-      // Librerie medie
+    } else if (fileCount <= 200) {
+      // Librerie medie - 1 file alla volta con pause molto lunghe
       return {
-        batchSize: 50, // 50 file per volta per velocità massima
-        delayBetweenBatches: 300, // Pausa di 0.3 secondi
-        skipWaveformGeneration: false, // ABILITA waveform
-        maxConcurrentFiles: 1 // SEMPRE 1 file alla volta
-      }
-    } else if (fileCount <= 1000) {
-      // Librerie grandi
-      return {
-        batchSize: 50, // 50 file per volta per velocità massima
-        delayBetweenBatches: 200, // Pausa di 0.2 secondi
-        skipWaveformGeneration: false, // ABILITA waveform
-        maxConcurrentFiles: 1 // SEMPRE 1 file alla volta
+        batchSize: 1, // ✅ ULTRA-LEGGERO: Solo 1 file alla volta
+        delayBetweenBatches: 3000, // Pausa di 3 secondi
+        skipWaveformGeneration: true, // ✅ ULTRA-LEGGERO: ZERO waveform
+        maxConcurrentFiles: 1 // ✅ ULTRA-LEGGERO: SEMPRE 1 file alla volta
       }
     } else {
-      // Librerie enormi
+      // Librerie grandi - MASSIMA SICUREZZA per PC vecchissimi
       return {
-        batchSize: 50, // 50 file per volta per velocità massima
-        delayBetweenBatches: 100, // Pausa di 0.1 secondi
-        skipWaveformGeneration: false, // ABILITA waveform
-        maxConcurrentFiles: 1 // SEMPRE 1 file alla volta
+        batchSize: 1, // ✅ ULTRA-LEGGERO: Solo 1 file alla volta
+        delayBetweenBatches: 5000, // Pausa di 5 secondi per PC vecchissimi
+        skipWaveformGeneration: true, // ✅ ULTRA-LEGGERO: ZERO waveform
+        maxConcurrentFiles: 1 // ✅ ULTRA-LEGGERO: SEMPRE 1 file alla volta
       }
     }
   }, [])
 
-  const handleFolderSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
-    if (!files || files.length === 0) return
-
+  const runImportWithFiles = async (filesArray: File[]) => {
     try {
-      // Calcola impostazioni ottimali
-      const optimalSettings = calculateOptimalSettings(files.length)
-      setImportSettings(optimalSettings)
+      console.log(`📁 [IMPORT] Usando preset: ${importSettings.preset}`)
+      console.log(`📁 [IMPORT] Impostazioni:`, importSettings)
+      console.log(`📁 [IMPORT] Batch Size: ${importSettings.batchSize}, Delay: ${importSettings.delayBetweenBatches}ms`)
 
       setIsImporting(true)
       setShowProgress(true)
-      setTotalFiles(files.length)
+      setTotalFiles(filesArray.length)
       setCompletedFiles(0)
       setCurrentBatch(0)
 
@@ -110,8 +167,7 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
         )
       })
 
-      // Filtra solo file audio supportati
-      const audioFiles = Array.from(files).filter(file => {
+      const audioFiles = filesArray.filter(file => {
         const extension = file.name.toLowerCase().split('.').pop()
         return ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma'].includes(extension || '')
       })
@@ -123,7 +179,6 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
         return
       }
 
-      // Inizializza il progresso per ogni file
       const progress = audioFiles.map(file => ({
         file: file.name,
         progress: 0,
@@ -131,29 +186,44 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
       }))
       setImportProgress(progress)
 
-      // Calcola numero di batch
-      const batchCount = Math.ceil(audioFiles.length / optimalSettings.batchSize)
+      const batchCount = Math.ceil(audioFiles.length / importSettings.batchSize)
       setTotalBatches(batchCount)
 
-      // Crea abort controller per cancellare l'import se necessario
+      // Nuovo abort controller (resettato ogni import)
       abortControllerRef.current = new AbortController()
 
-            // Carica file in modo SERIALE per stabilità massima
       const { tracks: newTracks, errors } = await uploadInBatches(
         audioFiles,
-        optimalSettings
+        importSettings
       )
       
       if (newTracks.length > 0) {
+        console.log(`🎉 [IMPORT] Import completato con ${newTracks.length} tracce`)
         setCompletedFiles(newTracks.length)
-        // Emetti evento per aggiornare la library
+        
+        // Notifica a tutta l'app che il database è cambiato
+        console.log('📡 [IMPORT] Invio eventi di aggiornamento...')
         window.dispatchEvent(new CustomEvent('djconsole:db-updated'))
+        window.dispatchEvent(new CustomEvent('djconsole:library-updated'))
+        window.dispatchEvent(new CustomEvent('djconsole:playlist-updated'))
+        window.dispatchEvent(new CustomEvent('djconsole:force-library-reload'))
+        
+        // Se disponibile, invoca un hook globale di refresh
+        try { 
+          (window as any).refreshLibrary?.() 
+          console.log('✅ [IMPORT] refreshLibrary() chiamato')
+        } catch (e) { console.warn('⚠️ [IMPORT] refreshLibrary() non disponibile:', e) }
+        
+        try { 
+          (window as any).refreshPlaylists?.() 
+          console.log('✅ [IMPORT] refreshPlaylists() chiamato')
+        } catch (e) { console.warn('⚠️ [IMPORT] refreshPlaylists() non disponibile:', e) }
+        
         onImportComplete()
       }
 
       if (errors.length > 0) {
         console.warn(`Import completed with ${errors.length} errors:`, errors)
-        // Aggiorna lo stato degli errori nel progresso
         setImportProgress(prev => 
           prev.map(p => 
             errors.some(e => e.includes(p.file)) 
@@ -163,7 +233,6 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
         )
       }
 
-      // Mostra riepilogo
       setTimeout(() => {
         setShowProgress(false)
         setIsImporting(false)
@@ -172,8 +241,10 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
         setCompletedFiles(0)
         setCurrentBatch(0)
         setTotalBatches(0)
+        // Dispatch finale per assicurare sync UI anche se in idle
+        window.dispatchEvent(new CustomEvent('djconsole:db-updated'))
+        window.dispatchEvent(new CustomEvent('djconsole:force-library-reload'))
       }, 3000)
-
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('Import cancelled by user')
@@ -186,15 +257,31 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
     }
   }
 
-  // Carica file in batch di 5 per bilanciare velocità e stabilità
+  const handleFolderSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files || files.length === 0) return
+
+    // Memorizza ultimi file selezionati e resetta il value per consentire re-selezione stessa cartella
+    lastSelectedFilesRef.current = Array.from(files)
+    try { if (folderInputRef.current) folderInputRef.current.value = '' } catch {}
+
+    await runImportWithFiles(lastSelectedFilesRef.current)
+  }
+
+  // Carica file in batch usando le impostazioni correnti (preset/custom)
   const uploadInBatches = async (files: File[], settings: ImportSettings): Promise<{ tracks: DatabaseTrack[], errors: string[] }> => {
     const tracks: DatabaseTrack[] = []
     const errors: string[] = []
     
-    console.log(`🚀 [IMPORT] Inizio import in batch di ${settings.batchSize} per ${files.length} file`)
+    // Usa i parametri dal preset/setting selezionato
+    const batchSize = Math.max(1, settings.batchSize)
+    const delayBetweenBatches = Math.max(0, settings.delayBetweenBatches)
+    const maxConcurrent = Math.max(1, settings.maxConcurrentFiles)
+    const useUltraLight = settings.skipWaveformGeneration === true
+    console.log(`🚀 [IMPORT] Config: batchSize=${batchSize}, delay=${delayBetweenBatches}ms, concurrent=${maxConcurrent}, ultraLight=${useUltraLight}`)
     
     // Calcola numero di batch
-    const totalBatches = Math.ceil(files.length / settings.batchSize)
+    const totalBatches = Math.ceil(files.length / batchSize)
     
     for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
       // Controlla se l'operazione è stata cancellata
@@ -203,8 +290,8 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
         throw new Error('Operazione cancellata dall\'utente')
       }
       
-      const start = batchIndex * settings.batchSize
-      const end = Math.min(start + settings.batchSize, files.length)
+      const start = batchIndex * batchSize
+      const end = Math.min(start + batchSize, files.length)
       const batch = files.slice(start, end)
       
       console.log(`📁 [IMPORT] Processando batch ${batchIndex + 1}/${totalBatches} (${batch.length} file)`)
@@ -212,42 +299,47 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
       // Aggiorna progresso batch
       setCurrentBatch(batchIndex + 1)
       
-      // Processa batch corrente in parallelo
-      const batchPromises = batch.map(async (file) => {
-        try {
-          if (!uploadManagerRef.current) {
-            throw new Error('FileUploadManager non inizializzato')
-          }
-          
-          console.log(`⚡ [IMPORT] Inizio processamento: ${file.name}`)
-          const track = await uploadManagerRef.current.processFileOptimized(file, settings.skipWaveformGeneration)
-          
-          if (track) {
-            console.log(`✅ [IMPORT] File completato: ${file.name}`)
-            return track
-          } else {
-            console.warn(`⚠️ [IMPORT] File fallito: ${file.name}`)
+      // Processa il batch rispettando il limite di concorrenza
+      const batchResults: Array<DatabaseTrack | null> = []
+      for (let i = 0; i < batch.length; i += maxConcurrent) {
+        const group = batch.slice(i, i + maxConcurrent)
+        const groupPromises = group.map(async (file) => {
+          try {
+            if (!uploadManagerRef.current) {
+              throw new Error('FileUploadManager non inizializzato')
+            }
+            const method = useUltraLight ? 'processFileUltraLight' : 'processFile'
+            console.log(`⚡ [IMPORT] ${method} → ${file.name}`)
+            const track = useUltraLight
+              ? await uploadManagerRef.current.processFileUltraLight(file, true)
+              // @ts-expect-error: metodo processFile esiste nel manager standard
+              : await (uploadManagerRef.current as any).processFile(file)
+            if (track) {
+              console.log(`✅ [IMPORT] File completato: ${file.name}`)
+              return track as DatabaseTrack
+            } else {
+              console.warn(`⚠️ [IMPORT] File fallito: ${file.name}`)
+              return null
+            }
+          } catch (error) {
+            const errorMsg = `Failed to process ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`
+            errors.push(errorMsg)
+            console.error(`❌ [IMPORT] Errore file: ${file.name}`, error)
             return null
           }
-        } catch (error) {
-          const errorMsg = `Failed to process ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`
-          errors.push(errorMsg)
-          console.error(`❌ [IMPORT] Errore file: ${file.name}`, error)
-          return null
-        }
-      })
-      
-      // Processa batch in parallelo
-      const batchResults = await Promise.all(batchPromises)
+        })
+        const groupResults = await Promise.all(groupPromises)
+        batchResults.push(...groupResults)
+      }
       const batchTracks = batchResults.filter((track): track is DatabaseTrack => track !== null)
       
       tracks.push(...batchTracks)
       setCompletedFiles(prev => prev + batchTracks.length)
       
-      // Pausa tra batch per permettere al sistema di "respirare"
+      // Pausa tra i batch secondo impostazioni correnti
       if (batchIndex < totalBatches - 1) {
-        console.log(`⏸️ [BATCH] Pausa di ${settings.delayBetweenBatches}ms dopo batch ${batchIndex + 1}/${totalBatches}`)
-        await new Promise(resolve => setTimeout(resolve, settings.delayBetweenBatches))
+        console.log(`⏸️ [IMPORT] Pausa di ${delayBetweenBatches}ms tra batch`)
+        await new Promise(resolve => setTimeout(resolve, delayBetweenBatches))
         
         // Pulizia memoria AGGRESSIVA ogni batch
         try {
@@ -280,6 +372,14 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
+    // Reset stato UI per permettere re-import immediato
+    setIsImporting(false)
+    setShowProgress(false)
+    setCurrentBatch(0)
+    setTotalBatches(0)
+    setCompletedFiles(0)
+    // Mantieni lastSelectedFilesRef per re-import
+    abortControllerRef.current = null
   }
 
   const handleMemoryWarning = () => {
@@ -354,81 +454,166 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
         <span>Impostazioni Import</span>
       </button>
 
-      {/* Impostazioni import */}
+      {/* ✅ IMPOSTAZIONI IMPORT CON PRESET */}
       {showSettings && (
-        <div className="mt-3 p-3 bg-dj-primary rounded-lg">
-          <div className="space-y-3">
+        <div className="mt-3 p-4 bg-dj-primary rounded-lg border border-dj-accent/20">
+          <h3 className="text-lg font-semibold text-dj-light mb-4 flex items-center">
+            <Settings className="w-4 h-4 mr-2" />
+            Impostazioni Import
+          </h3>
+          
+          {/* ✅ PRESET SELECTOR */}
+          <div className="space-y-4">
             <div>
-              <label className="text-sm text-dj-light/80">Dimensione Batch:</label>
-              <select
-                value={importSettings.batchSize}
-                onChange={(e) => setImportSettings(prev => ({ ...prev, batchSize: Number(e.target.value) }))}
-                className="ml-2 bg-dj-secondary text-white text-sm rounded px-2 py-1"
-                aria-label="Dimensione batch per importazione"
-              >
-                <option value={25}>25 file</option>
-                <option value={50}>50 file</option>
-                <option value={100}>100 file</option>
-              </select>
+              <label className="text-sm font-medium text-dj-light/80 mb-2 block">Preset PC:</label>
+              <div className="grid grid-cols-1 gap-2">
+                {Object.entries(importPresets).map(([key, preset]) => (
+                  <button
+                    key={key}
+                    onClick={() => applyPreset(key as keyof typeof importPresets)}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      importSettings.preset === key
+                        ? 'border-green-500 bg-green-500/20 text-green-400 shadow-lg shadow-green-500/20'
+                        : 'border-dj-secondary/50 bg-dj-secondary/10 text-dj-light/80 hover:border-green-400/50 hover:bg-green-500/10'
+                    }`}
+                  >
+                    <div className="font-medium text-sm">{preset.name}</div>
+                    <div className="text-xs text-dj-light/60 mt-1">{preset.description}</div>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div>
-              <label className="text-sm text-dj-light/80">Pausa tra Batch (ms):</label>
-              <select
-                value={importSettings.delayBetweenBatches}
-                onChange={(e) => setImportSettings(prev => ({ ...prev, delayBetweenBatches: Number(e.target.value) }))}
-                className="ml-2 bg-dj-secondary text-white text-sm rounded px-2 py-1"
-                aria-label="Pausa tra batch per importazione"
-              >
-                <option value={50}>50ms</option>
-                <option value={100}>100ms</option>
-                <option value={200}>200ms</option>
-              </select>
-            </div>
-            <div className="text-sm text-dj-light/80 bg-dj-highlight/20 p-2 rounded border border-dj-highlight/30">
-              <span className="text-dj-highlight">🎵 Waveform sempre generati per qualità audio ottimale</span>
-            </div>
-            <div>
-              <label className="text-sm text-dj-light/80">File concorrenti:</label>
-              <select
-                value={importSettings.maxConcurrentFiles}
-                onChange={(e) => setImportSettings(prev => ({ ...prev, maxConcurrentFiles: Number(e.target.value) }))}
-                className="ml-2 bg-dj-secondary text-white text-sm rounded px-2 py-1"
-                aria-label="Numero di file concorrenti per importazione"
-              >
-                <option value={3}>3</option>
-                <option value={5}>5</option>
-                <option value={8}>8</option>
-              </select>
+
+            {/* ✅ IMPOSTAZIONI PERSONALIZZATE */}
+            {importSettings.preset === 'custom' && (
+              <div className="space-y-3 pt-3 border-t border-dj-secondary/30">
+                <div className="text-sm font-medium text-dj-light/80">Impostazioni Personalizzate:</div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-dj-light/60">Batch Size:</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={importSettings.batchSize}
+                      onChange={(e) => updateCustomSettings({ batchSize: Number(e.target.value) })}
+                      className="w-full mt-1 bg-dj-secondary text-white text-sm rounded px-2 py-1"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="text-xs text-dj-light/60">Delay (ms):</label>
+                    <input
+                      type="number"
+                      min="100"
+                      max="10000"
+                      step="100"
+                      value={importSettings.delayBetweenBatches}
+                      onChange={(e) => updateCustomSettings({ delayBetweenBatches: Number(e.target.value) })}
+                      className="w-full mt-1 bg-dj-secondary text-white text-sm rounded px-2 py-1"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="text-xs text-dj-light/60">Concurrent Files:</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={importSettings.maxConcurrentFiles}
+                      onChange={(e) => updateCustomSettings({ maxConcurrentFiles: Number(e.target.value) })}
+                      className="w-full mt-1 bg-dj-secondary text-white text-sm rounded px-2 py-1"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <label className="text-xs text-dj-light/60 flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={importSettings.skipWaveformGeneration}
+                        onChange={(e) => updateCustomSettings({ skipWaveformGeneration: e.target.checked })}
+                        className="mr-2"
+                      />
+                      Skip Waveform
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ✅ INFO CURRENT SETTINGS */}
+            <div className="text-xs text-dj-light/60 bg-green-500/10 p-3 rounded border border-green-500/30">
+              <div className="font-medium mb-2 text-green-400 flex items-center">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                Preset Attivo: {importPresets[importSettings.preset]?.name || 'Custom'}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>Batch: <span className="text-green-400 font-medium">{importSettings.batchSize}</span></div>
+                <div>Delay: <span className="text-green-400 font-medium">{importSettings.delayBetweenBatches}ms</span></div>
+                <div>Concurrent: <span className="text-green-400 font-medium">{importSettings.maxConcurrentFiles}</span></div>
+                <div>Waveform: <span className="text-green-400 font-medium">{importSettings.skipWaveformGeneration ? '❌' : '✅'}</span></div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-                            {/* Informazioni import Ottimizzato */}
-              {totalFiles > 0 && (
-            <div className="text-xs text-dj-light/60 bg-green-500/20 p-2 rounded border border-green-500/30">
-              <strong>🚀 Import Ottimizzato (Batch di 50):</strong> 
-              <span className="text-green-400">
-                Processamento in batch di {importSettings.batchSize} file con waveform completi e durate accurate. Pausa: {importSettings.delayBetweenBatches}ms tra batch. Performance massima!
-              </span>
-            </div>
-          )}
+            {/* ✅ INFO IMPORT CORRENTE - COLORI CHIARI E LEGGIBILI */}
+            {totalFiles > 0 && (
+              <div className="text-sm text-white bg-gradient-to-r from-cyan-600/30 to-blue-600/30 p-4 rounded-lg border border-cyan-400/50 shadow-lg">
+                <div className="flex items-center mb-3">
+                  <div className="w-3 h-3 bg-cyan-400 rounded-full mr-3 animate-pulse"></div>
+                  <strong className="text-cyan-200 text-lg">
+                    🚀 Import {importSettings.preset === 'ultra-light' ? 'Ultra-Leggero' : 'Configurato'}
+                  </strong>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="flex items-center">
+                    <span className="text-white/80 mr-2 font-medium">Preset:</span>
+                    <span className="text-cyan-200 font-bold">{importPresets[importSettings.preset]?.name || 'Custom'}</span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-white/80 mr-2 font-medium">Batch:</span>
+                    <span className="text-cyan-200 font-bold">{importSettings.batchSize} file</span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-white/80 mr-2 font-medium">Delay:</span>
+                    <span className="text-cyan-200 font-bold">{importSettings.delayBetweenBatches}ms</span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-white/80 mr-2 font-medium">Waveform:</span>
+                    <span className="text-cyan-200 font-bold">{importSettings.skipWaveformGeneration ? '❌' : '✅'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
-      {/* Barra di progresso generale */}
+      {/* ✅ BARRA DI PROGRESSO MIGLIORATA - COLORI CHIARI */}
       {isImporting && (
-        <div className="mt-3">
-          <div className="flex items-center justify-between text-sm text-dj-light/60 mb-2">
-            <span>Progresso Import Ottimizzato</span>
-            <span>{completedFiles} / {totalFiles}</span>
+        <div className="mt-4 p-4 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 rounded-lg border border-emerald-400/40 shadow-lg">
+          <div className="flex items-center justify-between text-base text-white mb-3">
+            <div className="flex items-center">
+              <div className="w-3 h-3 bg-emerald-400 rounded-full mr-3 animate-pulse"></div>
+              <span className="font-bold text-emerald-200">Progresso Import ({importPresets[importSettings.preset]?.name || 'Custom'})</span>
+            </div>
+            <span className="text-emerald-300 font-bold text-xl">{completedFiles} / {totalFiles}</span>
           </div>
-          <div className="w-full bg-dj-primary rounded-full h-2 overflow-hidden">
+          <div className="w-full bg-gray-700 rounded-full h-4 overflow-hidden shadow-inner">
             <div 
-              className="h-full bg-gradient-to-r from-dj-success to-dj-highlight transition-all duration-300"
+              className="h-full bg-gradient-to-r from-emerald-400 to-cyan-400 transition-all duration-500 shadow-lg"
               style={{ width: `${(completedFiles / totalFiles) * 100}%` }}
             />
           </div>
-          <div className="text-xs text-dj-light/60 mt-1">
-            Batch: {currentBatch} / {Math.ceil(totalFiles / importSettings.batchSize)} | File: {completedFiles} ({Math.round((completedFiles / totalFiles) * 100)}%)
+          <div className="text-sm text-white/90 mt-4 grid grid-cols-2 gap-4">
+            <div className="flex items-center">
+              <span className="text-white/70 mr-2 font-medium">Batch:</span>
+              <span className="text-emerald-300 font-bold">{currentBatch} / {Math.ceil(totalFiles / importSettings.batchSize)}</span>
+            </div>
+            <div className="flex items-center">
+              <span className="text-white/70 mr-2 font-medium">Completato:</span>
+              <span className="text-emerald-300 font-bold">{Math.round((completedFiles / totalFiles) * 100)}%</span>
+            </div>
           </div>
         </div>
       )}

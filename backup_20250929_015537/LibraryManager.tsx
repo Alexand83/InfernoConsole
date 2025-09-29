@@ -9,8 +9,6 @@ import FolderImporter from './FolderImporter'
 import AdvancedSearch, { SearchFilters } from './AdvancedSearch'
 import LazyWaveform from './LazyWaveform'
 import VirtualizedTrackList from './VirtualizedTrackList'
-import UltraLightTrackList from './UltraLightTrackList'
-import { ultraLightMemoryManager } from '../utils/UltraLightMemoryManager'
 
 interface Playlist {
   id: string
@@ -122,7 +120,7 @@ const TrackItem = React.memo(({
 const LibraryManager = () => {
   // const { addToDeck } = useAudio() // Rimosso perché non usato
   const [tracks, setTracks] = useState<DatabaseTrack[]>([])
-  const [filteredTracks, setFilteredTracks] = useState<DatabaseTrack[]>([]) // ✅ ULTRA-LIGHT: Inizializzato come array vuoto
+  const [filteredTracks, setFilteredTracks] = useState<DatabaseTrack[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({
@@ -146,13 +144,13 @@ const LibraryManager = () => {
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // ✅ ULTRA-LEGGERO: Paginazione aggressiva per PC antichi
+  // ✅ PAGINAZIONE: Gestione pagine per performance
   const [currentPage, setCurrentPage] = useState(0)
-  const ITEMS_PER_PAGE = 20 // 20 file per pagina per PC con 4GB RAM
+  const ITEMS_PER_PAGE = 50 // 50 file per pagina per fluidità massima
 
   // ✅ VIRTUALIZZAZIONE: Abilita/disabilita virtualizzazione
-  const [useVirtualization, setUseVirtualization] = useState(true) // Riabilitata con controlli di sicurezza
-  const VIRTUALIZATION_THRESHOLD = 50 // Usa virtualizzazione se > 50 file
+  const [useVirtualization, setUseVirtualization] = useState(false)
+  const VIRTUALIZATION_THRESHOLD = 100 // Usa virtualizzazione se > 100 file
 
   // Nuove variabili per playlist
   const [playlists, setPlaylists] = useState<Playlist[]>([])
@@ -441,110 +439,76 @@ const LibraryManager = () => {
     setCurrentPage(0)
   }, [tracks, debouncedQuery, searchFilters, sortBy, sortOrder])
 
-  // ✅ ULTRA-LIGHT FIX: Assicura che filteredTracks sia sempre un array valido
-  const safeFilteredTracks = Array.isArray(filteredTracks) ? filteredTracks : []
-
   // ✅ PAGINAZIONE: Calcola i track da mostrare per la pagina corrente
   const paginatedTracks = useMemo(() => {
     const start = currentPage * ITEMS_PER_PAGE
     const end = start + ITEMS_PER_PAGE
-    return safeFilteredTracks.slice(start, end)
-  }, [safeFilteredTracks, currentPage, ITEMS_PER_PAGE])
+    return filteredTracks.slice(start, end)
+  }, [filteredTracks, currentPage, ITEMS_PER_PAGE])
 
   // ✅ PAGINAZIONE: Calcola il numero totale di pagine
-  const totalPages = Math.ceil(safeFilteredTracks.length / ITEMS_PER_PAGE)
-  
-  // ✅ VIRTUALIZZAZIONE: Decidi se usare virtualizzazione o paginazione
-  const shouldUseVirtualization = safeFilteredTracks.length > VIRTUALIZATION_THRESHOLD
-  // ✅ CRITICAL FIX: Disabilita virtualizzazione se tracks non è valido
-  const effectiveUseVirtualization = useVirtualization && shouldUseVirtualization && Array.isArray(safeFilteredTracks) && safeFilteredTracks.length > 0
+  const totalPages = Math.ceil(filteredTracks.length / ITEMS_PER_PAGE)
 
-  // ✅ ULTRA-LEGGERO: Caricamento differito per PC antichi
+  // ✅ VIRTUALIZZAZIONE: Decidi se usare virtualizzazione o paginazione
+  const shouldUseVirtualization = filteredTracks.length > VIRTUALIZATION_THRESHOLD
+  const effectiveUseVirtualization = useVirtualization && shouldUseVirtualization
+
+  // ✅ OPTIMIZATION: Load tracks from database - Caricamento differito per avvio veloce
   useEffect(() => {
-    // ✅ CRITICAL: Attiva memory manager ultra-light per PC antichi
-    ultraLightMemoryManager.startUltraLightMode()
-    console.log('🚀 [ULTRA-LIGHT] Memory manager ultra-light attivato per PC antichi')
-    
-    const loadTracksUltraLight = async () => {
+    const loadTracks = async () => {
       try {
-        console.log('🚀 [ULTRA-LIGHT] Caricamento libreria differito...')
-        
-        // ✅ CRITICAL: Carica SOLO i primi 20 track per avvio istantaneo
+        // ✅ FIX: Non aspettare l'inizializzazione - carica in background
+        const initPromise = localDatabase.waitForInitialization()
         const allTracks = await localDatabase.getAllTracks().catch(() => [])
-        const initialTracks = allTracks.slice(0, 20) // Solo primi 20 per avvio
         
-        console.log(`⚡ [ULTRA-LIGHT] Caricati ${initialTracks.length} track per avvio veloce`)
+        // Completa l'inizializzazione in background
+        initPromise.catch(() => {})
+        // ✅ OPTIMIZATION: Waveform generation completamente differita per avvio veloce
+        // Non rigenerare waveform all'avvio - solo quando necessario
+        try { 
+          (window as any).log?.info?.('Waveform generation deferred for faster startup') 
+        } catch {}
         
-        setTracks(initialTracks)
-        setFilteredTracks(initialTracks)
-        
-        // ✅ ZERO WAVEFORM: Nessuna generazione waveform all'avvio
-        console.log('⚡ [ULTRA-LIGHT] Waveform generation completamente disabilitata per PC antichi')
-        
-        // ✅ LAZY LOADING: Carica il resto in background dopo 2 secondi
+        // Genera waveform solo per i primi 5 track per avvio veloce
+        const tracksToProcess = allTracks.slice(0, 5)
         setTimeout(async () => {
-          console.log('🔄 [ULTRA-LIGHT] Caricamento completo in background...')
-          setTracks(allTracks)
-          setFilteredTracks(allTracks)
-        }, 2000)
-        
+          for (const t of tracksToProcess) {
+            if ((!t.waveform || t.waveform.length === 0) && t.blobId) {
+              try {
+                const blob = await getBlob(t.blobId)
+                if (blob) {
+                  const peaks = await generateWaveformPeaksFromBlob(blob, 200)
+                  if (peaks.length > 0) {
+                    await localDatabase.updateTrack(t.id, { waveform: peaks })
+                    t.waveform = peaks
+                  }
+                }
+              } catch {}
+            }
+          }
+        }, 1000) // Differito di 1 secondo
+        setTracks(allTracks)
+        setFilteredTracks(allTracks)
       } catch (error) {
-        console.error('❌ [ULTRA-LIGHT] Errore caricamento:', error)
+        console.error('Failed to load tracks:', error)
       }
     }
     
-    loadTracksUltraLight()
-
+    loadTracks()
     // Reload when DB updates (e.g., after upload, playlist changes)
-    const onDbUpdated = async () => {
-      console.log('🔄 [LIBRARY] db-updated ricevuto → ricarico libreria')
-      try {
-        const allTracks = await localDatabase.getAllTracks().catch(() => [])
-        console.log(`🔄 [LIBRARY] Caricate ${allTracks.length} tracce dopo import`)
-        setTracks(allTracks)
-        setFilteredTracks(allTracks)
-        console.log('✅ [LIBRARY] Libreria aggiornata con successo')
-      } catch (error) {
-        console.error('❌ [LIBRARY] Errore ricaricamento dopo import:', error)
-      }
+    const onDbUpdated = (e: Event) => {
+      loadTracks()
     }
     window.addEventListener('djconsole:db-updated', onDbUpdated as EventListener)
-    
-    // Listener aggiuntivo per force-library-reload
-    const onForceReload = async () => {
-      console.log('🔄 [LIBRARY] force-library-reload ricevuto → ricarico libreria')
-      try {
-        const allTracks = await localDatabase.getAllTracks().catch(() => [])
-        console.log(`🔄 [LIBRARY] Force reload: caricate ${allTracks.length} tracce`)
-        setTracks(allTracks)
-        setFilteredTracks(allTracks)
-        console.log('✅ [LIBRARY] Force reload completato')
-      } catch (error) {
-        console.error('❌ [LIBRARY] Errore force reload:', error)
-      }
-    }
-    window.addEventListener('djconsole:force-library-reload', onForceReload as EventListener)
 
     // Reload when tab becomes visible again
-    const onVisibility = async () => {
-      if (document.visibilityState === 'visible') {
-        console.log('🔄 [LIBRARY] Tab visibile → ricarico libreria')
-        try {
-          const allTracks = await localDatabase.getAllTracks().catch(() => [])
-          setTracks(allTracks)
-          setFilteredTracks(allTracks)
-        } catch (error) {
-          console.error('❌ [LIBRARY] Errore ricaricamento su visibility:', error)
-        }
-      }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') loadTracks()
     }
     document.addEventListener('visibilitychange', onVisibility)
-
-    // ✅ CLEANUP: Ferma memory manager e rimuovi listeners al dismount
+    
     return () => {
-      ultraLightMemoryManager.stop()
       window.removeEventListener('djconsole:db-updated', onDbUpdated as EventListener)
-      window.removeEventListener('djconsole:force-library-reload', onForceReload as EventListener)
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [])
@@ -990,31 +954,21 @@ const LibraryManager = () => {
     if (window.confirm('⚠️ ATTENZIONE: Questa operazione eliminerà TUTTE le canzoni dalla libreria. Sei sicuro di voler continuare?')) {
       try {
         console.log('🗑️ [LIBRARY] Inizio pulizia libreria...')
-        // ✅ NUOVO: Pulizia batch + non bloccante
+        
+        // Elimina tutte le tracce dal database
         const allTracks = await localDatabase.getAllTracks()
-        const BATCH = 50
-        for (let i = 0; i < allTracks.length; i += BATCH) {
-          const slice = allTracks.slice(i, i + BATCH)
-          await Promise.all(slice.map(t => localDatabase.deleteTrack(t.id)))
-          // micro-pausa per lasciare respirare il main thread
-          await new Promise(r => setTimeout(r, 10))
+        for (const track of allTracks) {
+          await localDatabase.deleteTrack(track.id)
         }
-
-        // ✅ Pulisci anche blob e URL
-        try { (window as any).revokeAllBlobUrls?.() } catch {}
-        try { (window as any).clearAudioCache?.() } catch {}
-
-        // ✅ Pulisci stato locale in un colpo solo
+        
+        // Pulisci lo stato locale
         setTracks([])
         setFilteredTracks([])
         setSelectedTrack(null)
-
-        // ✅ Notifiche globali per refresh immediato
-        window.dispatchEvent(new CustomEvent('djconsole:db-updated'))
-        window.dispatchEvent(new CustomEvent('djconsole:library-updated'))
-        window.dispatchEvent(new CustomEvent('djconsole:force-library-reload'))
-
-        console.log('✅ [LIBRARY] Libreria pulita con successo (batch)')
+        
+        console.log('✅ [LIBRARY] Libreria pulita con successo')
+        
+        // Sincronizzazione diretta senza eventi che causano loop
       } catch (error) {
         console.error('❌ [LIBRARY] Errore durante la pulizia della libreria:', error)
         alert('Errore durante la pulizia della libreria. Controlla la console per i dettagli.')
@@ -1267,7 +1221,7 @@ const LibraryManager = () => {
             </div>
             
             <div className="max-h-[600px] overflow-y-auto">
-              {safeFilteredTracks.length === 0 ? (
+              {filteredTracks.length === 0 ? (
                 <div className="text-center py-12 text-dj-light/60">
                   <Music className="w-16 h-16 mx-auto mb-4 opacity-50" />
                   <p className="text-lg mb-2">Nessuna traccia trovata</p>
@@ -1276,7 +1230,7 @@ const LibraryManager = () => {
               ) : effectiveUseVirtualization ? (
                 // ✅ VIRTUALIZZAZIONE: Lista virtualizzata per performance massime
                 <VirtualizedTrackList
-                  tracks={safeFilteredTracks || []}
+                  tracks={filteredTracks}
                   selectedTrack={selectedTrack}
                   onTrackSelect={handleTrackSelect}
                   onTrackDelete={handleTrackDelete}
@@ -1287,16 +1241,55 @@ const LibraryManager = () => {
                   TrackItemComponent={TrackItem}
                 />
               ) : (
-                // ✅ ULTRA-LEGGERO: Lista ultra-leggera per PC antichi
-                <UltraLightTrackList
-                  tracks={safeFilteredTracks || []}
-                  selectedTrack={selectedTrack}
-                  onTrackSelect={handleTrackSelect}
-                  onTrackDelete={handleTrackDelete}
-                  onTrackDoubleClick={handleTrackDoubleClick}
-                  onTrackDragStart={handleTrackDragStart}
-                  TrackItemComponent={TrackItem}
-                />
+                // ✅ PAGINAZIONE: Lista paginata per file < 100
+                <>
+                  <div className="divide-y divide-dj-accent/10">
+                    {paginatedTracks.map((track) => (
+                      <TrackItem
+                        key={track.id}
+                        track={track}
+                        isSelected={selectedTrack === track.id}
+                        onSelect={handleTrackSelect}
+                        onDelete={handleTrackDelete}
+                        onDoubleClick={handleTrackDoubleClick}
+                        onDragStart={handleTrackDragStart}
+                      />
+                    ))}
+                  </div>
+                  
+                  {/* ✅ PAGINAZIONE: Controlli di navigazione */}
+                  {totalPages > 1 && (
+                    <div className="p-4 border-t border-dj-accent/20 bg-dj-primary/20">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm text-dj-light/60">
+                          Mostrando {currentPage * ITEMS_PER_PAGE + 1}-{Math.min((currentPage + 1) * ITEMS_PER_PAGE, filteredTracks.length)} di {filteredTracks.length} tracce
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+                            disabled={currentPage === 0}
+                            className="px-3 py-1 bg-dj-accent/20 hover:bg-dj-accent/30 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm"
+                          >
+                            ← Precedente
+                          </button>
+                          
+                          <span className="px-3 py-1 text-sm text-dj-light/80">
+                            {currentPage + 1} / {totalPages}
+                          </span>
+                          
+                          <button
+                            onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
+                            disabled={currentPage >= totalPages - 1}
+                            className="px-3 py-1 bg-dj-accent/20 hover:bg-dj-accent/30 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm"
+                          >
+                            Successiva →
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

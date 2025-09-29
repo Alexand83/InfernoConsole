@@ -6,7 +6,7 @@ import NewDJConsole from './components/NewDJConsole'
 import { RebuiltDJConsole, AutoAdvanceManager } from './components/dj-console'
 // import DJRemotoServerPage from './components/DJRemotoServerPage' // Ora è un pannello nel TopNav
 // Rimossi import diretti per lazy loading
-// import LibraryManager from './components/LibraryManager'
+import LibraryManager from './components/LibraryManager'
 // import Settings from './components/Settings'
 import TestConsole from './components/TestConsole'
 import { AudioProvider } from './contexts/AudioContext'
@@ -62,9 +62,9 @@ function App() {
   const memoizedOldDJConsole = useMemo(() => <DJConsole key="djconsole-old-stable" />, [stableRef.current])
   
   // ✅ LAZY LOADING per componenti pesanti - Ottimizzato per avvio veloce
-  const LazyLibraryManager = useMemo(() => {
-    return React.lazy(() => import('./components/LibraryManager'))
-  }, [])
+  // const LazyLibraryManager = useMemo(() => {
+  //   return React.lazy(() => import('./components/LibraryManager'))
+  // }, [])
   
   const LazySettings = useMemo(() => {
     return React.lazy(() => import('./components/Settings'))
@@ -103,7 +103,7 @@ function App() {
                       <Route path="/" element={memoizedRebuiltDJConsole} />
                       <Route path="/v2" element={memoizedDJConsole} />
                       <Route path="/old" element={memoizedOldDJConsole} />
-                      <Route path="/library" element={<LazyLibraryManager />} />
+                      <Route path="/library" element={<LibraryManager />} />
                       <Route path="/settings" element={<LazySettings />} />
                       <Route path="/youtube" element={<LazyYouTubeDownloader />} />
                       <Route path="/test" element={memoizedTestConsole} />
@@ -128,7 +128,7 @@ function App() {
         </AudioProvider>
       </TimerProvider>
     </SettingsProvider>
-  ), [memoizedRebuiltDJConsole, memoizedDJConsole, memoizedOldDJConsole, LazyLibraryManager, LazySettings, memoizedTestConsole])
+  ), [memoizedRebuiltDJConsole, memoizedDJConsole, memoizedOldDJConsole, LazySettings, memoizedTestConsole])
 
   return memoizedProviders
 }

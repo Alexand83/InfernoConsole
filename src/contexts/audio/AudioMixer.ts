@@ -226,7 +226,14 @@ export class AudioMixer {
     
     // Applica volume microfono
     if (this.gainRefs.micGain) {
-      this.gainRefs.micGain.gain.setValueAtTime(state.microphone.volume, currentTime)
+      // ✅ CRITICAL FIX: Durante PTT Live, forza il microfono al 100% indipendentemente dalle settings
+      const pttActive = (window as any).__pttActive__ || false
+      const micVolume = pttActive ? 1.0 : state.microphone.volume
+      this.gainRefs.micGain.gain.setValueAtTime(micVolume, currentTime)
+      
+      if (pttActive) {
+        console.log(`🎤 [AUDIO MIXER] PTT attivo - microfono forzato al 100% (settings: ${Math.round(state.microphone.volume * 100)}%)`)
+      }
     }
     
     // Applica crossfader ai monitor gains

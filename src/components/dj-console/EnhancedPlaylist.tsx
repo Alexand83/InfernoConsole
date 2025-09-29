@@ -26,9 +26,10 @@ const EnhancedPlaylist: React.FC<EnhancedPlaylistProps> = ({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [highlightedTrack, setHighlightedTrack] = useState<string | null>(null)
 
-  // Trova la playlist attiva
+  // ✅ ULTRA-LEGGERO: Carica solo i primi 50 track per PC antichi
   const activePlaylist = playlistState.library.playlists.find(pl => pl.id === activePlaylistId)
-  const tracks = activePlaylist?.tracks || []
+  const allTracks = activePlaylist?.tracks || []
+  const tracks = allTracks.slice(0, 50) // Solo primi 50 track per PC con 4GB RAM
 
   // Calcola il tempo totale della playlist
   const totalDuration = tracks.reduce((sum, track) => sum + track.duration, 0)

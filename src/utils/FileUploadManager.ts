@@ -777,42 +777,42 @@ export class FileUploadManager {
     }
   }
 
-  // Metodo ultra-radicale per processare file senza alcuna analisi audio
-  async processFileOptimized(file: File, skipWaveformGeneration: boolean = false): Promise<DatabaseTrack | null> {
+  // ✅ ULTRA-LEGGERO: Import senza alcuna analisi audio per PC antichi
+  async processFileUltraLight(file: File, skipWaveformGeneration: boolean = true): Promise<DatabaseTrack | null> {
     try {
-      console.log(`🚀 [FILE] Inizio processamento: ${file.name} (${file.size} bytes)`)
+      console.log(`🚀 [ULTRA-LIGHT] Import: ${file.name} (${file.size} bytes)`)
       
       // Update progress to processing
       try { 
         this.updateProgress(file, 0, 'processing') 
-        console.log(`📊 [FILE] Progresso aggiornato per: ${file.name}`)
       } catch (e) { 
-        console.warn(`⚠️ [FILE] Errore aggiornamento progresso: ${file.name}`, e)
+        console.warn(`⚠️ [ULTRA-LIGHT] Errore progresso: ${file.name}`, e)
       }
 
-      // Extract metadata from filename if possible
-      console.log(`🔍 [FILE] Estrazione metadata per: ${file.name}`)
+      // ✅ CRITICAL: Estrazione metadata SOLO dal filename - ZERO analisi audio
       const metadata = this.extractMetadataFromFilename(file.name)
-      console.log(`✅ [FILE] Metadata estratti: ${file.name} - Title: "${metadata.title}", Artist: "${metadata.artist}"`)
       
-      // IMPORT OTTIMIZZATO: Durata ultra-leggera + metadata
+      // ✅ ULTRA-LEGGERO: Durata stimata dal filename o 0 - NO analisi audio
       let duration = 0
-      let waveform: number[] = []
+      const filename = file.name.toLowerCase()
       
-      // Calcola durata con metodo IBRIDO (Browser + Electron)
-      try {
-        duration = await this.getAudioDurationHybrid(file)
-        console.log(`✅ [FILE] Durata calcolata ibrida: ${file.name} - ${duration}s`)
-      } catch (durationError) {
-        console.warn(`⚠️ [FILE] Errore calcolo durata ibrida per ${file.name}:`, durationError)
-        duration = 0
+      // Stima durata basata su pattern comuni nei filename
+      if (filename.includes('intro') || filename.includes('outro')) {
+        duration = 30 // 30 secondi per intro/outro
+      } else if (filename.includes('short') || filename.includes('clip')) {
+        duration = 60 // 1 minuto per clip
+      } else if (filename.includes('extended') || filename.includes('long')) {
+        duration = 300 // 5 minuti per extended
+      } else {
+        duration = 180 // 3 minuti default
       }
       
-      // Waveform vuoto - verrà generato on-demand quando aggiunto alle playlist
-      console.log(`⏭️ [FILE] Waveform saltato per import veloce: ${file.name}`)
+      // ✅ ZERO WAVEFORM: Array vuoto - generato solo on-demand
+      const waveform: number[] = []
+      
+      console.log(`⚡ [ULTRA-LIGHT] Metadata: "${metadata.title}" - "${metadata.artist}" - ${duration}s`)
 
       // Create track object
-      console.log(`📝 [FILE] Creazione oggetto track per: ${file.name}`)
       const track: Omit<DatabaseTrack, 'id' | 'addedAt' | 'playCount' | 'rating'> = {
         title: metadata.title,
         artist: metadata.artist,
