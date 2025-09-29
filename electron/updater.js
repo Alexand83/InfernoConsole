@@ -60,7 +60,7 @@ class AppUpdater {
     autoUpdater.allowDowngrade = false
     autoUpdater.allowPrerelease = false
     autoUpdater.autoDownload = false // Controllo manuale del download
-    autoUpdater.autoInstallOnAppQuit = true
+    autoUpdater.autoInstallOnAppQuit = false // Disabilitato per gestione manuale
     
     // ✅ NUOVO: Configurazione per auto-updater
     if (process.platform === 'win32') {
@@ -393,41 +393,87 @@ class AppUpdater {
       console.log('🚀 Installazione aggiornamento...')
       this.downloadState.isInstalling = true
       
-      // ✅ NUOVO: Mostra percorso dell'app prima dell'installazione
-      const { app } = require('electron')
-      const appPath = app.getPath('exe')
-      const appDir = require('path').dirname(appPath)
-      
-      // Invia notifica di installazione in corso
-      const mainWindow = require('./main').getMainWindow()
-      if (mainWindow) {
-        mainWindow.webContents.send('installing-update')
-      }
-      
-      // ✅ FIX: Crea collegamento desktop DOPO l'installazione
-      // Il collegamento verrà creato al prossimo avvio dell'app aggiornata
-      console.log('🔗 Collegamento desktop sarà creato al prossimo avvio')
-      
-      // ✅ FIX: Parametri corretti per macOS e Windows
-      if (process.platform === 'darwin') {
-        // macOS: force=false, isSilent=false per installazione corretta
+      // ✅ NUOVO: Gestione installazione personalizzata per Windows
+      if (process.platform === 'win32') {
+        this.installUpdateWindows()
+      } else {
+        // macOS: usa il metodo standard
         console.log('🍎 macOS: Installazione aggiornamento...')
         autoUpdater.quitAndInstall(false, false)
-      } else {
-        // Windows: force=true, isSilent=false per mostrare progresso e chiudere correttamente
-        console.log('🪟 Windows: Installazione aggiornamento...')
-        console.log('🔄 Chiudendo app per installazione...')
-        
-        // Chiudi l'app prima dell'installazione per evitare EPERM
-        setTimeout(() => {
-          autoUpdater.quitAndInstall(true, false)
-        }, 1000)
       }
     } else {
       console.log('⚠️ Installazione non possibile:', {
         isDownloaded: this.downloadState.isDownloaded,
         isInstalling: this.downloadState.isInstalling
       })
+    }
+  }
+
+  // ✅ NUOVO: Metodo per installazione personalizzata su Windows
+  installUpdateWindows() {
+    const fs = require('fs')
+    const path = require('path')
+    const { app } = require('electron')
+    
+    try {
+      console.log('🪟 Windows: Installazione personalizzata...')
+      
+      // Path di destinazione (cartella desktop)
+      const customInstallDir = this.customInstallDir || path.join(require('os').homedir(), 'Desktop', 'Inferno Console')
+      const targetExePath = path.join(customInstallDir, 'Inferno-Console-win.exe')
+      
+      console.log('📁 Directory installazione:', customInstallDir)
+      console.log('📁 File destinazione:', targetExePath)
+      
+      // Crea la directory se non esiste
+      if (!fs.existsSync(customInstallDir)) {
+        fs.mkdirSync(customInstallDir, { recursive: true })
+        console.log('✅ Directory creata:', customInstallDir)
+      }
+      
+      // Trova il file scaricato
+      const downloadDir = path.join(customInstallDir, 'Updates')
+      const downloadedFiles = fs.readdirSync(downloadDir).filter(file => file.endsWith('.exe'))
+      
+      if (downloadedFiles.length === 0) {
+        throw new Error('Nessun file .exe trovato nella cartella Updates')
+      }
+      
+      const sourceExePath = path.join(downloadDir, downloadedFiles[0])
+      console.log('📁 File sorgente:', sourceExePath)
+      
+      // Copia il file nella cartella principale
+      fs.copyFileSync(sourceExePath, targetExePath)
+      console.log('✅ File copiato in:', targetExePath)
+      
+      // Rimuovi il file temporaneo
+      fs.unlinkSync(sourceExePath)
+      console.log('🗑️ File temporaneo rimosso')
+      
+      // Crea il shortcut desktop
+      this.createDesktopShortcut()
+      
+      // Invia notifica di successo
+      const mainWindow = require('./main').getMainWindow()
+      if (mainWindow) {
+        mainWindow.webContents.send('update-installed', {
+          path: targetExePath,
+          message: 'Aggiornamento installato con successo!'
+        })
+      }
+      
+      console.log('✅ Installazione completata!')
+      
+    } catch (error) {
+      console.error('❌ Errore durante installazione:', error)
+      
+      // Invia notifica di errore
+      const mainWindow = require('./main').getMainWindow()
+      if (mainWindow) {
+        mainWindow.webContents.send('update-error', {
+          error: error.message
+        })
+      }
     }
   }
 
@@ -523,20 +569,56 @@ updaterCacheDirName: inferno-console-updater`
         console.log('📁 [UPDATER] Percorso collegamento:', shortcutPath)
         console.log('📁 [UPDATER] Desktop exists:', fs.existsSync(desktopPath))
         
-        // ✅ FIX: Usa sempre il percorso corrente per ora
-        // Il collegamento verrà aggiornato dopo l'installazione
-        const currentAppPath = app.getPath('exe')
-        console.log('📁 [UPDATER] Percorso app corrente:', currentAppPath)
-        console.log('📁 [UPDATER] App exists:', fs.existsSync(currentAppPath))
+        // ✅ NUOVO: Trova il file corretto da usare
+        const targetExePath = this.findTargetExePath()
+        console.log('📁 [UPDATER] File target trovato:', targetExePath)
         
-        // Crea il collegamento con il percorso corrente
-        this.createShortcutWithPath(shortcutPath, currentAppPath)
+        // Crea il collegamento con il percorso corretto
+        this.createShortcutWithPath(shortcutPath, targetExePath)
       } else {
         console.log('⚠️ [UPDATER] Collegamento desktop supportato solo su Windows')
       }
     } catch (error) {
       console.error('❌ [UPDATER] Errore nella creazione del collegamento:', error)
     }
+  }
+
+  // ✅ NUOVO: Metodo per trovare il file exe corretto
+  findTargetExePath() {
+    const path = require('path')
+    const fs = require('fs')
+    const os = require('os')
+    
+    // 1. Prima cerca nella cartella desktop personalizzata
+    const customInstallDir = this.customInstallDir || path.join(os.homedir(), 'Desktop', 'Inferno Console')
+    const desktopExePath = path.join(customInstallDir, 'Inferno-Console-win.exe')
+    
+    if (fs.existsSync(desktopExePath)) {
+      console.log('✅ File trovato in cartella desktop:', desktopExePath)
+      return desktopExePath
+    }
+    
+    // 2. Cerca nella cartella AppData (installazione standard)
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
+    const appDataExePath = path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno-Console-win.exe')
+    
+    if (fs.existsSync(appDataExePath)) {
+      console.log('✅ File trovato in AppData:', appDataExePath)
+      return appDataExePath
+    }
+    
+    // 3. Usa il percorso corrente dell'app
+    const { app } = require('electron')
+    const currentExePath = app.getPath('exe')
+    
+    if (fs.existsSync(currentExePath)) {
+      console.log('✅ File trovato in percorso corrente:', currentExePath)
+      return currentExePath
+    }
+    
+    // 4. Fallback: usa il percorso desktop anche se non esiste
+    console.log('⚠️ Nessun file trovato, uso percorso desktop come fallback')
+    return desktopExePath
   }
 
   // ✅ METODO PRINCIPALE: Crea collegamento usando percorso corretto
@@ -552,6 +634,7 @@ updaterCacheDirName: inferno-console-updater`
     console.log('🔧 [DESKTOP] Usando percorso installazione desktop:', installedExePath)
     console.log('🔧 [DESKTOP] Percorso exe corrente (ignorato):', app.getPath('exe'))
     console.log('🔧 [DESKTOP] Percorso richiesto (ignorato):', appPath)
+    console.log('🔧 [DESKTOP] File esiste:', fs.existsSync(installedExePath))
     
     // ✅ NUOVO: Verifica che il file installato esista
     if (!fs.existsSync(installedExePath)) {
