@@ -7,6 +7,7 @@ const https = require('https')
 const fs = require('fs')
 const WebRTCServer = require('./webrtc-server')
 const youtubedl = require('youtube-dl-exec')
+// const { YTDlpWrap } = require('yt-dlp-wrap') // Disabilitato per problemi di import
 
   // ✅ OPTIMIZATION: Ottimizzazioni per avvio ultra-veloce
   app.commandLine.appendSwitch('--disable-gpu-sandbox')
@@ -1462,11 +1463,51 @@ ipcMain.handle('get-webrtc-clients', async () => {
           return { success: true, url: tunnelUrl }
         })
 
-        // ✅ YOUTUBE DOWNLOADER APIs
-        ipcMain.handle('get-youtube-info', async (event, url) => {
+        // ✅ YOUTUBE DOWNLOADER APIs CON FALLBACK MULTIPLO
+        // Sistema di fallback: youtube-dl-exec -> yt-dlp -> youtube-dl
+        
+        async function getYouTubeInfoWithFallback(url) {
+          const downloaders = [
+            { name: 'yt-dlp-wrap', method: getInfoWithYtDlpWrap },
+            { name: 'youtube-dl-exec', method: getInfoWithYoutubeDlExec },
+            { name: 'yt-dlp', method: getInfoWithYtDlp },
+            { name: 'youtube-dl', method: getInfoWithYoutubeDl }
+          ]
+          
+          for (const downloader of downloaders) {
+            try {
+              console.log(`🔄 [YOUTUBE] Tentativo con ${downloader.name}...`)
+              const result = await downloader.method(url)
+              console.log(`✅ [YOUTUBE] Successo con ${downloader.name}`)
+              return { success: true, data: result, method: downloader.name }
+            } catch (error) {
+              console.warn(`⚠️ [YOUTUBE] ${downloader.name} fallito:`, error.message)
+              continue
+            }
+          }
+          
+          throw new Error('Tutti i downloader hanno fallito')
+        }
+        
+        async function getInfoWithYtDlpWrap(url) {
           try {
-            console.log(`🎵 [YOUTUBE] Recupero info per: ${url}`)
+            const ytDlpWrap = new YTDlpWrap()
+            const info = await ytDlpWrap.getVideoInfo(url)
             
+            return {
+              title: info.title || 'Titolo non disponibile',
+              duration: formatDuration(info.duration || 0),
+              thumbnail: info.thumbnail || '',
+              uploader: info.uploader || 'Canale sconosciuto',
+              view_count: formatNumber(info.view_count || 0),
+              duration_seconds: info.duration || 0
+            }
+          } catch (error) {
+            throw new Error(`yt-dlp-wrap fallito: ${error.message}`)
+          }
+        }
+        
+        async function getInfoWithYoutubeDlExec(url) {
             const info = await youtubedl(url, {
               dumpSingleJson: true,
               noWarnings: true,
@@ -1478,27 +1519,152 @@ ipcMain.handle('get-webrtc-clients', async () => {
               ]
             })
             
-            const videoInfo = {
+          return {
               title: info.title || 'Titolo non disponibile',
               duration: formatDuration(info.duration || 0),
               thumbnail: info.thumbnail || '',
               uploader: info.uploader || 'Canale sconosciuto',
               view_count: formatNumber(info.view_count || 0),
               duration_seconds: info.duration || 0
-            }
+          }
+        }
+        
+        async function getInfoWithYtDlp(url) {
+          return new Promise((resolve, reject) => {
+            const ytdlp = spawn('yt-dlp', [
+              '--dump-json',
+              '--no-warnings',
+              '--no-check-certificates',
+              '--prefer-free-formats',
+              '--add-header', 'referer:youtube.com',
+              '--add-header', 'user-agent:googlebot',
+              url
+            ], { stdio: ['pipe', 'pipe', 'pipe'] })
             
-            console.log(`✅ [YOUTUBE] Info recuperate: ${videoInfo.title}`)
-            return { success: true, data: videoInfo }
+            let stdout = ''
+            let stderr = ''
+            
+            ytdlp.stdout.on('data', (data) => {
+              stdout += data.toString()
+            })
+            
+            ytdlp.stderr.on('data', (data) => {
+              stderr += data.toString()
+            })
+            
+            ytdlp.on('close', (code) => {
+              if (code === 0) {
+                try {
+                  const info = JSON.parse(stdout)
+                  resolve({
+                    title: info.title || 'Titolo non disponibile',
+                    duration: formatDuration(info.duration || 0),
+                    thumbnail: info.thumbnail || '',
+                    uploader: info.uploader || 'Canale sconosciuto',
+                    view_count: formatNumber(info.view_count || 0),
+                    duration_seconds: info.duration || 0
+                  })
+                } catch (parseError) {
+                  reject(new Error(`Errore parsing JSON: ${parseError.message}`))
+                }
+              } else {
+                reject(new Error(`yt-dlp fallito con codice ${code}: ${stderr}`))
+              }
+            })
+            
+            ytdlp.on('error', (error) => {
+              reject(new Error(`yt-dlp non trovato: ${error.message}`))
+            })
+          })
+        }
+        
+        async function getInfoWithYoutubeDl(url) {
+          return new Promise((resolve, reject) => {
+            const youtubeDl = spawn('youtube-dl', [
+              '--dump-json',
+              '--no-warnings',
+              '--no-check-certificates',
+              '--prefer-free-formats',
+              '--add-header', 'referer:youtube.com',
+              '--add-header', 'user-agent:googlebot',
+              url
+            ], { stdio: ['pipe', 'pipe', 'pipe'] })
+            
+            let stdout = ''
+            let stderr = ''
+            
+            youtubeDl.stdout.on('data', (data) => {
+              stdout += data.toString()
+            })
+            
+            youtubeDl.stderr.on('data', (data) => {
+              stderr += data.toString()
+            })
+            
+            youtubeDl.on('close', (code) => {
+              if (code === 0) {
+                try {
+                  const info = JSON.parse(stdout)
+                  resolve({
+                    title: info.title || 'Titolo non disponibile',
+                    duration: formatDuration(info.duration || 0),
+                    thumbnail: info.thumbnail || '',
+                    uploader: info.uploader || 'Canale sconosciuto',
+                    view_count: formatNumber(info.view_count || 0),
+                    duration_seconds: info.duration || 0
+                  })
+                } catch (parseError) {
+                  reject(new Error(`Errore parsing JSON: ${parseError.message}`))
+                }
+              } else {
+                reject(new Error(`youtube-dl fallito con codice ${code}: ${stderr}`))
+              }
+            })
+            
+            youtubeDl.on('error', (error) => {
+              reject(new Error(`youtube-dl non trovato: ${error.message}`))
+            })
+          })
+        }
+        
+        ipcMain.handle('get-youtube-info', async (event, url) => {
+          try {
+            console.log(`🎵 [YOUTUBE] Recupero info per: ${url}`)
+            
+            const result = await getYouTubeInfoWithFallback(url)
+            console.log(`✅ [YOUTUBE] Info recuperate con ${result.method}: ${result.data.title}`)
+            return result
           } catch (error) {
             console.error('❌ [YOUTUBE] Errore recupero info:', error)
             return { success: false, error: error.message || 'Errore nel recupero delle informazioni video' }
           }
         })
 
-        ipcMain.handle('download-youtube-audio', async (event, { url, quality, outputPath, downloadId }) => {
-          try {
-            console.log(`🎵 [YOUTUBE] Download audio: ${url} (${quality}kbps) -> ${outputPath}`)
-            
+        async function downloadYouTubeAudioWithFallback(url, quality, outputPath, downloadId, event) {
+          const downloaders = [
+            { name: 'youtube-dl-exec', method: downloadWithYoutubeDlExec },
+            { name: 'yt-dlp', method: downloadWithYtDlp },
+            { name: 'youtube-dl', method: downloadWithYoutubeDl }
+          ]
+          
+          for (const downloader of downloaders) {
+            try {
+              console.log(`🔄 [YOUTUBE] Tentativo download con ${downloader.name}...`)
+              const result = await downloader.method(url, quality, outputPath, downloadId, event)
+              console.log(`✅ [YOUTUBE] Download completato con ${downloader.name}`)
+              return { success: true, ...result, method: downloader.name }
+            } catch (error) {
+              console.warn(`⚠️ [YOUTUBE] ${downloader.name} fallito:`, error.message)
+              continue
+            }
+          }
+          
+          throw new Error('Tutti i downloader hanno fallito')
+        }
+        
+        // downloadWithYtDlpWrap rimossa per problemi di import
+        
+        async function downloadWithYoutubeDlExec(url, quality, outputPath, downloadId, event) {
             // Crea la cartella se non esiste
             if (!fs.existsSync(outputPath)) {
               fs.mkdirSync(outputPath, { recursive: true })
@@ -1514,6 +1680,7 @@ ipcMain.handle('get-webrtc-clients', async () => {
                 noWarnings: true,
                 noCheckCertificates: true
               })
+              console.log(`🎵 [YOUTUBE] Titolo video: ${videoInfo.title}`)
             } catch (infoError) {
               console.warn('⚠️ [YOUTUBE] Errore recupero info video:', infoError.message)
             }
@@ -1532,12 +1699,11 @@ ipcMain.handle('get-webrtc-clients', async () => {
               ]
             })
             
-            // Simula progresso realistico (youtube-dl-exec non supporta callback di progresso)
+          // Simula progresso realistico
             let currentProgress = 0
             const progressInterval = setInterval(() => {
               if (downloadId) {
-                // Incrementa progresso gradualmente
-                currentProgress += Math.random() * 15 + 5 // 5-20% per volta
+              currentProgress += Math.random() * 15 + 5
                 currentProgress = Math.min(95, currentProgress)
                 
                 event.sender.send('youtube-download-progress', {
@@ -1562,14 +1728,253 @@ ipcMain.handle('get-webrtc-clients', async () => {
               })
             }
             
-            console.log(`✅ [YOUTUBE] Download completato`)
+          // Trova il file scaricato nella cartella
+          const files = fs.readdirSync(outputPath).filter(file => file.endsWith('.mp3'))
+          console.log(`🎵 [YOUTUBE] File trovati in ${outputPath}:`, files)
+          
+          let selectedFile = null
+          
+          // Se abbiamo il titolo del video, cerca il file con quel nome
+          if (videoInfo?.title) {
+            const safeTitle = videoInfo.title.replace(/[<>:"/\\|?*]/g, '_').substring(0, 100)
+            const expectedFileName = `${safeTitle}.mp3`
+            const expectedFilePath = path.join(outputPath, expectedFileName)
+            
+            console.log(`🎵 [YOUTUBE] Cercando file con nome: ${expectedFileName}`)
+            
+            if (fs.existsSync(expectedFilePath)) {
+              selectedFile = expectedFileName
+              console.log(`✅ [YOUTUBE] File trovato con nome corretto: ${expectedFileName}`)
+            } else {
+              console.log(`⚠️ [YOUTUBE] File con nome corretto non trovato, cerco il più recente...`)
+            }
+          }
+          
+          // Se non trovato per nome, cerca il più recente
+          if (!selectedFile) {
+            let latestTime = 0
+            for (const file of files) {
+              const filePath = path.join(outputPath, file)
+              const stats = fs.statSync(filePath)
+              if (stats.mtime.getTime() > latestTime) {
+                latestTime = stats.mtime.getTime()
+                selectedFile = file
+              }
+            }
+            console.log(`🎵 [YOUTUBE] File più recente trovato: ${selectedFile}`)
+          }
+          
+          const fullFilePath = selectedFile ? path.join(outputPath, selectedFile) : outputPath
+          
             return { 
-              success: true, 
-              filePath: outputPath,
-              title: videoInfo?.title || 'Unknown Title',
+            filePath: fullFilePath,
+            title: videoInfo?.title || selectedFile?.replace('.mp3', '') || 'Unknown Title',
               artist: videoInfo?.uploader || 'Unknown Artist',
               duration: videoInfo?.duration || 0
             }
+        }
+        
+        async function downloadWithYtDlp(url, quality, outputPath, downloadId, event) {
+          return new Promise((resolve, reject) => {
+            // Crea la cartella se non esiste
+            if (!fs.existsSync(outputPath)) {
+              fs.mkdirSync(outputPath, { recursive: true })
+            }
+            
+            const outputTemplate = path.join(outputPath, '%(title)s.%(ext)s')
+            
+            const ytdlp = spawn('yt-dlp', [
+              '--extract-audio',
+              '--audio-format', 'mp3',
+              '--audio-quality', quality.toString(),
+              '--output', outputTemplate,
+              '--no-warnings',
+              '--no-check-certificates',
+              '--add-header', 'referer:youtube.com',
+              '--add-header', 'user-agent:googlebot',
+              url
+            ], { stdio: ['pipe', 'pipe', 'pipe'] })
+            
+            let stdout = ''
+            let stderr = ''
+            
+            ytdlp.stdout.on('data', (data) => {
+              stdout += data.toString()
+            })
+            
+            ytdlp.stderr.on('data', (data) => {
+              stderr += data.toString()
+            })
+            
+            // Simula progresso
+            let currentProgress = 0
+            const progressInterval = setInterval(() => {
+              if (downloadId) {
+                currentProgress += Math.random() * 15 + 5
+                currentProgress = Math.min(95, currentProgress)
+                
+                event.sender.send('youtube-download-progress', {
+                  downloadId,
+                  percentage: Math.round(currentProgress),
+                  speed: 'N/A',
+                  eta: 'N/A'
+                })
+              }
+            }, 2000)
+            
+            ytdlp.on('close', (code) => {
+              clearInterval(progressInterval)
+              
+              if (code === 0) {
+                // Invia progresso finale
+                if (downloadId) {
+                  event.sender.send('youtube-download-progress', {
+                    downloadId,
+                    percentage: 100,
+                    speed: 'N/A',
+                    eta: 'N/A'
+                  })
+                }
+                
+                // Trova il file scaricato nella cartella (il più recente)
+                const files = fs.readdirSync(outputPath).filter(file => file.endsWith('.mp3'))
+                let latestFile = null
+                let latestTime = 0
+                
+                for (const file of files) {
+                  const filePath = path.join(outputPath, file)
+                  const stats = fs.statSync(filePath)
+                  if (stats.mtime.getTime() > latestTime) {
+                    latestTime = stats.mtime.getTime()
+                    latestFile = file
+                  }
+                }
+                
+                const fullFilePath = latestFile ? path.join(outputPath, latestFile) : outputPath
+                console.log(`🎵 [YOUTUBE] File più recente trovato: ${latestFile}`)
+                
+                resolve({
+                  filePath: fullFilePath,
+                  title: latestFile ? latestFile.replace('.mp3', '') : 'Downloaded with yt-dlp',
+                  artist: 'Unknown Artist',
+                  duration: 0
+                })
+              } else {
+                reject(new Error(`yt-dlp fallito con codice ${code}: ${stderr}`))
+              }
+            })
+            
+            ytdlp.on('error', (error) => {
+              clearInterval(progressInterval)
+              reject(new Error(`yt-dlp non trovato: ${error.message}`))
+            })
+          })
+        }
+        
+        async function downloadWithYoutubeDl(url, quality, outputPath, downloadId, event) {
+          return new Promise((resolve, reject) => {
+            // Crea la cartella se non esiste
+            if (!fs.existsSync(outputPath)) {
+              fs.mkdirSync(outputPath, { recursive: true })
+            }
+            
+            const outputTemplate = path.join(outputPath, '%(title)s.%(ext)s')
+            
+            const youtubeDl = spawn('youtube-dl', [
+              '--extract-audio',
+              '--audio-format', 'mp3',
+              '--audio-quality', quality.toString(),
+              '--output', outputTemplate,
+              '--no-warnings',
+              '--no-check-certificates',
+              '--add-header', 'referer:youtube.com',
+              '--add-header', 'user-agent:googlebot',
+              url
+            ], { stdio: ['pipe', 'pipe', 'pipe'] })
+            
+            let stdout = ''
+            let stderr = ''
+            
+            youtubeDl.stdout.on('data', (data) => {
+              stdout += data.toString()
+            })
+            
+            youtubeDl.stderr.on('data', (data) => {
+              stderr += data.toString()
+            })
+            
+            // Simula progresso
+            let currentProgress = 0
+            const progressInterval = setInterval(() => {
+              if (downloadId) {
+                currentProgress += Math.random() * 15 + 5
+                currentProgress = Math.min(95, currentProgress)
+                
+                event.sender.send('youtube-download-progress', {
+                  downloadId,
+                  percentage: Math.round(currentProgress),
+                  speed: 'N/A',
+                  eta: 'N/A'
+                })
+              }
+            }, 2000)
+            
+            youtubeDl.on('close', (code) => {
+              clearInterval(progressInterval)
+              
+              if (code === 0) {
+                // Invia progresso finale
+                if (downloadId) {
+                  event.sender.send('youtube-download-progress', {
+                    downloadId,
+                    percentage: 100,
+                    speed: 'N/A',
+                    eta: 'N/A'
+                  })
+                }
+                
+                // Trova il file scaricato nella cartella (il più recente)
+                const files = fs.readdirSync(outputPath).filter(file => file.endsWith('.mp3'))
+                let latestFile = null
+                let latestTime = 0
+                
+                for (const file of files) {
+                  const filePath = path.join(outputPath, file)
+                  const stats = fs.statSync(filePath)
+                  if (stats.mtime.getTime() > latestTime) {
+                    latestTime = stats.mtime.getTime()
+                    latestFile = file
+                  }
+                }
+                
+                const fullFilePath = latestFile ? path.join(outputPath, latestFile) : outputPath
+                console.log(`🎵 [YOUTUBE] File più recente trovato: ${latestFile}`)
+                
+                resolve({
+                  filePath: fullFilePath,
+                  title: latestFile ? latestFile.replace('.mp3', '') : 'Downloaded with youtube-dl',
+                  artist: 'Unknown Artist',
+                  duration: 0
+                })
+              } else {
+                reject(new Error(`youtube-dl fallito con codice ${code}: ${stderr}`))
+              }
+            })
+            
+            youtubeDl.on('error', (error) => {
+              clearInterval(progressInterval)
+              reject(new Error(`youtube-dl non trovato: ${error.message}`))
+            })
+          })
+        }
+        
+        ipcMain.handle('download-youtube-audio', async (event, { url, quality, outputPath, downloadId }) => {
+          try {
+            console.log(`🎵 [YOUTUBE] Download audio: ${url} (${quality}kbps) -> ${outputPath}`)
+            
+            const result = await downloadYouTubeAudioWithFallback(url, quality, outputPath, downloadId, event)
+            console.log(`✅ [YOUTUBE] Download completato con ${result.method}`)
+            return result
           } catch (error) {
             console.error('❌ [YOUTUBE] Errore download:', error)
             return { success: false, error: error.message || 'Errore durante il download' }
@@ -1618,30 +2023,8 @@ ipcMain.handle('get-webrtc-clients', async () => {
           }
         })
 
-        ipcMain.handle('add-to-library', async (event, { filePath, title, artist, duration }) => {
-          try {
-            console.log(`📚 [LIBRARY] Aggiunta traccia: ${title} - ${artist}`)
-            
-            // Crea la traccia per la libreria
-            const track = {
-              id: Date.now().toString(),
-              title: title || 'Unknown Title',
-              artist: artist || 'Unknown Artist',
-              duration: duration || 0,
-              filePath: filePath,
-              addedAt: new Date().toISOString(),
-              source: 'youtube'
-            }
-            
-            // Invia evento al renderer per aggiungere alla libreria
-            mainWindow.webContents.send('library-add-track', track)
-            
-            return { success: true, track }
-          } catch (error) {
-            console.error('❌ [LIBRARY] Errore aggiunta traccia:', error)
-            return { success: false, error: error.message }
-          }
-        })
+        // ✅ RIMOSSO: Handler add-to-library obsoleto
+        // Ora l'aggiunta alla libreria avviene direttamente nel frontend
 
         // Funzioni helper
         function formatDuration(seconds) {

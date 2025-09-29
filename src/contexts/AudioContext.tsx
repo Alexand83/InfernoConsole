@@ -2095,6 +2095,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       
       // Carica l'audio se c'è un URL
       if (track.url && leftAudioRef.current) {
+        console.log(`🎵 [LEFT DECK] Caricamento URL:`, track.url)
+        console.log(`🎵 [LEFT DECK] Track title:`, track.title)
         leftAudioRef.current.src = track.url
         leftAudioRef.current.load()
         
@@ -2144,6 +2146,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       
       // Carica l'audio se c'è un URL
       if (track.url && rightAudioRef.current) {
+        console.log(`🎵 [RIGHT DECK] Caricamento URL:`, track.url)
+        console.log(`🎵 [RIGHT DECK] Track title:`, track.title)
         rightAudioRef.current.src = track.url
         rightAudioRef.current.load()
         

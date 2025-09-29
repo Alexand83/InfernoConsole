@@ -98,14 +98,21 @@ const YouTubeDownloader: React.FC = () => {
     setVideoInfo(null)
 
     try {
+      console.log('🎵 [YOUTUBE] Recupero info per URL:', url)
       const response = await window.electronAPI.getYouTubeInfo(url)
+      console.log('🎵 [YOUTUBE] Risposta info:', response)
+      
       if (response.success) {
         setVideoInfo(response.data)
+        console.log('✅ [YOUTUBE] Info video recuperate con successo')
       } else {
-        setError(response.error || 'Errore nel recupero delle informazioni video')
+        const errorMsg = response.error || 'Errore nel recupero delle informazioni video'
+        console.error('❌ [YOUTUBE] Errore recupero info:', errorMsg)
+        setError(errorMsg)
       }
     } catch (err) {
-      setError('Errore di connessione')
+      console.error('❌ [YOUTUBE] Errore connessione:', err)
+      setError(`Errore di connessione: ${err instanceof Error ? err.message : 'Errore sconosciuto'}`)
     } finally {
       setIsLoading(false)
     }
@@ -134,6 +141,8 @@ const YouTubeDownloader: React.FC = () => {
     }])
 
     try {
+      console.log('🎵 [YOUTUBE] Avvio download:', { targetUrl, targetQuality, downloadPath, downloadId })
+      
       const response = await window.electronAPI.downloadYouTubeAudio({
         url: targetUrl,
         quality: targetQuality,
@@ -141,7 +150,12 @@ const YouTubeDownloader: React.FC = () => {
         downloadId
       })
 
+      console.log('🎵 [YOUTUBE] Risposta download completa:', response)
+
       if (response.success) {
+        console.log('✅ [YOUTUBE] Download completato con successo')
+        console.log('🎵 [YOUTUBE] File path ricevuto:', response.filePath)
+        console.log('🎵 [YOUTUBE] Titolo ricevuto:', response.title)
         setDownloads(prev => prev.map(download => 
           download.id === downloadId 
             ? { 
@@ -154,14 +168,55 @@ const YouTubeDownloader: React.FC = () => {
             : download
         ))
         
-        // Aggiungi alla libreria
-        if (response.filePath && window.electronAPI?.addToLibrary) {
-          await window.electronAPI.addToLibrary({
-            filePath: response.filePath,
-            title: response.title,
-            artist: response.artist || 'Unknown',
-            duration: response.duration || 0
-          })
+        // ✅ Aggiungi alla libreria locale
+        if (response.filePath) {
+          try {
+            console.log('🎵 [YOUTUBE] Aggiunta traccia alla libreria:', {
+              title: response.title,
+              artist: response.artist,
+              duration: response.duration,
+              filePath: response.filePath,
+              fileUrl: `file://${response.filePath}`
+            })
+            
+            // Importa il database locale
+            const { localDatabase } = await import('../../database/LocalDatabase')
+            
+            // Crea la traccia per il database
+            const trackId = await localDatabase.addTrack({
+              title: response.title || 'Unknown Title',
+              artist: response.artist || 'Unknown Artist',
+              duration: response.duration || 0,
+              url: `file://${response.filePath}`, // Converti in file:// URL
+              fileUrl: `file://${response.filePath}`,
+              playCount: 0,
+              rating: 0
+            })
+            
+            console.log('✅ [YOUTUBE] Traccia aggiunta alla libreria con ID:', trackId)
+            
+            // Notifica l'aggiornamento della libreria
+            window.dispatchEvent(new CustomEvent('djconsole:db-updated'))
+            window.dispatchEvent(new CustomEvent('djconsole:library-updated'))
+            window.dispatchEvent(new CustomEvent('djconsole:force-library-reload'))
+            
+            // Notifica successo
+            window.dispatchEvent(new CustomEvent('djconsole:notification', {
+              detail: { 
+                type: 'success', 
+                message: `"${response.title}" aggiunta alla libreria!` 
+              }
+            }))
+            
+          } catch (error) {
+            console.error('❌ [YOUTUBE] Errore aggiunta alla libreria:', error)
+            window.dispatchEvent(new CustomEvent('djconsole:notification', {
+              detail: { 
+                type: 'error', 
+                message: `Errore aggiunta alla libreria: ${error.message}` 
+              }
+            }))
+          }
         }
         
         // Notifica il file manager
@@ -169,23 +224,27 @@ const YouTubeDownloader: React.FC = () => {
           window.electronAPI.invoke('refresh-file-manager', response.filePath)
         }
       } else {
+        const errorMsg = response.error || 'Errore durante il download'
+        console.error('❌ [YOUTUBE] Errore download:', errorMsg)
         setDownloads(prev => prev.map(download => 
           download.id === downloadId 
             ? { 
                 ...download, 
                 status: 'error', 
-                error: response.error || 'Errore durante il download'
+                error: errorMsg
               }
             : download
         ))
       }
     } catch (err) {
+      const errorMsg = `Errore di connessione durante il download: ${err instanceof Error ? err.message : 'Errore sconosciuto'}`
+      console.error('❌ [YOUTUBE] Errore connessione download:', err)
       setDownloads(prev => prev.map(download => 
         download.id === downloadId 
           ? { 
               ...download, 
               status: 'error', 
-              error: 'Errore di connessione durante il download'
+              error: errorMsg
             }
           : download
       ))
@@ -228,14 +287,55 @@ const YouTubeDownloader: React.FC = () => {
             : download
         ))
         
-        // Aggiungi alla libreria
-        if (response.filePath && window.electronAPI?.addToLibrary) {
-          await window.electronAPI.addToLibrary({
-            filePath: response.filePath,
-            title: videoInfo.title,
-            artist: videoInfo.uploader,
-            duration: videoInfo.duration_seconds
-          })
+        // ✅ Aggiungi alla libreria locale
+        if (response.filePath) {
+          try {
+            console.log('🎵 [YOUTUBE] Aggiunta traccia alla libreria:', {
+              title: videoInfo.title,
+              artist: videoInfo.uploader,
+              duration: videoInfo.duration_seconds,
+              filePath: response.filePath,
+              fileUrl: `file://${response.filePath}`
+            })
+            
+            // Importa il database locale
+            const { localDatabase } = await import('../../database/LocalDatabase')
+            
+            // Crea la traccia per il database
+            const trackId = await localDatabase.addTrack({
+              title: videoInfo.title || 'Unknown Title',
+              artist: videoInfo.uploader || 'Unknown Artist',
+              duration: videoInfo.duration_seconds || 0,
+              url: `file://${response.filePath}`, // Converti in file:// URL
+              fileUrl: `file://${response.filePath}`,
+              playCount: 0,
+              rating: 0
+            })
+            
+            console.log('✅ [YOUTUBE] Traccia aggiunta alla libreria con ID:', trackId)
+            
+            // Notifica l'aggiornamento della libreria
+            window.dispatchEvent(new CustomEvent('djconsole:db-updated'))
+            window.dispatchEvent(new CustomEvent('djconsole:library-updated'))
+            window.dispatchEvent(new CustomEvent('djconsole:force-library-reload'))
+            
+            // Notifica successo
+            window.dispatchEvent(new CustomEvent('djconsole:notification', {
+              detail: { 
+                type: 'success', 
+                message: `"${videoInfo.title}" aggiunta alla libreria!` 
+              }
+            }))
+            
+          } catch (error) {
+            console.error('❌ [YOUTUBE] Errore aggiunta alla libreria:', error)
+            window.dispatchEvent(new CustomEvent('djconsole:notification', {
+              detail: { 
+                type: 'error', 
+                message: `Errore aggiunta alla libreria: ${error.message}` 
+              }
+            }))
+          }
         }
         
         // Notifica il file manager
@@ -343,6 +443,26 @@ const YouTubeDownloader: React.FC = () => {
               disabled={isLoading || isDownloading}
             />
             <button
+              onClick={async () => {
+                try {
+                  const clipboardText = await navigator.clipboard.readText()
+                  if (clipboardText && isValidYouTubeUrl(clipboardText)) {
+                    setUrl(clipboardText)
+                    setError('')
+                  } else {
+                    setError('Nessun URL YouTube valido negli appunti')
+                  }
+                } catch (err) {
+                  setError('Impossibile accedere agli appunti. Incolla manualmente l\'URL.')
+                }
+              }}
+              disabled={isLoading || isDownloading}
+              className="px-4 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+              title="Incolla URL dagli appunti"
+            >
+              📋 Incolla
+            </button>
+            <button
               onClick={getVideoInfo}
               disabled={!url || isLoading || isDownloading}
               className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
@@ -409,6 +529,26 @@ const YouTubeDownloader: React.FC = () => {
                     disabled={isDownloading}
                   />
                 </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      const clipboardText = await navigator.clipboard.readText()
+                      if (clipboardText && isValidYouTubeUrl(clipboardText)) {
+                        updateUrl(urlData.id, 'url', clipboardText)
+                        setError('')
+                      } else {
+                        setError('Nessun URL YouTube valido negli appunti')
+                      }
+                    } catch (err) {
+                      setError('Impossibile accedere agli appunti. Incolla manualmente l\'URL.')
+                    }
+                  }}
+                  disabled={isDownloading}
+                  className="px-3 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                  title="Incolla URL dagli appunti"
+                >
+                  📋
+                </button>
                 <select
                   value={urlData.quality}
                   onChange={(e) => updateUrl(urlData.id, 'quality', e.target.value)}

@@ -83,3 +83,5 @@ Per testare la funzionalità:
 4. Dopo un aggiornamento, verifica che gli shortcut vengano aggiornati automaticamente
 
 
+
+

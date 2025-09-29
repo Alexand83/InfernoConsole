@@ -1091,6 +1091,7 @@ const DJRemotoServerPage: React.FC = () => {
   // ✅ NEW: PTT Live Audio Management Functions
   const pttLiveAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
   const pttLiveAudioChunksRef = useRef<Map<string, { chunks: Uint8Array[], totalChunks: number, totalSize: number, djName: string }>>(new Map())
+  const pttLiveProcessingRef = useRef<Set<string>>(new Set()) // Coda per evitare sovrapposizioni
 
   const handlePTTLiveAudioFromClient = (clientId: string, djName: string, audioData: number[], audioSize: number) => {
     try {
@@ -1148,6 +1149,12 @@ const DJRemotoServerPage: React.FC = () => {
     try {
       const { audioId, chunkIndex, totalChunks, chunkData, chunkSize, totalSize } = command
       
+      // ✅ NEW: Controlla se questo audio è già in elaborazione
+      if (pttLiveProcessingRef.current.has(audioId)) {
+        console.log(`🎤 [PTT Live Audio Chunk] Audio ${audioId} già in elaborazione - ignoro chunk`)
+        return
+      }
+      
       // Inizializza la struttura per questo audio se non esiste
       if (!pttLiveAudioChunksRef.current.has(audioId)) {
         pttLiveAudioChunksRef.current.set(audioId, {
@@ -1170,6 +1177,9 @@ const DJRemotoServerPage: React.FC = () => {
       if (receivedChunks === totalChunks) {
         console.log(`🎤 [PTT Live Audio Chunk] Tutti i chunk ricevuti per audio ${audioId} - ricostruzione audio`)
         
+        // ✅ NEW: Aggiungi alla coda elaborazione
+        pttLiveProcessingRef.current.add(audioId)
+        
         // Ricostruisci l'audio completo
         const completeAudioData = new Uint8Array(totalSize)
         let offset = 0
@@ -1185,12 +1195,18 @@ const DJRemotoServerPage: React.FC = () => {
         // Elabora l'audio ricostruito
         processReconstructedAudio(clientId, djName, completeAudioData, totalSize)
         
-        // Pulisci il buffer
+        // Pulisci il buffer e rimuovi dalla coda
         pttLiveAudioChunksRef.current.delete(audioId)
+        pttLiveProcessingRef.current.delete(audioId)
       }
       
     } catch (error) {
       console.error(`❌ [PTT Live Audio Chunk] Errore elaborazione chunk da ${djName}:`, error)
+      // ✅ NEW: Rimuovi dalla coda in caso di errore
+      const { audioId } = command
+      if (audioId) {
+        pttLiveProcessingRef.current.delete(audioId)
+      }
     }
   }
 

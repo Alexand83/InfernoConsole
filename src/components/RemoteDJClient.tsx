@@ -322,6 +322,10 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
   const dataChannelRef = useRef<RTCDataChannel | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const hostAudioElementRef = useRef<HTMLAudioElement | null>(null)
+  // ✅ NEW: PTT Live recording (record-then-send via DataChannel)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordedChunksRef = useRef<BlobPart[]>([])
+  const pttLiveQueueRef = useRef<boolean>(false) // Coda per evitare sovrapposizioni
 
   // ✅ RIMOSSO: rtcConfig non più utilizzato (sostituito da optimizedRtcConfig)
 
@@ -1426,6 +1430,12 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
 
   // ✅ NEW: PTT Live Functions
   const handlePTTLivePress = () => {
+    // ✅ NEW: Controlla se c'è già una registrazione in corso
+    if (pttLiveQueueRef.current) {
+      console.log('📡 [PTT Live] Registrazione già in corso - ignoro pressione')
+      return
+    }
+    
     setIsPTTLiveActive(true)
     console.log('📡 [PTT Live] Attivato - Streaming Live + Ducking')
     // Attiva il microfono per streaming live
@@ -1435,6 +1445,8 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
         console.log(`📡 [PTT Live] Track ${track.id} abilitato`)
       })
     }
+    // ✅ NEW: Avvia registrazione locale da inviare in chunk all'host
+    startPTTLiveAudioRecording()
     // ✅ NEW: Invia comando PTT Live all'host via DataChannel
     sendPTTLiveCommandToHost(true)
   }
@@ -1453,6 +1465,8 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
         }
       })
     }
+    // ✅ NEW: Ferma registrazione e invia audio in chunk
+    stopPTTLiveAudioRecording()
     // ✅ NEW: Invia comando PTT Live all'host via DataChannel
     sendPTTLiveCommandToHost(false)
   }
@@ -1477,6 +1491,110 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
     } else {
       console.warn(`📡 [DataChannel] DataChannel non disponibile per inviare comando PTT Live`)
     }
+  }
+
+  // ===== PTT Live: Record then send in chunks over DataChannel =====
+  const startPTTLiveAudioRecording = () => {
+    try {
+      if (!localStreamRef.current) {
+        console.warn('📡 [PTT Live] Nessuno stream microfono per registrazione')
+        return
+      }
+      
+      // ✅ NEW: Imposta flag coda per evitare sovrapposizioni
+      pttLiveQueueRef.current = true
+      console.log('📡 [PTT Live] Flag coda impostato - registrazione in corso')
+      
+      recordedChunksRef.current = []
+      const mimeType = 'audio/webm'
+      const rec = new MediaRecorder(localStreamRef.current, { mimeType })
+      mediaRecorderRef.current = rec
+      rec.ondataavailable = (e: BlobEvent) => {
+        if (e.data && e.data.size > 0) {
+          recordedChunksRef.current.push(e.data)
+        }
+      }
+      rec.onerror = (e) => {
+        console.error('📡 [PTT Live] MediaRecorder error:', e)
+        // ✅ NEW: Reset flag coda in caso di errore
+        pttLiveQueueRef.current = false
+      }
+      rec.start()
+      console.log('📡 [PTT Live] Registrazione avviata (MediaRecorder)')
+    } catch (error) {
+      console.error('📡 [PTT Live] Errore avvio registrazione:', error)
+      // ✅ NEW: Reset flag coda in caso di errore
+      pttLiveQueueRef.current = false
+    }
+  }
+
+  const stopPTTLiveAudioRecording = async () => {
+    try {
+      const rec = mediaRecorderRef.current
+      if (!rec) return
+      await new Promise<void>((resolve) => {
+        rec.onstop = () => resolve()
+        try { rec.stop() } catch { resolve() }
+      })
+      mediaRecorderRef.current = null
+
+      const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' })
+      recordedChunksRef.current = []
+      const arrayBuffer = await blob.arrayBuffer()
+      const audioId = `ptt_${Date.now()}_${Math.random().toString(36).slice(2)}`
+      console.log(`📡 [PTT Live Recording] Audio pronto da inviare: ${arrayBuffer.byteLength} bytes, id=${audioId}`)
+      
+      // ✅ NEW: Invia audio in chunk e poi reset flag coda
+      await sendAudioInChunks(new Uint8Array(arrayBuffer), audioId)
+      
+      // ✅ NEW: Reset flag coda dopo invio completato
+      pttLiveQueueRef.current = false
+      console.log('📡 [PTT Live] Flag coda resettato - registrazione completata')
+    } catch (error) {
+      console.error('📡 [PTT Live] Errore stop registrazione/invio:', error)
+      // ✅ NEW: Reset flag coda anche in caso di errore
+      pttLiveQueueRef.current = false
+    }
+  }
+
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+  const sendAudioInChunks = async (data: Uint8Array, audioId: string) => {
+    const channel = dataChannelRef.current
+    if (!channel || channel.readyState !== 'open') {
+      console.warn('📡 [PTT Live] DataChannel non disponibile per invio chunk')
+      return
+    }
+    const chunkSize = 8 * 1024 // 8KB
+    const totalChunks = Math.ceil(data.length / chunkSize)
+    const djNameSafe = djName || 'RemoteDJ'
+    console.log(`📡 [PTT Live] Invio in chunk: ${totalChunks} pezzi da ${chunkSize} bytes (tot=${data.length})`)
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * chunkSize
+      const end = Math.min(start + chunkSize, data.length)
+      const chunk = data.slice(start, end)
+      const payload = {
+        type: 'pttLiveAudioChunk',
+        audioId,
+        chunkIndex: i,
+        totalChunks: totalChunks,
+        chunkSize: chunk.length,
+        totalSize: data.length,
+        djName: djNameSafe,
+        chunkData: Array.from(chunk) // serialize as array of numbers
+      }
+      try {
+        channel.send(JSON.stringify(payload))
+      } catch (err) {
+        console.error('📡 [PTT Live] Errore invio chunk:', err)
+        // Riprova breve
+        await sleep(20)
+        try { channel.send(JSON.stringify(payload)) } catch {}
+      }
+      // Piccola pausa per non saturare il DataChannel
+      await sleep(10)
+    }
+    console.log('📡 [PTT Live] Invio chunk completato')
   }
 
   // ✅ REMOVED: Handle ducking command from host

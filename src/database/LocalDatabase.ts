@@ -363,6 +363,12 @@ class LocalDatabase {
       addedAt: new Date()
     }
 
+    console.log(`🎵 [DATABASE] Aggiunta traccia:`, {
+      id,
+      title: newTrack.title,
+      url: newTrack.url,
+      fileUrl: newTrack.fileUrl
+    })
     try { (window as any).log?.info?.(`LocalDatabase.addTrack: ${id}`) } catch {}
     this.tracks.set(id, newTrack)
     try {
