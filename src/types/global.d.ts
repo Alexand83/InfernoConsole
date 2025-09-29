@@ -24,7 +24,7 @@ declare global {
       removeFFmpegListeners: () => void
       on: (event: string, callback: (event: any, data: any) => void) => void
       removeListener: (event: string, callback: (event: any, data: any) => void) => void
-      getAppPath: () => Promise<{ success: boolean; exePath?: string; appPath?: string; appDir?: string; platform?: string; error?: string }>
+      // getAppPath: RIMOSSO per versione portabile
     }
     
     // Desktop Stream API

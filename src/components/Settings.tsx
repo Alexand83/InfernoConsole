@@ -29,8 +29,7 @@ const Settings = () => {
   const [isMicTestActive, setIsMicTestActive] = useState(false)
   const [micTestLevel, setMicTestLevel] = useState(0)
   const [isListeningForKey, setIsListeningForKey] = useState(false)
-  const [appPath, setAppPath] = useState<string>('')
-  const [appPathInfo, setAppPathInfo] = useState<any>(null)
+  // RIMOSSO: Path app per versione portabile
   
   // Configurazione aggiornamenti
   const updateUrl = updateConfig.updateUrl
@@ -240,24 +239,7 @@ const Settings = () => {
     loadVersionInfo()
   }, [])
 
-  // Carica path dell'app
-  useEffect(() => {
-    const loadAppPath = async () => {
-      try {
-        if (window.electronAPI?.getAppPath) {
-          const result = await window.electronAPI.getAppPath()
-          if (result.success) {
-            setAppPath(result.exePath)
-            setAppPathInfo(result)
-          }
-        }
-      } catch (error) {
-        console.error('Errore nel caricamento path app:', error)
-      }
-    }
-    
-    loadAppPath()
-  }, [])
+  // RIMOSSO: Caricamento path app per versione portabile
 
   // Listener per il progresso del download
   useEffect(() => {
@@ -1548,30 +1530,7 @@ const Settings = () => {
                   <div>{t('settings.author')}: Alessandro(NeverAgain)</div>
                 </div>
                 
-                {/* Path dell'applicazione */}
-                <div className="mt-4 p-3 bg-dj-secondary/20 rounded-lg border border-dj-accent/10">
-                  <h3 className="text-sm font-semibold text-dj-light mb-2 flex items-center">
-                    <Monitor className="w-4 h-4 mr-2" />
-                    Percorso Applicazione
-                  </h3>
-                  <div className="text-xs text-dj-light/80 font-mono bg-dj-dark/50 p-2 rounded border break-all">
-                    {appPath || 'Caricamento...'}
-                  </div>
-                  <div className="text-xs text-dj-light/60 mt-1">
-                    {appPathInfo?.isDev ? (
-                      <>
-                        <span className="text-yellow-400">🔧 Modalità Sviluppo:</span> Percorso del progetto di sviluppo
-                        {appPathInfo.electronPath && (
-                          <div className="mt-1 text-dj-light/50">
-                            Electron: {appPathInfo.electronPath}
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      'Questo è il percorso del file eseguibile di Inferno Console'
-                    )}
-                  </div>
-                </div>
+                {/* Path dell'applicazione - RIMOSSO per app portabile */}
                 
                 {/* Pulsante per controllare aggiornamenti */}
                 <div className="mt-4 pt-4 border-t border-dj-accent/20">

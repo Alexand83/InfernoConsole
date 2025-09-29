@@ -1,107 +1,74 @@
-# 🔗 Sistema Shortcut Portatile - Solo Post-Update Automatico
+# Sistema Shortcut per App Portabili
 
-## 📋 Riepilogo Modifiche
+## 🎯 Problema Risolto
 
-### ✅ **Implementato**
-- **Sistema automatico post-update**: Shortcut creato automaticamente solo dopo ogni aggiornamento
-- **Eventi intercettati**: `update-downloaded` e `update-installed`
-- **Libreria**: `windows-shortcuts` (dev dependency)
-- **Percorso**: Desktop dell'utente (`%USERPROFILE%\\Desktop\\Inferno Console.lnk`)
+Le app Electron portabili (creates con `electron-builder --win portable`) si comportano in modo diverso dalle app installate:
 
-### ❌ **Rimosso**
-- **Creazione all'avvio**: Nessun shortcut creato automaticamente all'avvio
-- **Creazione manuale**: Rimosso handler IPC `recreate-shortcut`
-- **Metodi updater**: Rimossi `createDesktopShortcut()`, `findTargetExePath()`, `createShortcutWithPath()`, `createFallbackShortcut()`
-- **Dipendenze**: `windows-shortcuts` spostato da production a dev dependency
+1. **App Installata**: L'exe è in `C:\Users\...\AppData\Local\Programs\Inferno Console\Inferno Console.exe`
+2. **App Portabile**: L'exe si estrae temporaneamente in `C:\Users\...\AppData\Local\Temp\...\Inferno Console.exe`
 
-## 🔧 **Come Funziona**
+## 🔧 Soluzione Implementata
 
-### 1. **Avvio App (Creazione Condizionale)**
+### 1. **Rimozione Path Info**
+- ❌ Rimosso il display del percorso dell'app nelle impostazioni
+- ❌ Rimosso l'API `getAppPath` 
+- ✅ Le app portabili non mostrano percorsi interni
+
+### 2. **Shortcut Intelligente**
+Il sistema ora crea shortcut che puntano al **file portabile originale**, non a quello estratto:
+
 ```javascript
-// Controlla se lo shortcut esiste già
-if (!fs.existsSync(desktopPath)) {
-  // Crea shortcut solo se non esiste (per versioni vecchie che si aggiornano)
-  shortcut.create(desktopPath, { ... })
-}
-```
+// ✅ CORRETTO: Punto al file portabile originale
+const exePath = process.execPath // File portabile originale
+const portableDir = path.dirname(exePath) // Cartella del file portabile
 
-### 2. **Update Downloaded**
-```javascript
-autoUpdater.on('update-downloaded', (info) => {
-  // Crea shortcut automaticamente con percorso corretto
-  const exePath = process.execPath // Percorso reale del nuovo exe
-  const desktopPath = path.join(app.getPath('desktop'), 'Inferno Console.lnk')
-  
-  shortcut.create(desktopPath, {
-    target: exePath,
-    desc: 'Inferno Console - DJ Software',
-    icon: exePath,
-    workingDir: path.dirname(exePath)
-  })
+shortcut.create(desktopPath, {
+  target: exePath,           // File portabile originale
+  desc: 'Inferno Console - DJ Software',
+  icon: exePath,             // Icona dal file portabile
+  workingDir: portableDir    // Cartella del file portabile
 })
 ```
 
-### 3. **Update Installed**
-```javascript
-autoUpdater.on('update-installed', (info) => {
-  // Ricrea shortcut anche dopo il riavvio
-  // Stessa logica di sopra
-})
-```
+### 3. **Creazione Automatica**
+Lo shortcut viene creato automaticamente in 3 momenti:
 
-## 🎯 **Vantaggi**
+1. **All'avvio** (solo se non esiste)
+2. **Dopo download update** (`update-downloaded`)
+3. **Dopo installazione update** (`update-installed`)
 
-### ✅ **Portabile**
-- **Creazione condizionale**: Solo se non esiste già
-- **Percorso corretto**: Punta sempre all'exe aggiornato
-- **Automatico**: Nessun intervento manuale richiesto
+## 🎵 Vantaggi
 
-### ✅ **Pulito**
-- **Creazione intelligente**: Solo quando necessario
-- **Nessun metodo manuale**: Codice più semplice
-- **Dipendenze minime**: Solo quando necessario
+- ✅ **Shortcut funzionante**: Punta sempre al file portabile originale
+- ✅ **Aggiornamento automatico**: Si ricrea ad ogni update
+- ✅ **Compatibilità**: Funziona con versioni vecchie che si aggiornano
+- ✅ **Pulizia UI**: Nessun percorso interno mostrato all'utente
 
-### ✅ **Affidabile**
-- **Sempre aggiornato**: Shortcut punta alla versione corretta
-- **Gestione errori**: Try/catch per robustezza
-- **Notifiche**: Feedback all'utente via IPC
+## 🔍 Debug
 
-## 📁 **File Modificati**
+Per verificare che funzioni:
 
-### `electron/main.js`
-- ✅ Aggiunto listener `update-downloaded`
-- ✅ Aggiunto listener `update-installed`
-- ❌ Rimosso `updater.createDesktopShortcut()` all'avvio
-- ❌ Rimosso handler IPC `recreate-shortcut`
+1. **Controlla i log**:
+   ```
+   🔗 [SHORTCUT] Target (portatile): C:\path\to\Inferno Console.exe
+   ✅ [SHORTCUT] Shortcut portabile creato all'avvio!
+   ```
 
-### `electron/updater.js`
-- ❌ Rimosso `createDesktopShortcut()`
-- ❌ Rimosso `findTargetExePath()`
-- ❌ Rimosso `createShortcutWithPath()`
-- ❌ Rimosso `createFallbackShortcut()`
-- ❌ Rimosso chiamate a creazione shortcut
+2. **Verifica lo shortcut**:
+   - Proprietà → Destinazione deve puntare al file `.exe` portabile
+   - Proprietà → Cartella iniziale deve essere la cartella del file portabile
 
-### `package.json`
-- ✅ `windows-shortcuts` spostato a dev dependency
-- ✅ Import dinamico per ridurre bundle size
+## 📁 File Modificati
 
-## 🚀 **Risultato Finale**
+- `electron/main.js`: Sistema shortcut portabile
+- `src/components/Settings.tsx`: Rimosso display path
+- `electron/preload.js`: Rimosso API getAppPath
+- `src/types/global.d.ts`: Rimosso tipo getAppPath
 
-### **Sistema Completamente Portatile**
-1. **App si avvia** → Controlla se shortcut esiste, se no lo crea
-2. **Update disponibile** → Download automatico
-3. **Update scaricato** → Shortcut creato/aggiornato automaticamente
-4. **App riavviata** → Shortcut punta alla nuova versione
-5. **Ciclo completo** → Sempre aggiornato e corretto
+## 🚀 Risultato
 
-### **Zero Intervento Manuale**
-- ❌ Nessun bottone "Crea Shortcut"
-- ✅ Creazione condizionale all'avvio (solo se necessario)
-- ❌ Nessun metodo manuale
-- ✅ Automatico post-update + condizionale all'avvio
-
-## 🎵 **Perfetto per DJ Console!**
-
-Il sistema è ora **completamente portatile** e **automatico**. Lo shortcut viene creato solo quando necessario (dopo gli update) e punta sempre alla versione corretta dell'applicazione.
-
-**Nessun intervento manuale richiesto!** 🎯✅
+L'app portabile ora crea shortcut funzionanti che:
+- Puntano al file portabile originale
+- Si aggiornano automaticamente
+- Non mostrano percorsi interni all'utente
+- Funzionano anche per aggiornamenti da versioni vecchie

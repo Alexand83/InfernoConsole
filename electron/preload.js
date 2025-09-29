@@ -39,8 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openFolder: (path) => ipcRenderer.invoke('open-folder', path),
   refreshFileManager: (path) => ipcRenderer.invoke('refresh-file-manager', path),
   addToLibrary: (trackData) => ipcRenderer.invoke('add-to-library', trackData),
-  // ===== APP INFO API =====
-  getAppPath: () => ipcRenderer.invoke('get-app-path'),
+  // ===== APP INFO API - RIMOSSO per versione portabile =====
   // ===== WEBRTC SERVER API =====
   webrtcServerAPI: {
     startServer: (options) => ipcRenderer.invoke('start-webrtc-server', options),

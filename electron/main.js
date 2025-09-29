@@ -233,24 +233,29 @@ app.whenReady().then(() => {
       // ✅ NUOVO: Creazione condizionale shortcut all'avvio (solo se non esiste)
       if (process.platform === 'win32') {
         try {
+          // ✅ FIX: Per app portabili, usa il percorso del file portabile originale
           const exePath = process.execPath
           const desktopPath = path.join(app.getPath('desktop'), 'Inferno Console.lnk')
           
           // Controlla se lo shortcut esiste già
           if (!fs.existsSync(desktopPath)) {
             console.log('🔗 [SHORTCUT] Shortcut non trovato, creazione all\'avvio...')
+            console.log('🔗 [SHORTCUT] Target (portatile):', exePath)
             
             // Importa windows-shortcuts dinamicamente
             const shortcut = require('windows-shortcuts')
+            
+            // ✅ FIX: Per app portabili, il working directory deve essere la cartella del file portabile
+            const portableDir = path.dirname(exePath)
             
             shortcut.create(desktopPath, {
               target: exePath,
               desc: 'Inferno Console - DJ Software',
               icon: exePath,
-              workingDir: path.dirname(exePath)
+              workingDir: portableDir
             })
             
-            console.log('✅ [SHORTCUT] Shortcut creato all\'avvio!')
+            console.log('✅ [SHORTCUT] Shortcut portabile creato all\'avvio!')
           } else {
             console.log('🔗 [SHORTCUT] Shortcut già esistente, nessuna creazione necessaria')
           }
@@ -268,31 +273,36 @@ app.whenReady().then(() => {
         // Crea shortcut automaticamente dopo l'update
         if (process.platform === 'win32') {
           try {
-            const exePath = process.execPath // Percorso reale del nuovo exe
+            // ✅ FIX: Per app portabili, usa il percorso del file portabile originale
+            // Non il percorso estratto in temp
+            const exePath = process.execPath
             const desktopPath = path.join(app.getPath('desktop'), 'Inferno Console.lnk')
             
             console.log('🔗 [SHORTCUT] Creazione shortcut automatico post-update...')
-            console.log('🔗 [SHORTCUT] Target:', exePath)
+            console.log('🔗 [SHORTCUT] Target (portatile):', exePath)
             console.log('🔗 [SHORTCUT] Desktop:', desktopPath)
             
             // Importa windows-shortcuts dinamicamente
             const shortcut = require('windows-shortcuts')
+            
+            // ✅ FIX: Per app portabili, il working directory deve essere la cartella del file portabile
+            const portableDir = path.dirname(exePath)
             
             // Crea shortcut con windows-shortcuts
             shortcut.create(desktopPath, {
               target: exePath,
               desc: 'Inferno Console - DJ Software',
               icon: exePath,
-              workingDir: path.dirname(exePath)
+              workingDir: portableDir
             })
             
-            console.log('✅ [SHORTCUT] Shortcut ricreato automaticamente!')
+            console.log('✅ [SHORTCUT] Shortcut portabile ricreato automaticamente!')
             
             // Invia notifica al renderer
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('update-shortcut-created', {
                 success: true,
-                message: 'Shortcut aggiornato automaticamente!'
+                message: 'Shortcut portabile aggiornato automaticamente!'
               })
             }
           } catch (shortcutError) {
@@ -308,22 +318,27 @@ app.whenReady().then(() => {
         // Ricrea shortcut anche dopo l'installazione
         if (process.platform === 'win32') {
           try {
+            // ✅ FIX: Per app portabili, usa il percorso del file portabile originale
             const exePath = process.execPath
             const desktopPath = path.join(app.getPath('desktop'), 'Inferno Console.lnk')
             
             console.log('🔗 [SHORTCUT] Ricreazione shortcut post-installazione...')
+            console.log('🔗 [SHORTCUT] Target (portatile):', exePath)
             
             // Importa windows-shortcuts dinamicamente
             const shortcut = require('windows-shortcuts')
+            
+            // ✅ FIX: Per app portabili, il working directory deve essere la cartella del file portabile
+            const portableDir = path.dirname(exePath)
             
             shortcut.create(desktopPath, {
               target: exePath,
               desc: 'Inferno Console - DJ Software',
               icon: exePath,
-              workingDir: path.dirname(exePath)
+              workingDir: portableDir
             })
             
-            console.log('✅ [SHORTCUT] Shortcut aggiornato post-installazione!')
+            console.log('✅ [SHORTCUT] Shortcut portabile aggiornato post-installazione!')
           } catch (shortcutError) {
             console.error('❌ [SHORTCUT] Errore ricreazione shortcut post-installazione:', shortcutError)
           }
@@ -1211,47 +1226,7 @@ ipcMain.handle('check-github-files', async () => {
   }
 })
 
-// ✅ NUOVO: Handler per ottenere il path dell'exe
-ipcMain.handle('get-app-path', async () => {
-  try {
-    const exePath = process.execPath
-    const appPath = app.getPath('exe')
-    const appDir = path.dirname(exePath)
-    
-    // ✅ FIX: Distingui tra versione dev e produzione
-    const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_IS_DEV === '1'
-    
-    let actualAppPath = appPath
-    let pathType = 'production'
-    
-    if (isDev) {
-      // In dev, mostra il percorso del progetto, non di electron.exe
-      actualAppPath = process.cwd() // C:\djconsole
-      pathType = 'development'
-    } else {
-      // In produzione, usa il percorso reale dell'app
-      actualAppPath = appPath
-      pathType = 'production'
-    }
-    
-    return {
-      success: true,
-      exePath: actualAppPath,
-      appPath: actualAppPath,
-      appDir: path.dirname(actualAppPath),
-      platform: process.platform,
-      isDev: isDev,
-      pathType: pathType,
-      electronPath: exePath // Percorso di electron.exe (solo per debug)
-    }
-  } catch (error) {
-    console.error('❌ [APP-PATH] Errore ottenimento path app:', error)
-    return {
-      success: false,
-      error: error.message
-    }
-  }
-})
+// ✅ RIMOSSO: Handler get-app-path per versione portabile
 
 // ✅ RIMOSSO: Handler per ricreazione manuale shortcut - solo automatico post-update
 
