@@ -1211,6 +1211,48 @@ ipcMain.handle('check-github-files', async () => {
   }
 })
 
+// ✅ NUOVO: Handler per ottenere il path dell'exe
+ipcMain.handle('get-app-path', async () => {
+  try {
+    const exePath = process.execPath
+    const appPath = app.getPath('exe')
+    const appDir = path.dirname(exePath)
+    
+    // ✅ FIX: Distingui tra versione dev e produzione
+    const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_IS_DEV === '1'
+    
+    let actualAppPath = appPath
+    let pathType = 'production'
+    
+    if (isDev) {
+      // In dev, mostra il percorso del progetto, non di electron.exe
+      actualAppPath = process.cwd() // C:\djconsole
+      pathType = 'development'
+    } else {
+      // In produzione, usa il percorso reale dell'app
+      actualAppPath = appPath
+      pathType = 'production'
+    }
+    
+    return {
+      success: true,
+      exePath: actualAppPath,
+      appPath: actualAppPath,
+      appDir: path.dirname(actualAppPath),
+      platform: process.platform,
+      isDev: isDev,
+      pathType: pathType,
+      electronPath: exePath // Percorso di electron.exe (solo per debug)
+    }
+  } catch (error) {
+    console.error('❌ [APP-PATH] Errore ottenimento path app:', error)
+    return {
+      success: false,
+      error: error.message
+    }
+  }
+})
+
 // ✅ RIMOSSO: Handler per ricreazione manuale shortcut - solo automatico post-update
 
 // ✅ NUOVO: Listener per navigazione alle impostazioni
