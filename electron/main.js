@@ -230,12 +230,79 @@ app.whenReady().then(() => {
     try {
       const updater = new AppUpdater()
       
-      // ✅ NUOVO: Crea collegamento desktop all'avvio se non esiste
-      if (process.platform === 'win32') {
-        console.log('🔧 [MAIN] Creazione collegamento desktop all\'avvio...')
-        updater.createDesktopShortcut()
-        console.log('🔧 [MAIN] Collegamento desktop richiesto')
-      }
+      // ✅ RIMOSSO: Creazione automatica shortcut all'avvio - solo post-update
+
+      // ✅ NUOVO: Intercetta update-downloaded per ricreare shortcut automaticamente
+      const { autoUpdater } = require('electron-updater')
+      
+      autoUpdater.on('update-downloaded', (info) => {
+        console.log('🔄 [UPDATE] Update scaricato, ricreazione shortcut automatica...')
+        
+        // Crea shortcut automaticamente dopo l'update
+        if (process.platform === 'win32') {
+          try {
+            const exePath = process.execPath // Percorso reale del nuovo exe
+            const desktopPath = path.join(app.getPath('desktop'), 'Inferno Console.lnk')
+            
+            console.log('🔗 [SHORTCUT] Creazione shortcut automatico post-update...')
+            console.log('🔗 [SHORTCUT] Target:', exePath)
+            console.log('🔗 [SHORTCUT] Desktop:', desktopPath)
+            
+            // Importa windows-shortcuts dinamicamente
+            const shortcut = require('windows-shortcuts')
+            
+            // Crea shortcut con windows-shortcuts
+            shortcut.create(desktopPath, {
+              target: exePath,
+              desc: 'Inferno Console - DJ Software',
+              icon: exePath,
+              workingDir: path.dirname(exePath)
+            })
+            
+            console.log('✅ [SHORTCUT] Shortcut ricreato automaticamente!')
+            
+            // Invia notifica al renderer
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('update-shortcut-created', {
+                success: true,
+                message: 'Shortcut aggiornato automaticamente!'
+              })
+            }
+          } catch (shortcutError) {
+            console.error('❌ [SHORTCUT] Errore creazione shortcut automatico:', shortcutError)
+          }
+        }
+      })
+
+      // ✅ NUOVO: Listener per update-installed (dopo il riavvio)
+      autoUpdater.on('update-installed', (info) => {
+        console.log('✅ [UPDATE] Update installato con successo!')
+        
+        // Ricrea shortcut anche dopo l'installazione
+        if (process.platform === 'win32') {
+          try {
+            const exePath = process.execPath
+            const desktopPath = path.join(app.getPath('desktop'), 'Inferno Console.lnk')
+            
+            console.log('🔗 [SHORTCUT] Ricreazione shortcut post-installazione...')
+            
+            // Importa windows-shortcuts dinamicamente
+            const shortcut = require('windows-shortcuts')
+            
+            shortcut.create(desktopPath, {
+              target: exePath,
+              desc: 'Inferno Console - DJ Software',
+              icon: exePath,
+              workingDir: path.dirname(exePath)
+            })
+            
+            console.log('✅ [SHORTCUT] Shortcut aggiornato post-installazione!')
+          } catch (shortcutError) {
+            console.error('❌ [SHORTCUT] Errore ricreazione shortcut post-installazione:', shortcutError)
+          }
+        }
+      })
+      
     } catch (error) {
       console.error('Auto-updater initialization failed:', error)
     }
@@ -1116,6 +1183,8 @@ ipcMain.handle('check-github-files', async () => {
     throw error
   }
 })
+
+// ✅ RIMOSSO: Handler per ricreazione manuale shortcut - solo automatico post-update
 
 // ✅ NUOVO: Listener per navigazione alle impostazioni
 ipcMain.on('navigate-to-settings', () => {

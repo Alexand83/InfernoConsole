@@ -257,8 +257,7 @@ class AppUpdater {
         mainWindow.webContents.send('download-complete')
       }
       
-      // ✅ NUOVO: Crea/aggiorna collegamento desktop dopo download
-      this.createDesktopShortcut()
+      // ✅ RIMOSSO: Creazione shortcut dopo download - solo post-update automatico
       
       // ✅ FIX: Verifica il tipo di download in base alla piattaforma
       let downloadType = 'completo'
@@ -450,8 +449,7 @@ class AppUpdater {
       fs.unlinkSync(sourceExePath)
       console.log('🗑️ File temporaneo rimosso')
       
-      // Crea il shortcut desktop
-      this.createDesktopShortcut()
+      // ✅ RIMOSSO: Creazione shortcut dopo installazione - solo post-update automatico
       
       // Invia notifica di successo
       const mainWindow = require('./main').getMainWindow()
@@ -552,190 +550,11 @@ updaterCacheDirName: inferno-console-updater`
     }
   }
 
-  // ✅ NUOVO: Metodo per creare collegamento sul desktop
-  createDesktopShortcut() {
-    try {
-      console.log('🔧 [UPDATER] createDesktopShortcut chiamato')
-      
-      const { app } = require('electron')
-      const path = require('path')
-      const fs = require('fs')
-      
-      if (process.platform === 'win32') {
-        const desktopPath = path.join(require('os').homedir(), 'Desktop')
-        const shortcutPath = path.join(desktopPath, 'Inferno Console.lnk')
-        
-        console.log('🔗 [UPDATER] Creazione collegamento desktop...')
-        console.log('📁 [UPDATER] Percorso collegamento:', shortcutPath)
-        console.log('📁 [UPDATER] Desktop exists:', fs.existsSync(desktopPath))
-        
-        // ✅ NUOVO: Trova il file corretto da usare
-        const targetExePath = this.findTargetExePath()
-        console.log('📁 [UPDATER] File target trovato:', targetExePath)
-        
-        // Crea il collegamento con il percorso corretto
-        this.createShortcutWithPath(shortcutPath, targetExePath)
-      } else {
-        console.log('⚠️ [UPDATER] Collegamento desktop supportato solo su Windows')
-      }
-    } catch (error) {
-      console.error('❌ [UPDATER] Errore nella creazione del collegamento:', error)
-    }
-  }
+  // ✅ RIMOSSO: Metodo createDesktopShortcut - solo post-update automatico
 
-  // ✅ NUOVO: Metodo per trovare il file exe corretto
-  findTargetExePath() {
-    const path = require('path')
-    const fs = require('fs')
-    const os = require('os')
-    
-    // 1. Prima cerca nella cartella desktop personalizzata
-    const customInstallDir = this.customInstallDir || path.join(os.homedir(), 'Desktop', 'Inferno Console')
-    const desktopExePath = path.join(customInstallDir, 'Inferno-Console-win.exe')
-    
-    if (fs.existsSync(desktopExePath)) {
-      console.log('✅ File trovato in cartella desktop:', desktopExePath)
-      return desktopExePath
-    }
-    
-    // 2. Cerca nella cartella AppData (installazione standard)
-    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
-    const appDataExePath = path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno-Console-win.exe')
-    
-    if (fs.existsSync(appDataExePath)) {
-      console.log('✅ File trovato in AppData:', appDataExePath)
-      return appDataExePath
-    }
-    
-    // 3. Usa il percorso corrente dell'app
-    const { app } = require('electron')
-    const currentExePath = app.getPath('exe')
-    
-    if (fs.existsSync(currentExePath)) {
-      console.log('✅ File trovato in percorso corrente:', currentExePath)
-      return currentExePath
-    }
-    
-    // 4. Fallback: usa il percorso desktop anche se non esiste
-    console.log('⚠️ Nessun file trovato, uso percorso desktop come fallback')
-    return desktopExePath
-  }
+  // ✅ RIMOSSO: Metodo findTargetExePath - solo post-update automatico
 
-  // ✅ METODO PRINCIPALE: Crea collegamento usando percorso corretto
-  createShortcutWithPath(shortcutPath, appPath) {
-    const path = require('path')
-    const { app } = require('electron')
-    const fs = require('fs')
-    
-    // ✅ NUOVO: Usa il path personalizzato dalla configurazione
-    const customInstallDir = this.customInstallDir || path.join(require('os').homedir(), 'Desktop', 'Inferno Console')
-    const installedExePath = path.join(customInstallDir, 'Inferno-Console-win.exe')
-    
-    console.log('🔧 [DESKTOP] Usando percorso installazione desktop:', installedExePath)
-    console.log('🔧 [DESKTOP] Percorso exe corrente (ignorato):', app.getPath('exe'))
-    console.log('🔧 [DESKTOP] Percorso richiesto (ignorato):', appPath)
-    console.log('🔧 [DESKTOP] File esiste:', fs.existsSync(installedExePath))
-    
-    // ✅ NUOVO: Verifica che il file installato esista
-    if (!fs.existsSync(installedExePath)) {
-      console.error('❌ File installato non trovato:', installedExePath)
-      console.log('🔄 Tentativo di trovare il file installato...')
-      
-      // Cerca in percorsi alternativi (prima desktop, poi AppData)
-      const alternativePaths = [
-        // Percorsi desktop
-        path.join(customInstallDir, 'Inferno-Console-win.exe'),
-        path.join(customInstallDir, 'Inferno Console.exe'),
-        path.join(customInstallDir, 'Inferno Console', 'Inferno-Console-win.exe'),
-        path.join(customInstallDir, 'Inferno Console', 'Inferno Console.exe'),
-        // Percorsi AppData (fallback)
-        path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno-Console-win.exe'),
-        path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno Console.exe'),
-        path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno Console', 'Inferno-Console-win.exe'),
-        path.join(localAppData, 'Programs', 'Inferno Console', 'Inferno Console', 'Inferno Console.exe')
-      ]
-      
-      let foundPath = null
-      for (const altPath of alternativePaths) {
-        if (fs.existsSync(altPath)) {
-          foundPath = altPath
-          console.log('✅ File installato trovato in:', foundPath)
-          break
-        }
-      }
-      
-      if (!foundPath) {
-        console.error('❌ Nessun file installato trovato, creo shortcut che apre la cartella')
-        this.createFallbackShortcut(shortcutPath)
-        return
-      }
-      
-      // Usa il path trovato
-      this.createShortcutWithPath(shortcutPath, foundPath)
-      return
-    }
-    
-    const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${shortcutPath}'); $Shortcut.TargetPath = '${installedExePath}'; $Shortcut.WorkingDirectory = '${path.dirname(installedExePath)}'; $Shortcut.Description = 'Inferno Console - Console DJ professionale'; $Shortcut.IconLocation = '${installedExePath},0'; $Shortcut.Save(); Write-Host 'SUCCESS: Collegamento creato'`
-    
-    console.log('🔧 PowerShell command:', psCommand)
-    console.log('🔧 Shortcut path:', shortcutPath)
-    console.log('🔧 App path (installato):', installedExePath)
-    console.log('🔧 Working directory:', path.dirname(installedExePath))
-    
-    require('child_process').exec(`powershell -Command "${psCommand}"`, (error, stdout, stderr) => {
-      if (error) {
-        console.error('❌ Errore creazione collegamento:', error)
-        console.error('❌ Stderr:', stderr)
-        
-        // ✅ FALLBACK: Crea collegamento con percorso fisso di aggiornamento
-        this.createFallbackShortcut(shortcutPath)
-      } else {
-        console.log('✅ Collegamento desktop creato con successo')
-        console.log('📋 Output:', stdout)
-        
-        // ✅ DEBUG: Log di conferma
-        console.log('🎯 Collegamento desktop creato con percorso corretto!')
-      }
-    })
-  }
-
-  // ✅ FALLBACK: Crea collegamento con percorso installato fisso
-  createFallbackShortcut(shortcutPath) {
-    const path = require('path')
-    const fs = require('fs')
-    const os = require('os')
-    
-    // ✅ NUOVO: Usa il path personalizzato dalla configurazione
-    const customInstallDir = this.customInstallDir || path.join(os.homedir(), 'Desktop', 'Inferno Console')
-    const installedExePath = path.join(customInstallDir, 'Inferno-Console-win.exe')
-    
-    console.log('🔄 FALLBACK: Usando percorso installato fisso')
-    console.log('📁 Percorso installato fisso:', installedExePath)
-    console.log('📁 App exists:', fs.existsSync(installedExePath))
-    console.log('📁 Desktop path:', shortcutPath)
-    console.log('📁 Desktop exists:', fs.existsSync(path.dirname(shortcutPath)))
-    
-    if (fs.existsSync(installedExePath)) {
-      // App trovata - crea collegamento diretto
-      console.log('✅ App trovata, creo collegamento diretto')
-      this.createShortcutWithPath(shortcutPath, installedExePath)
-    } else {
-      // App non trovata - crea collegamento che apre la cartella desktop
-      console.log('⚠️ App non trovata, creo collegamento che apre cartella desktop')
-      const desktopDir = customInstallDir
-      const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${shortcutPath}'); $Shortcut.TargetPath = 'explorer.exe'; $Shortcut.Arguments = '/select,${desktopDir}'; $Shortcut.Description = 'Inferno Console - Apri cartella installazione'; $Shortcut.Save(); Write-Host 'EXPLORER FALLBACK: Collegamento creato'`
-      
-      require('child_process').exec(`powershell -Command "${psCommand}"`, (fallbackError, fallbackStdout, fallbackStderr) => {
-        if (fallbackError) {
-          console.error('❌ Anche il fallback è fallito:', fallbackError)
-          console.error('❌ Fallback Stderr:', fallbackStderr)
-        } else {
-          console.log('✅ Fallback collegamento creato con successo')
-          console.log('📋 Fallback Output:', fallbackStdout)
-        }
-      })
-    }
-  }
+  // ✅ RIMOSSO: Tutti i metodi di creazione shortcut - solo post-update automatico
 }
 
 module.exports = AppUpdater
