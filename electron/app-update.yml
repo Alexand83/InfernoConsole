@@ -2,4 +2,4 @@ provider: github
 owner: Alexand83
 repo: InfernoConsole
 updaterCacheDirName: inferno-console-updater
-updaterCacheDir: %USERPROFILE%\InfernoConsole\Updates
+updaterCacheDir: "%USERPROFILE%\\InfernoConsole\\Updates"
