@@ -53,10 +53,9 @@ process.on('unhandledRejection', (reason, promise) => {
 })
 let ffmpegPathResolved = null
 try {
-  // Prefer packaged ffmpeg when available
-  // Replace app.asar path to the unpacked folder to allow executing the binary
-  const ff = require('@ffmpeg-installer/ffmpeg')
-  ffmpegPathResolved = ff && ff.path ? ff.path.replace('app.asar', 'app.asar.unpacked') : null
+  // Prefer packaged ffmpeg when available (static binary)
+  const ffStaticPath = require('ffmpeg-static')
+  ffmpegPathResolved = ffStaticPath ? ffStaticPath.replace('app.asar', 'app.asar.unpacked') : null
 } catch (_) {
   ffmpegPathResolved = null
 }
