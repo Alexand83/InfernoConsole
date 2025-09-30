@@ -242,18 +242,12 @@ app.whenReady().then(() => {
             console.log('🔗 [SHORTCUT] Shortcut non trovato, creazione all\'avvio...')
             console.log('🔗 [SHORTCUT] Target (portatile):', exePath)
             
-            // Importa windows-shortcuts dinamicamente
-            const shortcut = require('windows-shortcuts')
+            // ✅ NUOVO: Usa create-desktop-shortcuts (più moderno e affidabile)
+            const success = createShortcutWithModernLibrary(exePath)
             
-            // ✅ FIX: Per app portabili, il working directory deve essere la cartella del file portabile
-            const portableDir = path.dirname(exePath)
-            
-            shortcut.create(desktopPath, {
-              target: exePath,
-              desc: 'Inferno Console - DJ Software',
-              icon: exePath,
-              workingDir: portableDir
-            })
+            if (!success) {
+              console.error('❌ [SHORTCUT] Errore creazione shortcut con create-desktop-shortcuts')
+            }
             
             console.log('✅ [SHORTCUT] Shortcut portabile creato all\'avvio!')
           } else {
@@ -282,19 +276,12 @@ app.whenReady().then(() => {
             console.log('🔗 [SHORTCUT] Target (portatile):', exePath)
             console.log('🔗 [SHORTCUT] Desktop:', desktopPath)
             
-            // Importa windows-shortcuts dinamicamente
-            const shortcut = require('windows-shortcuts')
+            // ✅ NUOVO: Usa create-desktop-shortcuts (più moderno e affidabile)
+            const success = createShortcutWithModernLibrary(exePath)
             
-            // ✅ FIX: Per app portabili, il working directory deve essere la cartella del file portabile
-            const portableDir = path.dirname(exePath)
-            
-            // Crea shortcut con windows-shortcuts
-            shortcut.create(desktopPath, {
-              target: exePath,
-              desc: 'Inferno Console - DJ Software',
-              icon: exePath,
-              workingDir: portableDir
-            })
+            if (!success) {
+              console.error('❌ [SHORTCUT] Errore creazione shortcut con create-desktop-shortcuts')
+            }
             
             console.log('✅ [SHORTCUT] Shortcut portabile ricreato automaticamente!')
             
@@ -325,18 +312,12 @@ app.whenReady().then(() => {
             console.log('🔗 [SHORTCUT] Ricreazione shortcut post-installazione...')
             console.log('🔗 [SHORTCUT] Target (portatile):', exePath)
             
-            // Importa windows-shortcuts dinamicamente
-            const shortcut = require('windows-shortcuts')
+            // ✅ NUOVO: Usa create-desktop-shortcuts (più moderno e affidabile)
+            const success = createShortcutWithModernLibrary(exePath)
             
-            // ✅ FIX: Per app portabili, il working directory deve essere la cartella del file portabile
-            const portableDir = path.dirname(exePath)
-            
-            shortcut.create(desktopPath, {
-              target: exePath,
-              desc: 'Inferno Console - DJ Software',
-              icon: exePath,
-              workingDir: portableDir
-            })
+            if (!success) {
+              console.error('❌ [SHORTCUT] Errore creazione shortcut con create-desktop-shortcuts')
+            }
             
             console.log('✅ [SHORTCUT] Shortcut portabile aggiornato post-installazione!')
           } catch (shortcutError) {
@@ -1225,6 +1206,41 @@ ipcMain.handle('check-github-files', async () => {
     throw error
   }
 })
+
+// ✅ NUOVO: Funzione per creare shortcut con create-desktop-shortcuts
+function createShortcutWithModernLibrary(exePath) {
+  try {
+    const createDesktopShortcut = require('create-desktop-shortcuts')
+    const desktopPath = app.getPath('desktop')
+    
+    console.log('🔗 [SHORTCUT] Creazione shortcut con create-desktop-shortcuts...')
+    console.log('🔗 [SHORTCUT] Target:', exePath)
+    console.log('🔗 [SHORTCUT] Desktop:', desktopPath)
+    
+    const options = {
+      windows: {
+        filePath: exePath,
+        name: 'Inferno Console',
+        icon: exePath,
+        workingDirectory: path.dirname(exePath),
+        description: 'Inferno Console - DJ Software'
+      }
+    }
+    
+    const success = createDesktopShortcut(options)
+    
+    if (success) {
+      console.log('✅ [SHORTCUT] Shortcut creato con successo!')
+      return true
+    } else {
+      console.error('❌ [SHORTCUT] Errore creazione shortcut')
+      return false
+    }
+  } catch (error) {
+    console.error('❌ [SHORTCUT] Errore create-desktop-shortcuts:', error)
+    return false
+  }
+}
 
 // ✅ RIMOSSO: Handler get-app-path per versione portabile
 
