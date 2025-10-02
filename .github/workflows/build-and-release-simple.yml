@@ -192,10 +192,68 @@ jobs:
         pause >nul
         "@
         
-        $installerScript | Out-File -FilePath "Inferno-Console-Installer.ps1" -Encoding UTF8
+        # Crea installer batch che si auto-avvia
+        $installerBatch = @"
+@echo off
+setlocal enabledelayedexpansion
+echo ========================================
+echo    INFERNO CONSOLE - INSTALLER
+echo ========================================
+echo.
+
+set "INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console"
+if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
+
+echo [INFO] Copiando file applicazione...
+xcopy "win-unpacked\*" "%INSTALL_DIR%\" /E /I /Y /Q >nul
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERRORE] Errore durante la copia dei file.
+    goto :END
+)
+echo [OK] File applicazione copiati con successo.
+
+echo [INFO] Creazione shortcut desktop...
+powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERRORE] Errore durante la creazione dello shortcut desktop.
+) else (
+    echo [OK] Shortcut desktop creato.
+)
+
+echo [INFO] Creazione shortcut Start Menu...
+powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERRORE] Errore durante la creazione dello shortcut Start Menu.
+) else (
+    echo [OK] Shortcut Start Menu creato.
+)
+
+echo.
+echo [OK] Installazione completata!
+echo.
+
+:ASK_LAUNCH
+set /p LAUNCH_APP="Vuoi avviare Inferno Console ora? (S/N): "
+if /i "%LAUNCH_APP%"=="s" (
+    echo [INFO] Avvio di Inferno Console...
+    start "" "%INSTALL_DIR%\Inferno Console.exe"
+) else if /i "%LAUNCH_APP%"=="n" (
+    echo [INFO] Non avvio l'applicazione.
+) else (
+    echo [AVVISO] Scelta non valida. Inserisci S o N.
+    goto :ASK_LAUNCH
+)
+
+:END
+echo.
+echo Premi un tasto per uscire...
+pause >nul
+"@
+
+        $installerBatch | Out-File -FilePath "Inferno-Console-Installer.bat" -Encoding ASCII
         
-        Write-Host "PowerShell installer created: Inferno-Console-Installer.ps1"
-        Write-Host "Installer size: $((Get-Item 'Inferno-Console-Installer.ps1').Length) bytes"
+        Write-Host "Batch installer created: Inferno-Console-Installer.bat"
+        Write-Host "Installer size: $((Get-Item 'Inferno-Console-Installer.bat').Length) bytes"
         
         # Crea anche l'uninstaller
         $uninstallerScript = @"
@@ -249,10 +307,64 @@ jobs:
         Read-Host | Out-Null
         "@
         
-        $uninstallerScript | Out-File -FilePath "Inferno-Console-Uninstaller.ps1" -Encoding UTF8
+        # Crea uninstaller batch
+        $uninstallerBatch = @"
+@echo off
+setlocal enabledelayedexpansion
+echo ========================================
+echo    INFERNO CONSOLE - UNINSTALLER
+echo ========================================
+echo.
+
+set "INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console"
+
+echo [INFO] Tentativo di terminare il processo Inferno Console...
+taskkill /f /im "Inferno Console.exe" >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo [OK] Processo terminato.
+) else (
+    echo [INFO] Processo non in esecuzione o non trovato.
+)
+
+echo [INFO] Rimozione shortcut desktop...
+del "%USERPROFILE%\Desktop\Inferno Console.lnk" >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo [OK] Shortcut desktop rimosso.
+) else (
+    echo [INFO] Shortcut desktop non trovato o errore.
+)
+
+echo [INFO] Rimozione shortcut Start Menu...
+del "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk" >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo [OK] Shortcut Start Menu rimosso.
+) else (
+    echo [INFO] Shortcut Start Menu non trovato o errore.
+)
+
+echo [INFO] Rimozione directory di installazione: %INSTALL_DIR%
+if exist "%INSTALL_DIR%" (
+    rmdir /s /q "%INSTALL_DIR%" >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        echo [OK] Directory di installazione rimossa.
+    ) else (
+        echo [ERRORE] Errore durante la rimozione della directory di installazione.
+    )
+) else (
+    echo [INFO] Directory di installazione non trovata.
+)
+
+echo.
+echo [OK] Disinstallazione completata!
+echo.
+echo Premi un tasto per uscire...
+pause >nul
+"@
+
+        $uninstallerBatch | Out-File -FilePath "Inferno-Console-Uninstaller.bat" -Encoding ASCII
         
-        Write-Host "PowerShell uninstaller created: Inferno-Console-Uninstaller.ps1"
-        Write-Host "Uninstaller size: $((Get-Item 'Inferno-Console-Uninstaller.ps1').Length) bytes"
+        Write-Host "Batch uninstaller created: Inferno-Console-Uninstaller.bat"
+        Write-Host "Uninstaller size: $((Get-Item 'Inferno-Console-Uninstaller.bat').Length) bytes"
 
     - name: Generate latest.yml for Windows
       if: matrix.os == 'windows-latest'
@@ -261,8 +373,8 @@ jobs:
         Write-Host "Generating latest.yml for Windows..."
         Set-Location dist-electron
         
-        # Usa l'installer PowerShell invece del file portabile
-        $INSTALLER_FILE = "Inferno-Console-Installer.ps1"
+        # Usa l'installer batch invece del file portabile
+        $INSTALLER_FILE = "Inferno-Console-Installer.bat"
         $INSTALLER_SIZE = (Get-Item $INSTALLER_FILE).Length
         $INSTALLER_SHA512 = (Get-FileHash -Path $INSTALLER_FILE -Algorithm SHA512).Hash.ToLower()
         
@@ -357,8 +469,8 @@ jobs:
           - Licenza MIT
           - Supporto completo per streaming Icecast
         files: |
-          dist-electron/Inferno-Console-Installer.ps1
-          dist-electron/Inferno-Console-Uninstaller.ps1
+          dist-electron/Inferno-Console-Installer.bat
+          dist-electron/Inferno-Console-Uninstaller.bat
           dist-electron/latest.yml
         draft: false
         prerelease: false
