@@ -199,7 +199,7 @@ jobs:
         Write-Host "Creating self-extracting installer with embedded files..."
         
         # Crea un installer che include tutti i file dell'applicazione
-        $installerContent = @"
+        $installerContent = @'
 @echo off
 setlocal enabledelayedexpansion
 echo ========================================
@@ -291,7 +291,7 @@ if /i "%LAUNCH_APP%"=="s" (
 echo.
 echo Premi un tasto per uscire...
 pause >nul
-"@
+'@
 
         # Salva come file .exe
         $installerContent | Out-File -FilePath "Inferno-Console-Installer.exe" -Encoding ASCII
@@ -317,7 +317,7 @@ pause >nul
         # Crea anche l'uninstaller con log dettagliati
         Write-Host "Creating self-extracting uninstaller executable..."
         
-        $uninstallerContent = @"
+        $uninstallerContent = @'
 @echo off
 setlocal enabledelayedexpansion
 echo ========================================
@@ -368,7 +368,7 @@ echo [OK] Disinstallazione completata!
 echo.
 echo Premi un tasto per uscire...
 pause >nul
-"@
+'@
 
         $uninstallerContent | Out-File -FilePath "Inferno-Console-Uninstaller.exe" -Encoding ASCII
         
