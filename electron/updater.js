@@ -408,59 +408,60 @@ class AppUpdater {
     }
   }
 
-  // ✅ NUOVO: Metodo per installazione personalizzata su Windows
+  // ✅ NUOVO: Metodo per installazione personalizzata su Windows con installer self-extracting
   installUpdateWindows() {
     const fs = require('fs')
     const path = require('path')
     const { app } = require('electron')
+    const { spawn } = require('child_process')
     
     try {
-      console.log('🪟 Windows: Installazione personalizzata...')
+      console.log('🪟 Windows: Installazione con installer self-extracting...')
       
       // Path di destinazione (cartella desktop)
       const customInstallDir = this.customInstallDir || path.join(require('os').homedir(), 'Desktop', 'Inferno Console')
-      const targetExePath = path.join(customInstallDir, 'Inferno-Console-win.exe')
       
       console.log('📁 Directory installazione:', customInstallDir)
-      console.log('📁 File destinazione:', targetExePath)
       
-      // Crea la directory se non esiste
-      if (!fs.existsSync(customInstallDir)) {
-        fs.mkdirSync(customInstallDir, { recursive: true })
-        console.log('✅ Directory creata:', customInstallDir)
-      }
-      
-      // Trova il file scaricato
+      // Trova l'installer scaricato
       const downloadDir = path.join(customInstallDir, 'Updates')
-      const downloadedFiles = fs.readdirSync(downloadDir).filter(file => file.endsWith('.exe'))
+      const installerFiles = fs.readdirSync(downloadDir).filter(file => 
+        file.endsWith('.exe') && file.includes('Installer')
+      )
       
-      if (downloadedFiles.length === 0) {
-        throw new Error('Nessun file .exe trovato nella cartella Updates')
+      if (installerFiles.length === 0) {
+        throw new Error('Nessun installer self-extracting trovato nella cartella Updates')
       }
       
-      const sourceExePath = path.join(downloadDir, downloadedFiles[0])
-      console.log('📁 File sorgente:', sourceExePath)
+      const installerPath = path.join(downloadDir, installerFiles[0])
+      console.log('📁 Installer trovato:', installerPath)
       
-      // Copia il file nella cartella principale
-      fs.copyFileSync(sourceExePath, targetExePath)
-      console.log('✅ File copiato in:', targetExePath)
+      // Esegui l'installer self-extracting
+      console.log('🚀 Esecuzione installer self-extracting...')
+      const installerProcess = spawn(installerPath, [], {
+        cwd: downloadDir,
+        detached: true,
+        stdio: 'ignore'
+      })
       
-      // Rimuovi il file temporaneo
-      fs.unlinkSync(sourceExePath)
-      console.log('🗑️ File temporaneo rimosso')
-      
-      // ✅ RIMOSSO: Creazione shortcut dopo installazione - solo post-update automatico
+      installerProcess.unref()
       
       // Invia notifica di successo
       const mainWindow = require('./main').getMainWindow()
       if (mainWindow) {
         mainWindow.webContents.send('update-installed', {
-          path: targetExePath,
-          message: 'Aggiornamento installato con successo!'
+          path: customInstallDir,
+          message: 'Installer self-extracting avviato! L\'app si installerà automaticamente.'
         })
       }
       
-      console.log('✅ Installazione completata!')
+      console.log('✅ Installer self-extracting avviato!')
+      
+      // Chiudi l'app corrente per permettere l'installazione
+      setTimeout(() => {
+        console.log('🔄 Chiusura app per permettere installazione...')
+        app.quit()
+      }, 2000)
       
     } catch (error) {
       console.error('❌ Errore durante installazione:', error)
