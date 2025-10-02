@@ -201,7 +201,7 @@ jobs:
         # Crea un installer di download efficiente (piccolo e veloce)
         Write-Host "Creating efficient download installer..."
         
-        # Crea il contenuto dell'installer di download
+        # Crea il contenuto dell'installer con selezione directory
         $installerContent = "@echo off`n" +
         "setlocal enabledelayedexpansion`n" +
         "echo ========================================`n" +
@@ -209,18 +209,64 @@ jobs:
         "echo ========================================`n" +
         "echo.`n" +
         "`n" +
-        "set `"INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console`"`n" +
+        "echo [INFO] Benvenuto nell'installer di Inferno Console!`n" +
+        "echo [INFO] Questo installer scaricherà e installerà l'applicazione.`n" +
+        "echo [INFO] Dimensioni installer: ~5MB (efficiente e veloce)`n" +
+        "echo.`n" +
+        "`n" +
+        "REM Selezione directory di installazione`n" +
+        "echo [INFO] Selezione directory di installazione:`n" +
+        "echo.`n" +
+        "echo [1] Desktop (Raccomandato)`n" +
+        "echo [2] Programmi (C:\Program Files)`n" +
+        "echo [3] Documenti`n" +
+        "echo [4] Directory personalizzata`n" +
+        "echo.`n" +
+        ":SELECT_DIR`n" +
+        "set /p CHOICE=`"Scegli dove installare (1-4): `"`n" +
+        "`n" +
+        "if `"%CHOICE%`"==`"1`" (`n" +
+        "    set `"INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console`"`n" +
+        "    echo [OK] Directory selezionata: Desktop`n" +
+        ") else if `"%CHOICE%`"==`"2`" (`n" +
+        "    set `"INSTALL_DIR=C:\Program Files\Inferno Console`"`n" +
+        "    echo [OK] Directory selezionata: Programmi`n" +
+        "    echo [INFO] Potrebbe essere richiesto il permesso di amministratore.`n" +
+        ") else if `"%CHOICE%`"==`"3`" (`n" +
+        "    set `"INSTALL_DIR=%USERPROFILE%\Documents\Inferno Console`"`n" +
+        "    echo [OK] Directory selezionata: Documenti`n" +
+        ") else if `"%CHOICE%`"==`"4`" (`n" +
+        "    echo.`n" +
+        "    set /p CUSTOM_DIR=`"Inserisci il percorso completo (es: D:\MyApps\Inferno Console): `"`n" +
+        "    if `"!CUSTOM_DIR!`"==`"`" (`n" +
+        "        echo [ERRORE] Percorso non valido.`n" +
+        "        goto :SELECT_DIR`n" +
+        "    )`n" +
+        "    set `"INSTALL_DIR=!CUSTOM_DIR!`"`n" +
+        "    echo [OK] Directory personalizzata: !INSTALL_DIR!`n" +
+        ") else (`n" +
+        "    echo [ERRORE] Scelta non valida. Inserisci un numero da 1 a 4.`n" +
+        "    goto :SELECT_DIR`n" +
+        ")`n" +
+        "`n" +
+        "echo.`n" +
+        "echo [INFO] Directory di installazione: %INSTALL_DIR%`n" +
+        "echo [INFO] Creazione directory...`n" +
         "if not exist `"%INSTALL_DIR%`" mkdir `"%INSTALL_DIR%`"`n" +
+        "if %ERRORLEVEL% NEQ 0 (`n" +
+        "    echo [ERRORE] Impossibile creare la directory. Verifica i permessi.`n" +
+        "    goto :END`n" +
+        ")`n" +
+        "echo [OK] Directory creata con successo.`n" +
         "`n" +
         "echo [INFO] Download dell'applicazione Inferno Console...`n" +
-        "echo [INFO] Questo installer scaricherà e installerà l'applicazione...`n" +
-        "echo [INFO] Dimensioni installer: ~5MB (efficiente e veloce)`n" +
+        "echo [INFO] Scaricamento da GitHub...`n" +
         "`n" +
         "REM URL del file portabile da scaricare`n" +
         "set `"DOWNLOAD_URL=https://github.com/Alexand83/InfernoConsole/releases/latest/download/Inferno-Console-win.exe`"`n" +
         "set `"TEMP_FILE=%TEMP%\Inferno-Console-win.exe`"`n" +
         "`n" +
-        "echo [INFO] Scaricamento da: %DOWNLOAD_URL%`n" +
+        "echo [INFO] URL: %DOWNLOAD_URL%`n" +
         "echo [INFO] File temporaneo: %TEMP_FILE%`n" +
         "echo [INFO] Dimensioni da scaricare: ~120MB`n" +
         "`n" +
@@ -229,12 +275,14 @@ jobs:
         "powershell -Command `"`n" +
         "try {`n" +
         "    `$ProgressPreference = 'SilentlyContinue'`n" +
+        "    Write-Host '[INFO] Connessione a GitHub...'`n" +
         "    Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%TEMP_FILE%' -UseBasicParsing`n" +
         "    Write-Host '[OK] Download completato con successo!'`n" +
         "    `$fileSize = (Get-Item '%TEMP_FILE%').Length`n" +
         "    Write-Host '[INFO] File scaricato: ' + [math]::Round(`$fileSize/1MB, 2) + ' MB'`n" +
         "} catch {`n" +
         "    Write-Host '[ERRORE] Download fallito:' `$_.Exception.Message`n" +
+        "    Write-Host '[INFO] Verifica la connessione internet e riprova.'`n" +
         "    exit 1`n" +
         "}`n" +
         "`"`n" +
@@ -250,6 +298,7 @@ jobs:
         "copy `"%TEMP_FILE%`" `"%INSTALL_DIR%\Inferno Console.exe`" >nul`n" +
         "if %ERRORLEVEL% NEQ 0 (`n" +
         "    echo [ERRORE] Errore durante la copia dell'applicazione.`n" +
+        "    echo [INFO] Verifica i permessi di scrittura nella directory.`n" +
         "    goto :END`n" +
         ")`n" +
         "`n" +
@@ -276,9 +325,14 @@ jobs:
         ")`n" +
         "`n" +
         "echo.`n" +
-        "echo [OK] Installazione completata!`n" +
-        "echo [INFO] L'applicazione è stata scaricata e installata in: %INSTALL_DIR%`n" +
+        "echo ========================================`n" +
+        "echo    INSTALLAZIONE COMPLETATA!`n" +
+        "echo ========================================`n" +
+        "echo.`n" +
+        "echo [OK] Inferno Console è stato installato con successo!`n" +
+        "echo [INFO] Directory: %INSTALL_DIR%`n" +
         "echo [INFO] Installer efficiente: solo ~5MB invece di ~425MB`n" +
+        "echo [INFO] L'applicazione è stata scaricata da GitHub`n" +
         "echo.`n" +
         "`n" +
         ":ASK_LAUNCH`n" +
@@ -301,10 +355,13 @@ jobs:
         # Salva come file .exe
         $installerContent | Out-File -FilePath "Inferno-Console-Installer.exe" -Encoding ASCII
         
-        Write-Host "Efficient download installer created: Inferno-Console-Installer.exe"
+        Write-Host "Interactive download installer created: Inferno-Console-Installer.exe"
         Write-Host "Installer size: $((Get-Item 'Inferno-Console-Installer.exe').Length) bytes"
-        Write-Host "This installer will download the application (~120MB) when executed"
-        Write-Host "Much more efficient than embedding the application (~425MB)"
+        Write-Host "Features:"
+        Write-Host "  - User can choose installation directory"
+        Write-Host "  - Downloads application from GitHub (~120MB)"
+        Write-Host "  - Creates desktop and Start Menu shortcuts"
+        Write-Host "  - Much more efficient than embedding (~425MB)"
         
         # Crea anche l'uninstaller con log dettagliati
         Write-Host "Creating self-extracting uninstaller executable..."
