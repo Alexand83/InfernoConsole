@@ -192,11 +192,67 @@ jobs:
         pause >nul
         "@
         
-        $selfExtractingInstaller | Out-File -FilePath "Inferno-Console-Installer.exe" -Encoding ASCII
+        $installerScript | Out-File -FilePath "Inferno-Console-Installer.ps1" -Encoding UTF8
         
-        Write-Host "Self-extracting installer created: Inferno-Console-Installer.exe"
-        Write-Host "Installer size: $((Get-Item 'Inferno-Console-Installer.exe').Length) bytes"
-        Write-Host "Batch script size: $((Get-Item 'Inferno-Console-Installer.bat').Length) bytes"
+        Write-Host "PowerShell installer created: Inferno-Console-Installer.ps1"
+        Write-Host "Installer size: $((Get-Item 'Inferno-Console-Installer.ps1').Length) bytes"
+        
+        # Crea anche l'uninstaller
+        $uninstallerScript = @"
+        # Inferno Console Self-Extracting Uninstaller
+        param([string]$InstallDir = [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'Inferno Console'))
+        
+        Write-Host "========================================"
+        Write-Host "   INFERNO CONSOLE - UNINSTALLER"
+        Write-Host "========================================"
+        Write-Host ""
+        
+        Write-Host "[INFO] Tentativo di terminare il processo Inferno Console..."
+        $processes = Get-Process -Name "Inferno Console" -ErrorAction SilentlyContinue
+        if ($processes) {
+            $processes | Stop-Process -Force
+            Write-Host "[OK] Processo terminato"
+        } else {
+            Write-Host "[INFO] Processo non in esecuzione o non trovato"
+        }
+        
+        Write-Host "[INFO] Rimozione shortcut desktop..."
+        $desktopShortcut = [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'Inferno Console.lnk')
+        if (Test-Path $desktopShortcut) {
+            Remove-Item $desktopShortcut -Force
+            Write-Host "[OK] Shortcut desktop rimosso"
+        } else {
+            Write-Host "[INFO] Shortcut desktop non trovato"
+        }
+        
+        Write-Host "[INFO] Rimozione shortcut Start Menu..."
+        $startMenuShortcut = [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Programs'), 'Inferno Console.lnk')
+        if (Test-Path $startMenuShortcut) {
+            Remove-Item $startMenuShortcut -Force
+            Write-Host "[OK] Shortcut Start Menu rimosso"
+        } else {
+            Write-Host "[INFO] Shortcut Start Menu non trovato"
+        }
+        
+        Write-Host "[INFO] Rimozione directory di installazione: $InstallDir"
+        if (Test-Path $InstallDir) {
+            Remove-Item $InstallDir -Recurse -Force
+            Write-Host "[OK] Directory di installazione rimossa"
+        } else {
+            Write-Host "[INFO] Directory di installazione non trovata"
+        }
+        
+        Write-Host ""
+        Write-Host "[OK] Disinstallazione completata!"
+        Write-Host ""
+        Write-Host "Premi INVIO per uscire..."
+        Read-Host | Out-Null
+        "@
+        
+        $uninstallerScript | Out-File -FilePath "Inferno-Console-Uninstaller.ps1" -Encoding UTF8
+        
+        Write-Host "PowerShell uninstaller created: Inferno-Console-Uninstaller.ps1"
+        Write-Host "Uninstaller size: $((Get-Item 'Inferno-Console-Uninstaller.ps1').Length) bytes"
 
     - name: Generate latest.yml for Windows
       if: matrix.os == 'windows-latest'
@@ -205,8 +261,8 @@ jobs:
         Write-Host "Generating latest.yml for Windows..."
         Set-Location dist-electron
         
-        # Usa l'installer self-extracting invece del file portabile
-        $INSTALLER_FILE = "Inferno-Console-Installer.exe"
+        # Usa l'installer PowerShell invece del file portabile
+        $INSTALLER_FILE = "Inferno-Console-Installer.ps1"
         $INSTALLER_SIZE = (Get-Item $INSTALLER_FILE).Length
         $INSTALLER_SHA512 = (Get-FileHash -Path $INSTALLER_FILE -Algorithm SHA512).Hash.ToLower()
         
@@ -301,7 +357,8 @@ jobs:
           - Licenza MIT
           - Supporto completo per streaming Icecast
         files: |
-          dist-electron/Inferno-Console-Installer.exe
+          dist-electron/Inferno-Console-Installer.ps1
+          dist-electron/Inferno-Console-Uninstaller.ps1
           dist-electron/latest.yml
         draft: false
         prerelease: false
