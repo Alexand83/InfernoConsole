@@ -198,100 +198,98 @@ jobs:
         # Crea un installer self-extracting che include tutti i file dell'app
         Write-Host "Creating self-extracting installer with embedded files..."
         
-        # Crea un installer che include tutti i file dell'applicazione
-        $installerContent = @'
-@echo off
-setlocal enabledelayedexpansion
-echo ========================================
-echo    INFERNO CONSOLE - INSTALLER
-echo ========================================
-echo.
-
-set "INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console"
-if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
-
-echo [INFO] Copiando file applicazione...
-echo [INFO] Questo installer contiene tutti i file necessari...
-
-REM Crea i file dell'applicazione direttamente nell'installer
-echo [INFO] Estrazione file applicazione...
-
-REM Crea la directory principale
-if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
-
-REM Copia tutti i file dalla directory win-unpacked (se esiste) o usa il file portabile
-if exist "win-unpacked" (
-    echo [INFO] Trovata directory win-unpacked, copiando file...
-    xcopy "win-unpacked\*" "%INSTALL_DIR%\" /E /I /Y /Q >nul
-    if %ERRORLEVEL% NEQ 0 (
-        echo [ERRORE] Errore durante la copia dei file da win-unpacked.
-        goto :END
-    )
-) else (
-    echo [INFO] Directory win-unpacked non trovata, cercando file portabile...
-    for %%f in (*.exe) do (
-        if not "%%f"=="Inferno-Console-Installer.exe" if not "%%f"=="Inferno-Console-Uninstaller.exe" (
-            echo [INFO] Trovato file portabile: %%f
-            copy "%%f" "%INSTALL_DIR%\" >nul
-            if %ERRORLEVEL% EQU 0 (
-                echo [OK] File portabile copiato: %%f
-            ) else (
-                echo [ERRORE] Errore durante la copia del file portabile: %%f
-            )
-        )
-    )
-)
-
-REM Cerca e copia tutti i file necessari
-echo [INFO] Copiando file aggiuntivi...
-for %%f in (*.dll *.pak *.bin *.dat) do (
-    if exist "%%f" (
-        copy "%%f" "%INSTALL_DIR%\" >nul
-        if %ERRORLEVEL% EQU 0 (
-            echo [OK] File copiato: %%f
-        )
-    )
-)
-
-echo [OK] File applicazione copiati con successo.
-
-echo [INFO] Creazione shortcut desktop...
-powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERRORE] Errore durante la creazione dello shortcut desktop.
-) else (
-    echo [OK] Shortcut desktop creato.
-)
-
-echo [INFO] Creazione shortcut Start Menu...
-powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERRORE] Errore durante la creazione dello shortcut Start Menu.
-) else (
-    echo [OK] Shortcut Start Menu creato.
-)
-
-echo.
-echo [OK] Installazione completata!
-echo.
-
-:ASK_LAUNCH
-set /p LAUNCH_APP="Vuoi avviare Inferno Console ora? (S/N): "
-if /i "%LAUNCH_APP%"=="s" (
-    echo [INFO] Avvio di Inferno Console...
-    start "" "%INSTALL_DIR%\Inferno Console.exe"
-) else if /i "%LAUNCH_APP%"=="n" (
-    echo [INFO] Non avvio l'applicazione.
-) else (
-    echo [AVVISO] Scelta non valida. Inserisci S o N.
-    goto :ASK_LAUNCH
-)
-
-:END
-echo.
-echo Premi un tasto per uscire...
-pause >nul
-'@
+        # Crea un installer che include tutti i file dell'applicazione usando stringhe concatenate
+        $installerContent = "@echo off`n" +
+        "setlocal enabledelayedexpansion`n" +
+        "echo ========================================`n" +
+        "echo    INFERNO CONSOLE - INSTALLER`n" +
+        "echo ========================================`n" +
+        "echo.`n" +
+        "`n" +
+        "set `"INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console`"`n" +
+        "if not exist `"%INSTALL_DIR%`" mkdir `"%INSTALL_DIR%`"`n" +
+        "`n" +
+        "echo [INFO] Copiando file applicazione...`n" +
+        "echo [INFO] Questo installer contiene tutti i file necessari...`n" +
+        "`n" +
+        "REM Crea i file dell'applicazione direttamente nell'installer`n" +
+        "echo [INFO] Estrazione file applicazione...`n" +
+        "`n" +
+        "REM Crea la directory principale`n" +
+        "if not exist `"%INSTALL_DIR%`" mkdir `"%INSTALL_DIR%`"`n" +
+        "`n" +
+        "REM Copia tutti i file dalla directory win-unpacked (se esiste) o usa il file portabile`n" +
+        "if exist `"win-unpacked`" (`n" +
+        "    echo [INFO] Trovata directory win-unpacked, copiando file...`n" +
+        "    xcopy `"win-unpacked\*`" `"%INSTALL_DIR%`" /E /I /Y /Q >nul`n" +
+        "    if %ERRORLEVEL% NEQ 0 (`n" +
+        "        echo [ERRORE] Errore durante la copia dei file da win-unpacked.`n" +
+        "        goto :END`n" +
+        "    )`n" +
+        ") else (`n" +
+        "    echo [INFO] Directory win-unpacked non trovata, cercando file portabile...`n" +
+        "    for %%f in (*.exe) do (`n" +
+        "        if not `"%%f`"==`"Inferno-Console-Installer.exe`" if not `"%%f`"==`"Inferno-Console-Uninstaller.exe`" (`n" +
+        "            echo [INFO] Trovato file portabile: %%f`n" +
+        "            copy `"%%f`" `"%INSTALL_DIR%`" >nul`n" +
+        "            if %ERRORLEVEL% EQU 0 (`n" +
+        "                echo [OK] File portabile copiato: %%f`n" +
+        "            ) else (`n" +
+        "                echo [ERRORE] Errore durante la copia del file portabile: %%f`n" +
+        "            )`n" +
+        "        )`n" +
+        "    )`n" +
+        ")`n" +
+        "`n" +
+        "REM Cerca e copia tutti i file necessari`n" +
+        "echo [INFO] Copiando file aggiuntivi...`n" +
+        "for %%f in (*.dll *.pak *.bin *.dat) do (`n" +
+        "    if exist `"%%f`" (`n" +
+        "        copy `"%%f`" `"%INSTALL_DIR%`" >nul`n" +
+        "        if %ERRORLEVEL% EQU 0 (`n" +
+        "            echo [OK] File copiato: %%f`n" +
+        "        )`n" +
+        "    )`n" +
+        ")`n" +
+        "`n" +
+        "echo [OK] File applicazione copiati con successo.`n" +
+        "`n" +
+        "echo [INFO] Creazione shortcut desktop...`n" +
+        "powershell -Command `"$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()`" >nul 2>&1`n" +
+        "if %ERRORLEVEL% NEQ 0 (`n" +
+        "    echo [ERRORE] Errore durante la creazione dello shortcut desktop.`n" +
+        ") else (`n" +
+        "    echo [OK] Shortcut desktop creato.`n" +
+        ")`n" +
+        "`n" +
+        "echo [INFO] Creazione shortcut Start Menu...`n" +
+        "powershell -Command `"$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()`" >nul 2>&1`n" +
+        "if %ERRORLEVEL% NEQ 0 (`n" +
+        "    echo [ERRORE] Errore durante la creazione dello shortcut Start Menu.`n" +
+        ") else (`n" +
+        "    echo [OK] Shortcut Start Menu creato.`n" +
+        ")`n" +
+        "`n" +
+        "echo.`n" +
+        "echo [OK] Installazione completata!`n" +
+        "echo.`n" +
+        "`n" +
+        ":ASK_LAUNCH`n" +
+        "set /p LAUNCH_APP=`"Vuoi avviare Inferno Console ora? (S/N): `"`n" +
+        "if /i `"%LAUNCH_APP%`"==`"s`" (`n" +
+        "    echo [INFO] Avvio di Inferno Console...`n" +
+        "    start `"`" `"%INSTALL_DIR%\Inferno Console.exe`"`n" +
+        ") else if /i `"%LAUNCH_APP%`"==`"n`" (`n" +
+        "    echo [INFO] Non avvio l'applicazione.`n" +
+        ") else (`n" +
+        "    echo [AVVISO] Scelta non valida. Inserisci S o N.`n" +
+        "    goto :ASK_LAUNCH`n" +
+        ")`n" +
+        "`n" +
+        ":END`n" +
+        "echo.`n" +
+        "echo Premi un tasto per uscire...`n" +
+        "pause >nul"
 
         # Salva come file .exe
         $installerContent | Out-File -FilePath "Inferno-Console-Installer.exe" -Encoding ASCII
@@ -317,58 +315,56 @@ pause >nul
         # Crea anche l'uninstaller con log dettagliati
         Write-Host "Creating self-extracting uninstaller executable..."
         
-        $uninstallerContent = @'
-@echo off
-setlocal enabledelayedexpansion
-echo ========================================
-echo    INFERNO CONSOLE - UNINSTALLER
-echo ========================================
-echo.
-
-set "INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console"
-
-echo [INFO] Tentativo di terminare il processo Inferno Console...
-taskkill /f /im "Inferno Console.exe" >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    echo [OK] Processo terminato.
-) else (
-    echo [INFO] Processo non in esecuzione o non trovato.
-)
-
-echo [INFO] Rimozione shortcut desktop...
-del "%USERPROFILE%\Desktop\Inferno Console.lnk" >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    echo [OK] Shortcut desktop rimosso.
-) else (
-    echo [INFO] Shortcut desktop non trovato o errore.
-)
-
-echo [INFO] Rimozione shortcut Start Menu...
-del "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk" >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    echo [OK] Shortcut Start Menu rimosso.
-) else (
-    echo [INFO] Shortcut Start Menu non trovato o errore.
-)
-
-echo [INFO] Rimozione directory di installazione: %INSTALL_DIR%
-if exist "%INSTALL_DIR%" (
-    rmdir /s /q "%INSTALL_DIR%" >nul 2>&1
-    if %ERRORLEVEL% EQU 0 (
-        echo [OK] Directory di installazione rimossa.
-    ) else (
-        echo [ERRORE] Errore durante la rimozione della directory di installazione.
-    )
-) else (
-    echo [INFO] Directory di installazione non trovata.
-)
-
-echo.
-echo [OK] Disinstallazione completata!
-echo.
-echo Premi un tasto per uscire...
-pause >nul
-'@
+        $uninstallerContent = "@echo off`n" +
+        "setlocal enabledelayedexpansion`n" +
+        "echo ========================================`n" +
+        "echo    INFERNO CONSOLE - UNINSTALLER`n" +
+        "echo ========================================`n" +
+        "echo.`n" +
+        "`n" +
+        "set `"INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console`"`n" +
+        "`n" +
+        "echo [INFO] Tentativo di terminare il processo Inferno Console...`n" +
+        "taskkill /f /im `"Inferno Console.exe`" >nul 2>&1`n" +
+        "if %ERRORLEVEL% EQU 0 (`n" +
+        "    echo [OK] Processo terminato.`n" +
+        ") else (`n" +
+        "    echo [INFO] Processo non in esecuzione o non trovato.`n" +
+        ")`n" +
+        "`n" +
+        "echo [INFO] Rimozione shortcut desktop...`n" +
+        "del `"%USERPROFILE%\Desktop\Inferno Console.lnk`" >nul 2>&1`n" +
+        "if %ERRORLEVEL% EQU 0 (`n" +
+        "    echo [OK] Shortcut desktop rimosso.`n" +
+        ") else (`n" +
+        "    echo [INFO] Shortcut desktop non trovato o errore.`n" +
+        ")`n" +
+        "`n" +
+        "echo [INFO] Rimozione shortcut Start Menu...`n" +
+        "del `"%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk`" >nul 2>&1`n" +
+        "if %ERRORLEVEL% EQU 0 (`n" +
+        "    echo [OK] Shortcut Start Menu rimosso.`n" +
+        ") else (`n" +
+        "    echo [INFO] Shortcut Start Menu non trovato o errore.`n" +
+        ")`n" +
+        "`n" +
+        "echo [INFO] Rimozione directory di installazione: %INSTALL_DIR%`n" +
+        "if exist `"%INSTALL_DIR%`" (`n" +
+        "    rmdir /s /q `"%INSTALL_DIR%`" >nul 2>&1`n" +
+        "    if %ERRORLEVEL% EQU 0 (`n" +
+        "        echo [OK] Directory di installazione rimossa.`n" +
+        "    ) else (`n" +
+        "        echo [ERRORE] Errore durante la rimozione della directory di installazione.`n" +
+        "    )`n" +
+        ") else (`n" +
+        "    echo [INFO] Directory di installazione non trovata.`n" +
+        ")`n" +
+        "`n" +
+        "echo.`n" +
+        "echo [OK] Disinstallazione completata!`n" +
+        "echo.`n" +
+        "echo Premi un tasto per uscire...`n" +
+        "pause >nul"
 
         $uninstallerContent | Out-File -FilePath "Inferno-Console-Uninstaller.exe" -Encoding ASCII
         
