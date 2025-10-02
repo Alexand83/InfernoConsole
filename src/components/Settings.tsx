@@ -29,11 +29,60 @@ const Settings = () => {
   const [isMicTestActive, setIsMicTestActive] = useState(false)
   const [micTestLevel, setMicTestLevel] = useState(0)
   const [isListeningForKey, setIsListeningForKey] = useState(false)
+  const [isPortableApp, setIsPortableApp] = useState(false)
+  const [shortcutMessage, setShortcutMessage] = useState('')
   // RIMOSSO: Path app per versione portabile
   
   // Configurazione aggiornamenti
   const updateUrl = updateConfig.updateUrl
   const currentVersion = updateConfig.currentVersion
+
+  // ✅ NUOVO: Rileva se è app portabile
+  useEffect(() => {
+    const checkIfPortable = () => {
+      const isPortable = window.location.href.includes('file://') || 
+                        process.env.NODE_ENV === 'production' && 
+                        navigator.userAgent.includes('Electron')
+      setIsPortableApp(isPortable)
+    }
+    checkIfPortable()
+  }, [])
+
+  // ✅ NUOVO: Listener per notifiche shortcut portabile
+  useEffect(() => {
+    const handlePortableShortcutInfo = (event: any, data: any) => {
+      setShortcutMessage(data.message)
+    }
+
+    if (window.electronAPI) {
+      window.electronAPI.onPortableShortcutInfo?.(handlePortableShortcutInfo)
+    }
+
+    return () => {
+      if (window.electronAPI) {
+        window.electronAPI.removePortableShortcutInfoListener?.(handlePortableShortcutInfo)
+      }
+    }
+  }, [])
+
+  // ✅ NUOVO: Funzione per creare shortcut manualmente
+  const createShortcut = async () => {
+    try {
+      setIsLoading(true)
+      const result = await window.electronAPI?.createPortableShortcut?.()
+      
+      if (result?.success) {
+        setShortcutMessage('✅ ' + result.message)
+      } else {
+        setShortcutMessage('❌ ' + (result?.message || 'Errore sconosciuto'))
+      }
+    } catch (error) {
+      console.error('Errore creazione shortcut:', error)
+      setShortcutMessage('❌ Errore: ' + error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   // ✅ FIX: Funzioni per selezione tasto PTT
   const startKeyListening = () => {
@@ -1726,6 +1775,47 @@ const Settings = () => {
                     </button>
                   </div>
                 </div>
+
+                {/* Shortcut Portabile */}
+                {isPortableApp && (
+                  <div className="bg-dj-secondary rounded-lg p-4 mb-6 border border-dj-accent/20">
+                    <h3 className="text-lg font-medium text-white mb-3 flex items-center">
+                      <Download className="w-5 h-5 mr-2" />
+                      Shortcut Desktop
+                    </h3>
+                    <div className="space-y-3">
+                      <p className="text-sm text-dj-light/60">
+                        Per le app portabili, crea manualmente uno shortcut sul Desktop.
+                      </p>
+                      {shortcutMessage && (
+                        <div className={`p-3 rounded-lg text-sm ${
+                          shortcutMessage.includes('✅') 
+                            ? 'bg-dj-success/20 text-dj-success border border-dj-success/30' 
+                            : 'bg-dj-error/20 text-dj-error border border-dj-error/30'
+                        }`}>
+                          {shortcutMessage}
+                        </div>
+                      )}
+                      <button
+                        onClick={createShortcut}
+                        disabled={isLoading}
+                        className="w-full bg-dj-accent hover:bg-dj-accent/80 disabled:bg-dj-accent/50 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center"
+                      >
+                        {isLoading ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Creazione...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-4 h-4 mr-2" />
+                            Crea Shortcut Desktop
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
               </div>
             </div>

@@ -1,6 +1,6 @@
-appId: com.djconsole.app
-productName: DJ Console
-copyright: Copyright © 2024 DJ Console Team
+appId: com.infernoconsole.app
+productName: Inferno Console
+copyright: Copyright © 2024 Inferno Console Team
 
 # Configurazione per Windows
 win:
@@ -12,27 +12,25 @@ win:
     - target: portable
       arch:
         - x64
-  artifactName: DJ-Console-${version}-win-${arch}.${ext}
+  artifactName: Inferno-Console-${version}-win-${arch}.${ext}
   requestedExecutionLevel: asInvoker
-  publisherName: DJ Console Team
+  # publisherName: DJ Console Team  # Rimosso per compatibilità
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
 
-# Configurazione NSIS
+# Configurazione NSIS - VERSIONE SEMPLIFICATA
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  allowElevation: true
+  allowElevation: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: DJ Console
-  include: build/installer.nsh
+  shortcutName: Inferno Console
   perMachine: false
-  deleteAppDataOnUninstall: true
-  displayLanguageSelector: true
-  installerLanguages:
-    - it_IT
-    - en_US
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+  uninstallDisplayName: Inferno Console
+  # ✅ RIMOSSO: Script personalizzato e configurazioni complesse
 
 # File da includere
 files:
@@ -40,6 +38,8 @@ files:
   - electron/**
   - package.json
   - node_modules/@ffmpeg-installer/**
+  - node_modules/ffmpeg-static/**
+  - node_modules/ws/**
 
 # Configurazione ASAR
 asar: true

@@ -230,100 +230,40 @@ app.whenReady().then(() => {
     try {
       const updater = new AppUpdater()
       
-      // ✅ NUOVO: Creazione condizionale shortcut all'avvio (solo se non esiste)
+      // ✅ RIMOSSO: Creazione shortcut automatica all'avvio
+      // Gli shortcut vengono ora gestiti solo dall'installer NSIS
+      // Per app portabili, usa il pulsante nelle Impostazioni
       if (process.platform === 'win32') {
-        try {
-          // ✅ FIX: Per app portabili, usa il percorso del file portabile originale
-          const exePath = process.execPath
-          const desktopPath = path.join(app.getPath('desktop'), 'Inferno Console.lnk')
+        const isPortable = process.execPath.includes('AppData\\Local\\Temp')
+        
+        if (isPortable) {
+          console.log('🔗 [SHORTCUT] App portabile rilevata - shortcut automatico DISABILITATO')
+          console.log('💡 [SHORTCUT] Per app portabili, usa il menu "Crea Shortcut" nelle impostazioni')
           
-          // Controlla se lo shortcut esiste già
-          if (!fs.existsSync(desktopPath)) {
-            console.log('🔗 [SHORTCUT] Shortcut non trovato, creazione all\'avvio...')
-            console.log('🔗 [SHORTCUT] Target (portatile):', exePath)
-            
-            // ✅ NUOVO: Usa create-desktop-shortcuts (più moderno e affidabile)
-            const success = createShortcutWithModernLibrary(exePath)
-            
-            if (!success) {
-              console.error('❌ [SHORTCUT] Errore creazione shortcut con create-desktop-shortcuts')
-            }
-            
-            console.log('✅ [SHORTCUT] Shortcut portabile creato all\'avvio!')
-          } else {
-            console.log('🔗 [SHORTCUT] Shortcut già esistente, nessuna creazione necessaria')
+          // Invia notifica all'interfaccia per informare l'utente
+          if (mainWindow) {
+            mainWindow.webContents.send('portable-app-shortcut-info', {
+              message: 'App portabile rilevata. Per creare uno shortcut, vai nelle Impostazioni > Crea Shortcut.',
+              showButton: true
+            })
           }
-        } catch (error) {
-          console.error('❌ [SHORTCUT] Errore creazione shortcut all\'avvio:', error)
+        } else {
+          console.log('🔗 [SHORTCUT] App installata rilevata - shortcut gestiti dall\'installer NSIS')
         }
       }
 
-      // ✅ NUOVO: Intercetta update-downloaded per ricreare shortcut automaticamente
+      // ✅ RIMOSSO: Creazione shortcut automatica dopo aggiornamenti
+      // Gli shortcut vengono gestiti dall'installer NSIS
       const { autoUpdater } = require('electron-updater')
       
       autoUpdater.on('update-downloaded', (info) => {
-        console.log('🔄 [UPDATE] Update scaricato, ricreazione shortcut automatica...')
-        
-        // Crea shortcut automaticamente dopo l'update
-        if (process.platform === 'win32') {
-          try {
-            // ✅ FIX: Per app portabili, usa il percorso del file portabile originale
-            // Non il percorso estratto in temp
-            const exePath = process.execPath
-            const desktopPath = path.join(app.getPath('desktop'), 'Inferno Console.lnk')
-            
-            console.log('🔗 [SHORTCUT] Creazione shortcut automatico post-update...')
-            console.log('🔗 [SHORTCUT] Target (portatile):', exePath)
-            console.log('🔗 [SHORTCUT] Desktop:', desktopPath)
-            
-            // ✅ NUOVO: Usa create-desktop-shortcuts (più moderno e affidabile)
-            const success = createShortcutWithModernLibrary(exePath)
-            
-            if (!success) {
-              console.error('❌ [SHORTCUT] Errore creazione shortcut con create-desktop-shortcuts')
-            }
-            
-            console.log('✅ [SHORTCUT] Shortcut portabile ricreato automaticamente!')
-            
-            // Invia notifica al renderer
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('update-shortcut-created', {
-                success: true,
-                message: 'Shortcut portabile aggiornato automaticamente!'
-              })
-            }
-          } catch (shortcutError) {
-            console.error('❌ [SHORTCUT] Errore creazione shortcut automatico:', shortcutError)
-          }
-        }
+        console.log('🔄 [UPDATE] Update scaricato - shortcut gestiti dall\'installer NSIS')
       })
 
-      // ✅ NUOVO: Listener per update-installed (dopo il riavvio)
+      // ✅ RIMOSSO: Creazione shortcut automatica dopo installazione aggiornamenti
+      // Gli shortcut vengono gestiti dall'installer NSIS
       autoUpdater.on('update-installed', (info) => {
         console.log('✅ [UPDATE] Update installato con successo!')
-        
-        // Ricrea shortcut anche dopo l'installazione
-        if (process.platform === 'win32') {
-          try {
-            // ✅ FIX: Per app portabili, usa il percorso del file portabile originale
-            const exePath = process.execPath
-            const desktopPath = path.join(app.getPath('desktop'), 'Inferno Console.lnk')
-            
-            console.log('🔗 [SHORTCUT] Ricreazione shortcut post-installazione...')
-            console.log('🔗 [SHORTCUT] Target (portatile):', exePath)
-            
-            // ✅ NUOVO: Usa create-desktop-shortcuts (più moderno e affidabile)
-            const success = createShortcutWithModernLibrary(exePath)
-            
-            if (!success) {
-              console.error('❌ [SHORTCUT] Errore creazione shortcut con create-desktop-shortcuts')
-            }
-            
-            console.log('✅ [SHORTCUT] Shortcut portabile aggiornato post-installazione!')
-          } catch (shortcutError) {
-            console.error('❌ [SHORTCUT] Errore ricreazione shortcut post-installazione:', shortcutError)
-          }
-        }
       })
       
     } catch (error) {
@@ -1207,40 +1147,139 @@ ipcMain.handle('check-github-files', async () => {
   }
 })
 
-// ✅ NUOVO: Funzione per creare shortcut con create-desktop-shortcuts
+// ✅ NUOVO: Funzione per creare shortcut con PowerShell (più affidabile per app portabili)
 function createShortcutWithModernLibrary(exePath) {
   try {
-    const createDesktopShortcut = require('create-desktop-shortcuts')
     const desktopPath = app.getPath('desktop')
+    const shortcutPath = path.join(desktopPath, 'Inferno Console.lnk')
     
-    console.log('🔗 [SHORTCUT] Creazione shortcut con create-desktop-shortcuts...')
+    console.log('🔗 [SHORTCUT] Creazione shortcut con PowerShell...')
     console.log('🔗 [SHORTCUT] Target:', exePath)
     console.log('🔗 [SHORTCUT] Desktop:', desktopPath)
+    console.log('🔗 [SHORTCUT] Shortcut:', shortcutPath)
     
-    const options = {
-      windows: {
-        filePath: exePath,
-        name: 'Inferno Console',
-        icon: exePath,
-        workingDirectory: path.dirname(exePath),
-        description: 'Inferno Console - DJ Software'
+    // Usa PowerShell per creare lo shortcut (più affidabile)
+    const { execSync } = require('child_process')
+    
+    // ✅ SOLUZIONE MIGLIORATA: Usa script PowerShell dedicato per app portabili
+    const scriptPath = path.join(__dirname, '..', 'scripts', 'create-portable-shortcut.ps1')
+    
+    if (fs.existsSync(scriptPath)) {
+      console.log('🔗 [SHORTCUT] Usando script dedicato per app portabili...')
+      
+      // Esegui lo script dedicato
+      const result = execSync(`powershell -ExecutionPolicy Bypass -File "${scriptPath}" -ExePath "${exePath}" -DesktopPath "${shortcutPath}"`, { 
+        encoding: 'utf8',
+        timeout: 10000 // 10 secondi timeout
+      })
+      
+      console.log('✅ [SHORTCUT] Shortcut creato con successo via script dedicato!')
+      console.log('🔗 [SHORTCUT] Risultato:', result.trim())
+      return true
+    } else {
+      // Fallback: script temporaneo inline
+      console.log('🔄 [SHORTCUT] Script dedicato non trovato, uso script temporaneo...')
+      
+      const tempScriptPath = path.join(require('os').tmpdir(), 'create-shortcut.ps1')
+      const psScript = `
+$WshShell = New-Object -comObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut("${shortcutPath.replace(/\\/g, '\\\\')}")
+$Shortcut.TargetPath = "${exePath.replace(/\\/g, '\\\\')}"
+$Shortcut.WorkingDirectory = "${path.dirname(exePath).replace(/\\/g, '\\\\')}"
+$Shortcut.Description = "Inferno Console - DJ Software"
+$Shortcut.Save()
+Write-Output "Shortcut created successfully"
+`
+      
+      // Scrivi script temporaneo
+      fs.writeFileSync(tempScriptPath, psScript, 'utf8')
+      
+      // Esegui il comando PowerShell
+      const result = execSync(`powershell -ExecutionPolicy Bypass -File "${tempScriptPath}"`, { 
+        encoding: 'utf8',
+        timeout: 10000 // 10 secondi timeout
+      })
+      
+      // Pulisci file temporaneo
+      try {
+        fs.unlinkSync(tempScriptPath)
+      } catch (cleanupError) {
+        console.log('⚠️ [SHORTCUT] Errore pulizia file temporaneo:', cleanupError.message)
+      }
+      
+      console.log('✅ [SHORTCUT] Shortcut creato con successo via PowerShell!')
+      console.log('🔗 [SHORTCUT] Risultato PowerShell:', result.trim())
+      return true
+    }
+    
+  } catch (error) {
+    console.error('❌ [SHORTCUT] Errore PowerShell shortcut:', error)
+    
+    // Fallback: Crea shortcut con comando diretto PowerShell (senza create-desktop-shortcuts)
+    try {
+      console.log('🔄 [SHORTCUT] Tentativo fallback con PowerShell diretto...')
+      
+      // Comando PowerShell diretto senza file temporaneo
+      const psCommand = `$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('${shortcutPath}'); $Shortcut.TargetPath = '${exePath}'; $Shortcut.WorkingDirectory = '${path.dirname(exePath)}'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save(); Write-Output 'Success'`
+      
+      const result = execSync(`powershell -Command "${psCommand}"`, { 
+        encoding: 'utf8',
+        timeout: 10000
+      })
+      
+      console.log('✅ [SHORTCUT] Shortcut creato con successo via PowerShell diretto!')
+      console.log('🔗 [SHORTCUT] Risultato:', result.trim())
+      return true
+      
+    } catch (fallbackError) {
+      console.error('❌ [SHORTCUT] Errore completo:', fallbackError)
+      return false
+    }
+  }
+}
+
+// ✅ NUOVO: Handler per creazione manuale shortcut per app portabili
+ipcMain.handle('create-portable-shortcut', async () => {
+  try {
+    console.log('🔗 [SHORTCUT] Creazione manuale shortcut per app portabile...')
+    
+    // Cerca il file .exe originale nella directory corrente
+    const possibleExePaths = [
+      path.join(process.cwd(), 'Inferno-Console-win.exe'),
+      path.join(process.cwd(), 'Inferno Console.exe'),
+      path.join(__dirname, '..', 'Inferno-Console-win.exe'),
+      path.join(__dirname, '..', 'Inferno Console.exe')
+    ]
+    
+    let exePath = null
+    for (const possiblePath of possibleExePaths) {
+      if (fs.existsSync(possiblePath)) {
+        exePath = possiblePath
+        console.log('🔗 [SHORTCUT] File .exe originale trovato:', exePath)
+        break
       }
     }
     
-    const success = createDesktopShortcut(options)
+    if (!exePath) {
+      console.log('⚠️ [SHORTCUT] File .exe originale non trovato, uso percorso temporaneo')
+      exePath = process.execPath
+    }
+    
+    // Crea shortcut che punta al file originale
+    const success = createShortcutWithModernLibrary(exePath)
     
     if (success) {
-      console.log('✅ [SHORTCUT] Shortcut creato con successo!')
-      return true
+      console.log('✅ [SHORTCUT] Shortcut portabile creato con successo!')
+      return { success: true, message: 'Shortcut creato con successo!' }
     } else {
-      console.error('❌ [SHORTCUT] Errore creazione shortcut')
-      return false
+      console.error('❌ [SHORTCUT] Errore creazione shortcut portabile')
+      return { success: false, message: 'Errore nella creazione dello shortcut' }
     }
   } catch (error) {
-    console.error('❌ [SHORTCUT] Errore create-desktop-shortcuts:', error)
-    return false
+    console.error('❌ [SHORTCUT] Errore creazione shortcut manuale:', error)
+    return { success: false, message: 'Errore: ' + error.message }
   }
-}
+})
 
 // ✅ RIMOSSO: Handler get-app-path per versione portabile
 

@@ -1,4 +1,4 @@
-appId: com.djconsole.app
+appId: com.infernoconsole.app
 productName: Inferno Console
 copyright: Copyright © 2024 Inferno Console Team
 
@@ -48,6 +48,7 @@ files:
   - package.json
   - node_modules/@ffmpeg-installer/**
   - node_modules/ws/**
+  - scripts/**
 
 # Configurazione ASAR
 asar: true

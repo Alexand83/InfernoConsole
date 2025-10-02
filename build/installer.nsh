@@ -1,9 +1,9 @@
-; Script NSIS personalizzato per DJ Console
+; Script NSIS personalizzato per Inferno Console
 ; Gestisce la chiusura automatica dell'app durante l'installazione
 
 !macro preInit
-  ; Termina automaticamente tutti i processi DJ Console/Electron
-  nsExec::ExecToLog 'taskkill /f /im "DJ Console.exe"'
+  ; Termina automaticamente tutti i processi Inferno Console/Electron
+  nsExec::ExecToLog 'taskkill /f /im "Inferno Console.exe"'
   Pop $0
   nsExec::ExecToLog 'taskkill /f /im "electron.exe"'
   Pop $0
@@ -15,8 +15,8 @@
 !macroend
 
 !macro customInstall
-  ; Termina tutti i processi DJ Console/Electron se sono in esecuzione
-  nsExec::ExecToLog 'taskkill /f /im "DJ Console.exe"'
+  ; Termina tutti i processi Inferno Console/Electron se sono in esecuzione
+  nsExec::ExecToLog 'taskkill /f /im "Inferno Console.exe"'
   Pop $0
   nsExec::ExecToLog 'taskkill /f /im "electron.exe"'
   Pop $0
@@ -28,8 +28,8 @@
 !macroend
 
 !macro customUnInstall
-  ; Termina il processo DJ Console durante la disinstallazione
-  nsExec::ExecToLog 'taskkill /f /im "DJ Console.exe"'
+  ; Termina il processo Inferno Console durante la disinstallazione
+  nsExec::ExecToLog 'taskkill /f /im "Inferno Console.exe"'
   Pop $0
   Sleep 1000
 !macroend

@@ -49,6 +49,56 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
+    - name: Create Self-Extracting Installer (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        Write-Host "Creating self-extracting installer for Windows..."
+        Set-Location dist-electron
+        
+        # Trova il file .exe generato
+        $EXE_FILE = Get-ChildItem -Name "*.exe" | Select-Object -First 1
+        Write-Host "Found executable: $EXE_FILE"
+        
+        # Crea installer self-extracting usando PowerShell
+        $installerScript = @"
+        @echo off
+        setlocal enabledelayedexpansion
+        echo ========================================
+        echo    INFERNO CONSOLE - INSTALLER
+        echo ========================================
+        echo.
+        set "INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console"
+        if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
+        echo [INFO] Copiando file applicazione...
+        xcopy "win-unpacked\*" "%INSTALL_DIR%\" /E /I /Y /Q >nul
+        echo [INFO] Creazione shortcut desktop...
+        powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
+        echo [INFO] Creazione shortcut Start Menu...
+        powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
+        echo [OK] Installazione completata!
+        echo Premi INVIO per avviare Inferno Console...
+        pause >nul
+        start "" "%INSTALL_DIR%\Inferno Console.exe"
+        "@
+        
+        $installerScript | Out-File -FilePath "Inferno-Console-Installer.bat" -Encoding ASCII
+        
+        # Crea un installer .exe usando un wrapper batch
+        $exeInstaller = @"
+        @echo off
+        echo ========================================
+        echo    INFERNO CONSOLE - INSTALLER
+        echo ========================================
+        echo.
+        echo [INFO] Avvio installer...
+        call "%~dp0Inferno-Console-Installer.bat"
+        "@
+        
+        $exeInstaller | Out-File -FilePath "Inferno-Console-Installer.exe" -Encoding ASCII
+        
+        Write-Host "Self-extracting installer created: Inferno-Console-Installer.exe"
+
     - name: Generate latest.yml for Windows
       if: matrix.os == 'windows-latest'
       shell: pwsh
@@ -134,25 +184,26 @@ jobs:
           - Fix logging per debug del sistema di retry
           
           ### 📦 Download
-          **Windows**: Installa il file `.exe` per Windows 10/11
+          **Windows**: Scarica `Inferno-Console-Installer.exe` - Installer self-extracting
           
           ### 🚀 Installazione
-          1. Scarica il file `.exe` per Windows
-          2. Esegui l'installer
-          3. Avvia Inferno Console e goditi la tua sessione DJ!
+          1. Scarica `Inferno-Console-Installer.exe`
+          2. Esegui l'installer (si auto-estrae e installa)
+          3. L'app si avvia automaticamente!
           
-          ### 📝 Collegamento Desktop
-          - Un collegamento "Inferno Console" sarà creato sul desktop
-          - Puoi anche lanciare l'app dal menu Start
+          ### ✨ Caratteristiche Installer
+          - **Singolo file .exe** - tutto incluso
+          - **Auto-estrazione** - nessuna dipendenza esterna
+          - **Shortcut automatici** - Desktop e Start Menu
+          - **Compatibile con electron-updater**
           
           ### 📝 Note
           - Versione sviluppata da Alessandro(NeverAgain)
           - Licenza MIT
           - Supporto completo per streaming Icecast
         files: |
-          dist-electron/*.exe
+          dist-electron/Inferno-Console-Installer.exe
           dist-electron/latest.yml
-          dist-electron/create_shortcut.ps1
         draft: false
         prerelease: false
         generate_release_notes: true

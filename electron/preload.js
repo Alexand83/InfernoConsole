@@ -40,6 +40,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   refreshFileManager: (path) => ipcRenderer.invoke('refresh-file-manager', path),
   addToLibrary: (trackData) => ipcRenderer.invoke('add-to-library', trackData),
   // ===== APP INFO API - RIMOSSO per versione portabile =====
+  // ===== SHORTCUT API =====
+  createPortableShortcut: () => ipcRenderer.invoke('create-portable-shortcut'),
+  onPortableShortcutInfo: (callback) => ipcRenderer.on('portable-app-shortcut-info', callback),
+  removePortableShortcutInfoListener: (callback) => ipcRenderer.removeListener('portable-app-shortcut-info', callback),
   // ===== WEBRTC SERVER API =====
   webrtcServerAPI: {
     startServer: (options) => ipcRenderer.invoke('start-webrtc-server', options),
