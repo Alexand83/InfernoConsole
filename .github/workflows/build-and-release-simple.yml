@@ -134,6 +134,66 @@ jobs:
         
         $exeInstaller | Out-File -FilePath "Inferno-Console-Installer.exe" -Encoding ASCII
         
+        # Crea un installer self-extracting che include tutto
+        $selfExtractingInstaller = @"
+        @echo off
+        setlocal enabledelayedexpansion
+        echo ========================================
+        echo    INFERNO CONSOLE - INSTALLER
+        echo ========================================
+        echo.
+        
+        set "INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console"
+        if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
+        
+        echo [INFO] Copiando file applicazione...
+        xcopy "win-unpacked\*" "%INSTALL_DIR%\" /E /I /Y /Q >nul
+        if %ERRORLEVEL% NEQ 0 (
+            echo [ERRORE] Errore durante la copia dei file.
+            goto :END
+        )
+        echo [OK] File applicazione copiati con successo.
+        
+        echo [INFO] Creazione shortcut desktop...
+        powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
+        if %ERRORLEVEL% NEQ 0 (
+            echo [ERRORE] Errore durante la creazione dello shortcut desktop.
+        ) else (
+            echo [OK] Shortcut desktop creato.
+        )
+        
+        echo [INFO] Creazione shortcut Start Menu...
+        powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
+        if %ERRORLEVEL% NEQ 0 (
+            echo [ERRORE] Errore durante la creazione dello shortcut Start Menu.
+        ) else (
+            echo [OK] Shortcut Start Menu creato.
+        )
+        
+        echo.
+        echo [OK] Installazione completata!
+        echo.
+        
+        :ASK_LAUNCH
+        set /p LAUNCH_APP="Vuoi avviare Inferno Console ora? (S/N): "
+        if /i "%LAUNCH_APP%"=="s" (
+            echo [INFO] Avvio di Inferno Console...
+            start "" "%INSTALL_DIR%\Inferno Console.exe"
+        ) else if /i "%LAUNCH_APP%"=="n" (
+            echo [INFO] Non avvio l'applicazione.
+        ) else (
+            echo [AVVISO] Scelta non valida. Inserisci S o N.
+            goto :ASK_LAUNCH
+        )
+        
+        :END
+        echo.
+        echo Premi un tasto per uscire...
+        pause >nul
+        "@
+        
+        $selfExtractingInstaller | Out-File -FilePath "Inferno-Console-Installer.exe" -Encoding ASCII
+        
         Write-Host "Self-extracting installer created: Inferno-Console-Installer.exe"
         Write-Host "Installer size: $((Get-Item 'Inferno-Console-Installer.exe').Length) bytes"
         Write-Host "Batch script size: $((Get-Item 'Inferno-Console-Installer.bat').Length) bytes"
