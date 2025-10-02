@@ -204,81 +204,170 @@ jobs:
         # Leggi il file portabile come array di bytes
         $portableExe = Get-ChildItem -Name "Inferno-Console-win.exe" -ErrorAction SilentlyContinue
         if ($portableExe) {
-            $appBytes = [System.IO.File]::ReadAllBytes($portableExe)
-            Write-Host "Read application file: $portableExe ($($appBytes.Length) bytes)"
+            $fullPath = Join-Path (Get-Location) $portableExe
+            Write-Host "Looking for application file at: $fullPath"
+            if (Test-Path $fullPath) {
+                $appBytes = [System.IO.File]::ReadAllBytes($fullPath)
+                Write-Host "Read application file: $portableExe ($($appBytes.Length) bytes)"
+            } else {
+                Write-Host "Application file not found at: $fullPath"
+                $portableExe = $null
+            }
             
-            # Crea un installer che include l'applicazione come array di bytes usando file temporaneo
-            Write-Host "Creating installer with embedded application using temporary file..."
-            
-            # Crea il contenuto dell'installer come stringa concatenata
-            $installerContent = "@echo off`n" +
-            "setlocal enabledelayedexpansion`n" +
-            "echo ========================================`n" +
-            "echo    INFERNO CONSOLE - INSTALLER`n" +
-            "echo ========================================`n" +
-            "echo.`n" +
-            "`n" +
-            "set `"INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console`"`n" +
-            "if not exist `"%INSTALL_DIR%`" mkdir `"%INSTALL_DIR%`"`n" +
-            "`n" +
-            "echo [INFO] Estrazione applicazione dall'installer...`n" +
-            "echo [INFO] Questo installer contiene l'applicazione completa...`n" +
-            "`n" +
-            "REM Crea un file PowerShell temporaneo per estrarre l'applicazione`n" +
-            "echo [INFO] Creazione script di estrazione...`n" +
-            "`n" +
-            "powershell -Command `"`n" +
-            "# Array di bytes dell'applicazione (119MB)`n" +
-            "`$appBytes = @($(($appBytes -join ',')))`n" +
-            "# Salva l'applicazione`n" +
-            "[System.IO.File]::WriteAllBytes('%INSTALL_DIR%\Inferno Console.exe', `$appBytes)`n" +
-            "Write-Host '[OK] Applicazione estratta con successo!'`n" +
-            "`" >nul 2>&1`n" +
-            "`n" +
-            "if %ERRORLEVEL% NEQ 0 (`n" +
-            "    echo [ERRORE] Errore durante l'estrazione dell'applicazione.`n" +
-            "    goto :END`n" +
-            ")`n" +
-            "`n" +
-            "echo [OK] Applicazione estratta con successo!`n" +
-            "`n" +
-            "echo [INFO] Creazione shortcut desktop...`n" +
-            "powershell -Command `"$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()`" >nul 2>&1`n" +
-            "if %ERRORLEVEL% NEQ 0 (`n" +
-            "    echo [ERRORE] Errore durante la creazione dello shortcut desktop.`n" +
-            ") else (`n" +
-            "    echo [OK] Shortcut desktop creato.`n" +
-            ")`n" +
-            "`n" +
-            "echo [INFO] Creazione shortcut Start Menu...`n" +
-            "powershell -Command `"$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()`" >nul 2>&1`n" +
-            "if %ERRORLEVEL% NEQ 0 (`n" +
-            "    echo [ERRORE] Errore durante la creazione dello shortcut Start Menu.`n" +
-            ") else (`n" +
-            "    echo [OK] Shortcut Start Menu creato.`n" +
-            ")`n" +
-            "`n" +
-            "echo.`n" +
-            "echo [OK] Installazione completata!`n" +
-            "echo [INFO] L'applicazione è stata installata in: %INSTALL_DIR%`n" +
-            "echo.`n" +
-            "`n" +
-            ":ASK_LAUNCH`n" +
-            "set /p LAUNCH_APP=`"Vuoi avviare Inferno Console ora? (S/N): `"`n" +
-            "if /i `"%LAUNCH_APP%`"==`"s`" (`n" +
-            "    echo [INFO] Avvio di Inferno Console...`n" +
-            "    start `"`" `"%INSTALL_DIR%\Inferno Console.exe`"`n" +
-            ") else if /i `"%LAUNCH_APP%`"==`"n`" (`n" +
-            "    echo [INFO] Non avvio l'applicazione.`n" +
-            ") else (`n" +
-            "    echo [AVVISO] Scelta non valida. Inserisci S o N.`n" +
-            "    goto :ASK_LAUNCH`n" +
-            ")`n" +
-            "`n" +
-            ":END`n" +
-            "echo.`n" +
-            "echo Premi un tasto per uscire...`n" +
-            "pause >nul"
+            if ($appBytes) {
+                # Crea un installer che include l'applicazione come array di bytes usando file temporaneo
+                Write-Host "Creating installer with embedded application using temporary file..."
+                
+                # Crea il contenuto dell'installer come stringa concatenata
+                $installerContent = "@echo off`n" +
+                "setlocal enabledelayedexpansion`n" +
+                "echo ========================================`n" +
+                "echo    INFERNO CONSOLE - INSTALLER`n" +
+                "echo ========================================`n" +
+                "echo.`n" +
+                "`n" +
+                "set `"INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console`"`n" +
+                "if not exist `"%INSTALL_DIR%`" mkdir `"%INSTALL_DIR%`"`n" +
+                "`n" +
+                "echo [INFO] Estrazione applicazione dall'installer...`n" +
+                "echo [INFO] Questo installer contiene l'applicazione completa...`n" +
+                "`n" +
+                "REM Crea un file PowerShell temporaneo per estrarre l'applicazione`n" +
+                "echo [INFO] Creazione script di estrazione...`n" +
+                "`n" +
+                "powershell -Command `"`n" +
+                "# Array di bytes dell'applicazione (119MB)`n" +
+                "`$appBytes = @($(($appBytes -join ',')))`n" +
+                "# Salva l'applicazione`n" +
+                "[System.IO.File]::WriteAllBytes('%INSTALL_DIR%\Inferno Console.exe', `$appBytes)`n" +
+                "Write-Host '[OK] Applicazione estratta con successo!'`n" +
+                "`" >nul 2>&1`n" +
+                "`n" +
+                "if %ERRORLEVEL% NEQ 0 (`n" +
+                "    echo [ERRORE] Errore durante l'estrazione dell'applicazione.`n" +
+                "    goto :END`n" +
+                ")`n" +
+                "`n" +
+                "echo [OK] Applicazione estratta con successo!`n" +
+                "`n" +
+                "echo [INFO] Creazione shortcut desktop...`n" +
+                "powershell -Command `"$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()`" >nul 2>&1`n" +
+                "if %ERRORLEVEL% NEQ 0 (`n" +
+                "    echo [ERRORE] Errore durante la creazione dello shortcut desktop.`n" +
+                ") else (`n" +
+                "    echo [OK] Shortcut desktop creato.`n" +
+                ")`n" +
+                "`n" +
+                "echo [INFO] Creazione shortcut Start Menu...`n" +
+                "powershell -Command `"$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()`" >nul 2>&1`n" +
+                "if %ERRORLEVEL% NEQ 0 (`n" +
+                "    echo [ERRORE] Errore durante la creazione dello shortcut Start Menu.`n" +
+                ") else (`n" +
+                "    echo [OK] Shortcut Start Menu creato.`n" +
+                ")`n" +
+                "`n" +
+                "echo.`n" +
+                "echo [OK] Installazione completata!`n" +
+                "echo [INFO] L'applicazione è stata installata in: %INSTALL_DIR%`n" +
+                "echo.`n" +
+                "`n" +
+                ":ASK_LAUNCH`n" +
+                "set /p LAUNCH_APP=`"Vuoi avviare Inferno Console ora? (S/N): `"`n" +
+                "if /i `"%LAUNCH_APP%`"==`"s`" (`n" +
+                "    echo [INFO] Avvio di Inferno Console...`n" +
+                "    start `"`" `"%INSTALL_DIR%\Inferno Console.exe`"`n" +
+                ") else if /i `"%LAUNCH_APP%`"==`"n`" (`n" +
+                "    echo [INFO] Non avvio l'applicazione.`n" +
+                ") else (`n" +
+                "    echo [AVVISO] Scelta non valida. Inserisci S o N.`n" +
+                "    goto :ASK_LAUNCH`n" +
+                ")`n" +
+                "`n" +
+                ":END`n" +
+                "echo.`n" +
+                "echo Premi un tasto per uscire...`n" +
+                "pause >nul"
+            } else {
+                Write-Host "Application bytes not available, creating download installer instead..."
+                $installerContent = "@echo off`n" +
+                "setlocal enabledelayedexpansion`n" +
+                "echo ========================================`n" +
+                "echo    INFERNO CONSOLE - INSTALLER`n" +
+                "echo ========================================`n" +
+                "echo.`n" +
+                "`n" +
+                "set `"INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console`"`n" +
+                "if not exist `"%INSTALL_DIR%`" mkdir `"%INSTALL_DIR%`"`n" +
+                "`n" +
+                "echo [INFO] Download dell'applicazione Inferno Console...`n" +
+                "echo [INFO] Questo installer scaricherà e installerà l'applicazione...`n" +
+                "`n" +
+                "REM URL del file portabile da scaricare`n" +
+                "set `"DOWNLOAD_URL=https://github.com/Alexand83/InfernoConsole/releases/latest/download/Inferno-Console-win.exe`"`n" +
+                "set `"TEMP_FILE=%TEMP%\Inferno-Console-win.exe`"`n" +
+                "`n" +
+                "echo [INFO] Scaricamento da: %DOWNLOAD_URL%`n" +
+                "echo [INFO] File temporaneo: %TEMP_FILE%`n" +
+                "`n" +
+                "REM Scarica il file usando PowerShell`n" +
+                "powershell -Command `"try { Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%TEMP_FILE%' -UseBasicParsing; Write-Host '[OK] Download completato' } catch { Write-Host '[ERRORE] Download fallito:' $_.Exception.Message; exit 1 }`"`n" +
+                "if %ERRORLEVEL% NEQ 0 (`n" +
+                "    echo [ERRORE] Errore durante il download dell'applicazione.`n" +
+                "    goto :END`n" +
+                ")`n" +
+                "`n" +
+                "echo [OK] Download completato con successo!`n" +
+                "`n" +
+                "echo [INFO] Copia dell'applicazione nella directory di installazione...`n" +
+                "copy `"%TEMP_FILE%`" `"%INSTALL_DIR%\Inferno Console.exe`" >nul`n" +
+                "if %ERRORLEVEL% NEQ 0 (`n" +
+                "    echo [ERRORE] Errore durante la copia dell'applicazione.`n" +
+                "    goto :END`n" +
+                ")`n" +
+                "`n" +
+                "echo [OK] Applicazione copiata con successo!`n" +
+                "`n" +
+                "REM Pulisci il file temporaneo`n" +
+                "del `"%TEMP_FILE%`" >nul 2>&1`n" +
+                "`n" +
+                "echo [INFO] Creazione shortcut desktop...`n" +
+                "powershell -Command `"$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()`" >nul 2>&1`n" +
+                "if %ERRORLEVEL% NEQ 0 (`n" +
+                "    echo [ERRORE] Errore durante la creazione dello shortcut desktop.`n" +
+                ") else (`n" +
+                "    echo [OK] Shortcut desktop creato.`n" +
+                ")`n" +
+                "`n" +
+                "echo [INFO] Creazione shortcut Start Menu...`n" +
+                "powershell -Command `"$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()`" >nul 2>&1`n" +
+                "if %ERRORLEVEL% NEQ 0 (`n" +
+                "    echo [ERRORE] Errore durante la creazione dello shortcut Start Menu.`n" +
+                ") else (`n" +
+                "    echo [OK] Shortcut Start Menu creato.`n" +
+                ")`n" +
+                "`n" +
+                "echo.`n" +
+                "echo [OK] Installazione completata!`n" +
+                "echo [INFO] L'applicazione è stata scaricata e installata in: %INSTALL_DIR%`n" +
+                "echo.`n" +
+                "`n" +
+                ":ASK_LAUNCH`n" +
+                "set /p LAUNCH_APP=`"Vuoi avviare Inferno Console ora? (S/N): `"`n" +
+                "if /i `"%LAUNCH_APP%`"==`"s`" (`n" +
+                "    echo [INFO] Avvio di Inferno Console...`n" +
+                "    start `"`" `"%INSTALL_DIR%\Inferno Console.exe`"`n" +
+                ") else if /i `"%LAUNCH_APP%`"==`"n`" (`n" +
+                "    echo [INFO] Non avvio l'applicazione.`n" +
+                ") else (`n" +
+                "    echo [AVVISO] Scelta non valida. Inserisci S o N.`n" +
+                "    goto :ASK_LAUNCH`n" +
+                ")`n" +
+                "`n" +
+                ":END`n" +
+                "echo.`n" +
+                "echo Premi un tasto per uscire...`n" +
+                "pause >nul"
+            }
         } else {
             Write-Host "Portable executable not found, creating download installer instead..."
             $installerContent = "@echo off`n" +
