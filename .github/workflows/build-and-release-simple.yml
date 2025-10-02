@@ -60,78 +60,83 @@ jobs:
         $EXE_FILE = Get-ChildItem -Name "*.exe" | Select-Object -First 1
         Write-Host "Found executable: $EXE_FILE"
         
-        # Crea un installer PowerShell che include tutto
+        # Crea un installer batch che include tutto
         $installerScript = @"
-        # Inferno Console Self-Extracting Installer
-        param([string]$InstallDir = [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'Inferno Console'))
+        @echo off
+        setlocal enabledelayedexpansion
+        echo ========================================
+        echo    INFERNO CONSOLE - INSTALLER
+        echo ========================================
+        echo.
         
-        Write-Host "========================================"
-        Write-Host "   INFERNO CONSOLE - INSTALLER"
-        Write-Host "========================================"
-        Write-Host ""
+        set "INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console"
+        if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
         
-        # Crea directory di installazione
-        if (-not (Test-Path $InstallDir)) {
-            New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-            Write-Host "[INFO] Directory creata: $InstallDir"
-        } else {
-            Write-Host "[INFO] Directory esistente: $InstallDir"
-        }
+        echo [INFO] Copiando file applicazione...
+        xcopy "win-unpacked\*" "%INSTALL_DIR%\" /E /I /Y /Q >nul
+        if %ERRORLEVEL% NEQ 0 (
+            echo [ERRORE] Errore durante la copia dei file.
+            goto :END
+        )
+        echo [OK] File applicazione copiati con successo.
         
-        # Estrai i file dell'applicazione (simulato - in realtà i file sono già presenti)
-        Write-Host "[INFO] Copiando file applicazione..."
-        $SourceDir = Join-Path $PSScriptRoot "win-unpacked"
-        if (Test-Path $SourceDir) {
-            Copy-Item -Path "$SourceDir\*" -Destination $InstallDir -Recurse -Force
-            Write-Host "[OK] File applicazione copiati"
-        } else {
-            Write-Host "[ERRORE] Directory win-unpacked non trovata"
-            exit 1
-        }
+        echo [INFO] Creazione shortcut desktop...
+        powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
+        if %ERRORLEVEL% NEQ 0 (
+            echo [ERRORE] Errore durante la creazione dello shortcut desktop.
+        ) else (
+            echo [OK] Shortcut desktop creato.
+        )
         
-        # Crea shortcut desktop
-        Write-Host "[INFO] Creazione shortcut desktop..."
-        $WshShell = New-Object -comObject WScript.Shell
-        $DesktopShortcut = $WshShell.CreateShortcut([System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'Inferno Console.lnk'))
-        $DesktopShortcut.TargetPath = Join-Path $InstallDir "Inferno Console.exe"
-        $DesktopShortcut.WorkingDirectory = $InstallDir
-        $DesktopShortcut.Description = "Inferno Console - DJ Software"
-        $DesktopShortcut.Save()
-        Write-Host "[OK] Shortcut desktop creato"
+        echo [INFO] Creazione shortcut Start Menu...
+        powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
+        if %ERRORLEVEL% NEQ 0 (
+            echo [ERRORE] Errore durante la creazione dello shortcut Start Menu.
+        ) else (
+            echo [OK] Shortcut Start Menu creato.
+        )
         
-        # Crea shortcut Start Menu
-        Write-Host "[INFO] Creazione shortcut Start Menu..."
-        $StartMenuShortcut = $WshShell.CreateShortcut([System.IO.Path]::Combine([System.Environment]::GetFolderPath('StartMenuPrograms'), 'Inferno Console.lnk'))
-        $StartMenuShortcut.TargetPath = Join-Path $InstallDir "Inferno Console.exe"
-        $StartMenuShortcut.WorkingDirectory = $InstallDir
-        $StartMenuShortcut.Description = "Inferno Console - DJ Software"
-        $StartMenuShortcut.Save()
-        Write-Host "[OK] Shortcut Start Menu creato"
+        echo.
+        echo [OK] Installazione completata!
+        echo.
         
-        Write-Host ""
-        Write-Host "[OK] Installazione completata!"
-        Write-Host "Premi INVIO per avviare Inferno Console..."
-        Read-Host | Out-Null
-        Start-Process -FilePath (Join-Path $InstallDir "Inferno Console.exe")
+        :ASK_LAUNCH
+        set /p LAUNCH_APP="Vuoi avviare Inferno Console ora? (S/N): "
+        if /i "%LAUNCH_APP%"=="s" (
+            echo [INFO] Avvio di Inferno Console...
+            start "" "%INSTALL_DIR%\Inferno Console.exe"
+        ) else if /i "%LAUNCH_APP%"=="n" (
+            echo [INFO] Non avvio l'applicazione.
+        ) else (
+            echo [AVVISO] Scelta non valida. Inserisci S o N.
+            goto :ASK_LAUNCH
+        )
+        
+        :END
+        echo.
+        echo Premi un tasto per uscire...
+        pause >nul
         "@
         
-        $installerScript | Out-File -FilePath "Inferno-Console-Installer.ps1" -Encoding UTF8
+        $installerScript | Out-File -FilePath "Inferno-Console-Installer.bat" -Encoding ASCII
         
-        # Crea un wrapper batch che esegue PowerShell
-        $batchWrapper = @"
+        # Crea un installer .exe che include tutto
+        $exeInstaller = @"
         @echo off
+        setlocal enabledelayedexpansion
         echo ========================================
         echo    INFERNO CONSOLE - INSTALLER
         echo ========================================
         echo.
         echo [INFO] Avvio installer...
-        powershell -ExecutionPolicy Bypass -File "%~dp0Inferno-Console-Installer.ps1"
+        call "%~dp0Inferno-Console-Installer.bat"
         "@
         
-        $batchWrapper | Out-File -FilePath "Inferno-Console-Installer.exe" -Encoding ASCII
+        $exeInstaller | Out-File -FilePath "Inferno-Console-Installer.exe" -Encoding ASCII
         
         Write-Host "Self-extracting installer created: Inferno-Console-Installer.exe"
         Write-Host "Installer size: $((Get-Item 'Inferno-Console-Installer.exe').Length) bytes"
+        Write-Host "Batch script size: $((Get-Item 'Inferno-Console-Installer.bat').Length) bytes"
 
     - name: Generate latest.yml for Windows
       if: matrix.os == 'windows-latest'
