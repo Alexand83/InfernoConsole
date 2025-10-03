@@ -41,15 +41,122 @@ try {
     process.exit(1);
 }
 
-// 4. Create installer package
+// 3.5. Copy portable executable if it exists
+console.log('📁 Looking for portable executable...');
+const portableExePath = path.join(installerDir, '..', 'dist-electron', 'Inferno-Console-win.exe');
+if (fs.existsSync(portableExePath)) {
+    try {
+        fs.copySync(portableExePath, path.join(outputDir, 'Inferno-Console-win.exe'));
+        console.log('✅ Portable executable copied');
+    } catch (error) {
+        console.error('❌ Failed to copy portable executable:', error.message);
+    }
+} else {
+    console.log('⚠️  Portable executable not found, will be created by main build');
+}
+
+// 4. Create uninstaller
+console.log('📦 Creating uninstaller...');
+const uninstallerContent = `@echo off
+echo ========================================
+echo    INFERNO CONSOLE - UNINSTALLER
+echo ========================================
+echo.
+echo [AVVISO] Questo rimuoverà Inferno Console dal sistema.
+echo.
+
+set "INSTALL_DIR=%USERPROFILE%\\Desktop\\Inferno Console"
+
+:CONFIRM
+set /p CONFIRM="Sei sicuro di voler disinstallare? (S/N): "
+if /i "%CONFIRM%"=="s" (
+    goto :UNINSTALL
+) else if /i "%CONFIRM%"=="n" (
+    echo [INFO] Disinstallazione annullata.
+    goto :END
+) else (
+    echo [AVVISO] Scelta non valida. Inserisci S o N.
+    goto :CONFIRM
+)
+
+:UNINSTALL
+echo [INFO] Rimozione file applicazione...
+if exist "%INSTALL_DIR%" (
+    rmdir /s /q "%INSTALL_DIR%" 2>nul
+    if %ERRORLEVEL% NEQ 0 (
+        echo [ERRORE] Impossibile rimuovere alcuni file. Prova a chiudere l'applicazione e riprova.
+    ) else (
+        echo [OK] File applicazione rimossi.
+    )
+) else (
+    echo [INFO] Directory non trovata, probabilmente già rimossa.
+)
+
+echo [INFO] Rimozione shortcut desktop...
+if exist "%USERPROFILE%\\Desktop\\Inferno Console.lnk" (
+    del "%USERPROFILE%\\Desktop\\Inferno Console.lnk" 2>nul
+    echo [OK] Shortcut desktop rimosso.
+)
+
+echo [INFO] Rimozione shortcut Start Menu...
+if exist "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Inferno Console.lnk" (
+    del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Inferno Console.lnk" 2>nul
+    echo [OK] Shortcut Start Menu rimosso.
+)
+
+echo.
+echo ========================================
+echo    DISINSTALLAZIONE COMPLETATA!
+echo ========================================
+echo.
+echo [OK] Inferno Console è stato rimosso dal sistema.
+echo.
+
+:END
+echo Premi un tasto per uscire...
+pause >nul`;
+
+fs.writeFileSync(path.join(outputDir, 'Inferno-Console-Uninstaller.exe'), uninstallerContent);
+console.log('✅ Uninstaller created');
+
+// 5. Create latest.yml for electron-updater
+console.log('📦 Creating latest.yml...');
+const installerExePath = path.join(outputDir, outputExe);
+const portableExePath = path.join(outputDir, 'Inferno-Console-win.exe');
+
+let latestYml = `version: 1.4.100
+files:
+  - url: Inferno-Console-Installer.exe
+    sha512: ${require('crypto').createHash('sha512').update(fs.readFileSync(installerExePath)).digest('hex')}
+    size: ${fs.statSync(installerExePath).size}`;
+
+// Add portable executable if it exists
+if (fs.existsSync(portableExePath)) {
+    latestYml += `
+  - url: Inferno-Console-win.exe
+    sha512: ${require('crypto').createHash('sha512').update(fs.readFileSync(portableExePath)).digest('hex')}
+    size: ${fs.statSync(portableExePath).size}`;
+}
+
+latestYml += `
+path: Inferno-Console-Installer.exe
+sha512: ${require('crypto').createHash('sha512').update(fs.readFileSync(installerExePath)).digest('hex')}
+releaseDate: ${new Date().toISOString()}`;
+
+fs.writeFileSync(path.join(outputDir, 'latest.yml'), latestYml);
+console.log('✅ latest.yml created');
+
+// 6. Create installer package
 console.log('📦 Creating installer package...');
 const installerPackage = {
     name: 'Inferno-Console-Installer',
-    version: '1.4.99',
+    version: '1.4.100',
     description: 'Custom installer for Inferno Console',
     main: outputExe,
     files: [
         outputExe,
+        'Inferno-Console-Uninstaller.exe',
+        'latest.yml',
         'gui/**/*',
         'assets/**/*'
     ]
