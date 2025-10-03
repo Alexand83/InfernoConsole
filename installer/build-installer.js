@@ -9,48 +9,122 @@ const outputExe = 'Inferno-Console-Installer.exe';
 
 console.log('\n🔨 BUILDING CUSTOM INSTALLER FOR GITHUB RELEASE\n');
 
-// 1. Clean previous builds
+// 1. Clean previous builds (but preserve portable executable)
 console.log('🧹 Cleaning previous builds...');
 if (fs.existsSync(outputDir)) {
-    fs.removeSync(outputDir);
+    // Check if portable executable exists
+    const portableExePath = path.join(outputDir, 'Inferno-Console-win.exe');
+    if (fs.existsSync(portableExePath)) {
+        console.log('💾 Portable executable found, skipping clean to preserve it');
+        // Only clean installer-specific files
+        const installerFiles = ['Inferno-Console-Installer.exe', 'Inferno-Console-Uninstaller.exe', 'latest.yml', 'package.json', 'README.md', 'release-info.json'];
+        installerFiles.forEach(file => {
+            const filePath = path.join(outputDir, file);
+            if (fs.existsSync(filePath)) {
+                fs.removeSync(filePath);
+            }
+        });
+        // Clean installer directory if it exists
+        const installerDirPath = path.join(outputDir, 'installer');
+        if (fs.existsSync(installerDirPath)) {
+            fs.removeSync(installerDirPath);
+        }
+    } else {
+        // No portable executable, safe to clean everything
+        fs.removeSync(outputDir);
+        fs.mkdirpSync(outputDir);
+    }
+} else {
+    fs.mkdirpSync(outputDir);
 }
-fs.mkdirpSync(outputDir);
 console.log('✅ Clean completed');
 
-// 2. Build installer executable using pkg
-console.log('🔨 Building installer executable...');
+// 2. Create installer executable using electron-builder
+console.log('🔨 Creating installer executable...');
+
+// Create a simple Node.js launcher that starts Electron
+const launcherScript = `const { spawn } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+
+console.log('🚀 Starting Inferno Console Installer...');
+
+// Find the installer directory
+const installerDir = path.join(__dirname, 'installer');
+console.log('Looking for installer directory at:', installerDir);
+if (!fs.existsSync(installerDir)) {
+    console.error('❌ Installer directory not found at:', installerDir);
+    console.log('Current directory contents:');
+    try {
+        const files = fs.readdirSync(__dirname);
+        files.forEach(file => console.log('  -', file));
+    } catch (err) {
+        console.error('Error reading directory:', err.message);
+    }
+    process.exit(1);
+}
+
+// Start Electron
+const electronProcess = spawn('npx', ['electron', '.'], {
+    cwd: installerDir,
+    stdio: 'inherit',
+    shell: true
+});
+
+electronProcess.on('close', (code) => {
+    console.log(\`Installer process exited with code \${code}\`);
+});
+
+electronProcess.on('error', (err) => {
+    console.error('Failed to start installer:', err);
+    process.exit(1);
+});`;
+
+// Write launcher script
+const launcherFile = path.join(outputDir, 'installer-launcher.js');
+fs.writeFileSync(launcherFile, launcherScript);
+
+// Create executable using pkg with assets
 try {
-    execSync(`pkg ${mainFile} --targets node18-win-x64 --output ${path.join(outputDir, outputExe)}`, {
-        cwd: installerDir,
+    execSync(`pkg ${launcherFile} --targets node18-win-x64 --output ${path.join(outputDir, outputExe)} --assets installer`, {
+        cwd: outputDir,
         stdio: 'inherit'
     });
     console.log('✅ Installer executable built');
+    
+    // Clean up launcher file
+    fs.removeSync(launcherFile);
 } catch (error) {
     console.error('❌ Failed to build installer executable:', error.message);
-    process.exit(1);
+    console.log('🔄 Falling back to batch launcher...');
+    
+    // Fallback: create batch launcher
+    const installerLauncher = `@echo off
+echo Starting Inferno Console Installer...
+cd /d "%~dp0"
+cd installer
+npm start
+pause`;
+
+    fs.writeFileSync(path.join(outputDir, outputExe), installerLauncher);
+    console.log('✅ Installer batch launcher created');
 }
 
-// 3. Copy GUI files to output directory
-console.log('📁 Copying GUI files...');
+// 3. Copy installer directory to output
+console.log('📁 Copying installer directory...');
 try {
-    fs.copySync(path.join(installerDir, 'gui'), path.join(outputDir, 'gui'));
-    fs.copySync(path.join(installerDir, 'assets'), path.join(outputDir, 'assets'));
-    console.log('✅ GUI files copied');
+    fs.copySync(installerDir, path.join(outputDir, 'installer'));
+    console.log('✅ Installer directory copied');
 } catch (error) {
-    console.error('❌ Failed to copy GUI files:', error.message);
+    console.error('❌ Failed to copy installer directory:', error.message);
     process.exit(1);
 }
 
-// 3.5. Copy portable executable if it exists
-console.log('📁 Looking for portable executable...');
-const portableExePath = path.join(installerDir, '..', 'dist-electron', 'Inferno-Console-win.exe');
+// 3.5. Check if portable executable exists
+console.log('📁 Checking for portable executable...');
+const portableExePath = path.join(outputDir, 'Inferno-Console-win.exe');
 if (fs.existsSync(portableExePath)) {
-    try {
-        fs.copySync(portableExePath, path.join(outputDir, 'Inferno-Console-win.exe'));
-        console.log('✅ Portable executable copied');
-    } catch (error) {
-        console.error('❌ Failed to copy portable executable:', error.message);
-    }
+    console.log('✅ Portable executable found');
 } else {
     console.log('⚠️  Portable executable not found, will be created by main build');
 }
