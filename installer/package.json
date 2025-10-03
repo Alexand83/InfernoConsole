@@ -1,0 +1,33 @@
+{
+  "name": "inferno-console-installer",
+  "version": "1.0.0",
+  "description": "Custom installer for Inferno Console",
+  "main": "main-gui-simple.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "build": "pkg main-gui-simple.js --targets node18-win-x64 --output Inferno-Console-Installer.exe"
+  },
+  "dependencies": {
+    "electron": "^28.0.0",
+    "axios": "^1.6.0",
+    "fs-extra": "^11.1.1",
+    "progress": "^2.0.3",
+    "chalk": "^4.1.2",
+    "inquirer": "^8.2.6"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "assets": [
+      "gui/**/*",
+      "assets/**/*"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ]
+  },
+  "author": "Inferno Console Team",
+  "license": "MIT"
+}

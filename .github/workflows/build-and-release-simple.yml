@@ -49,6 +49,15 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
+    - name: Build Custom Installer (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        cd installer
+        npm install
+        node build-installer.js
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
     - name: Create Self-Extracting Installer (Windows)
       if: matrix.os == 'windows-latest'
       shell: pwsh
@@ -527,6 +536,7 @@ jobs:
         files: |
           dist-electron/Inferno-Console-Installer.exe
           dist-electron/Inferno-Console-Uninstaller.exe
+          dist-electron/Inferno-Console-win.exe
           dist-electron/latest.yml
         draft: false
         prerelease: false

@@ -27,6 +27,10 @@ class AppUpdater {
     customInstallDir = customInstallDir.replace(/%([^%]+)%/g, (match, envVar) => {
       return process.env[envVar] || match
     })
+
+    // ✅ NUOVO: Rileva se l'app è stata installata con l'installer personalizzato
+    this.isCustomInstaller = this.detectCustomInstaller()
+    this.customInstallPath = this.getCustomInstallPath()
     
     // Fallback sicuro se i path non sono validi
     if (!customUpdateDir || customUpdateDir.includes('%')) {
@@ -250,6 +254,12 @@ class AppUpdater {
       // Aggiorna lo stato
       this.downloadState.isDownloading = false
       this.downloadState.isDownloaded = true
+      
+      // ✅ NUOVO: Gestione percorso personalizzato per installer
+      if (this.isCustomInstaller && this.customInstallPath) {
+        console.log('🔧 Custom installer detected - preparing update for custom path')
+        this.prepareCustomUpdate(info)
+      }
       
       // Invia notifica di download completato
       const mainWindow = require('./main').getMainWindow()
@@ -556,6 +566,131 @@ updaterCacheDirName: inferno-console-updater`
   // ✅ RIMOSSO: Metodo findTargetExePath - solo post-update automatico
 
   // ✅ RIMOSSO: Tutti i metodi di creazione shortcut - solo post-update automatico
+
+  // ✅ NUOVO: Rileva se l'app è stata installata con l'installer personalizzato
+  detectCustomInstaller() {
+    try {
+      const fs = require('fs')
+      const appPath = process.execPath
+      const appDir = path.dirname(appPath)
+      
+      // Controlla se esiste un file di marker dell'installer personalizzato
+      const installerMarker = path.join(appDir, '..', 'installer-info.json')
+      if (fs.existsSync(installerMarker)) {
+        console.log('🔍 Custom installer detected')
+        return true
+      }
+      
+      // Controlla se l'app è in Program Files (installazione standard)
+      if (appPath.includes('Program Files') || appPath.includes('Program Files (x86)')) {
+        console.log('🔍 Standard installation detected')
+        return false
+      }
+      
+      // Controlla se l'app è portabile (temp directory)
+      if (appPath.includes('AppData\\Local\\Temp')) {
+        console.log('🔍 Portable app detected')
+        return false
+      }
+      
+      console.log('🔍 Unknown installation type')
+      return false
+    } catch (error) {
+      console.error('Error detecting installer type:', error)
+      return false
+    }
+  }
+
+  // ✅ NUOVO: Ottiene il percorso di installazione personalizzato
+  getCustomInstallPath() {
+    try {
+      const fs = require('fs')
+      const appPath = process.execPath
+      const appDir = path.dirname(appPath)
+      
+      // Leggi il marker dell'installer personalizzato
+      const installerMarker = path.join(appDir, '..', 'installer-info.json')
+      if (fs.existsSync(installerMarker)) {
+        const markerData = JSON.parse(fs.readFileSync(installerMarker, 'utf8'))
+        const customPath = markerData.installPath
+        
+        if (customPath && fs.existsSync(customPath)) {
+          console.log('📍 Custom install path found:', customPath)
+          return customPath
+        }
+      }
+      
+      console.log('📍 No custom install path found, using default')
+      return null
+    } catch (error) {
+      console.error('Error getting custom install path:', error)
+      return null
+    }
+  }
+
+  // ✅ NUOVO: Prepara l'aggiornamento per il percorso personalizzato
+  prepareCustomUpdate(info) {
+    try {
+      const fs = require('fs')
+      const os = require('os')
+      
+      // Trova il file scaricato
+      const updateCacheDir = path.join(os.tmpdir(), 'inferno-console-updater')
+      const downloadedFiles = fs.readdirSync(updateCacheDir)
+      
+      // Cerca il file .exe scaricato
+      const exeFile = downloadedFiles.find(file => file.endsWith('.exe'))
+      if (!exeFile) {
+        console.error('❌ No .exe file found in update cache')
+        return
+      }
+      
+      const sourcePath = path.join(updateCacheDir, exeFile)
+      const targetPath = path.join(this.customInstallPath, 'Inferno Console.exe')
+      
+      console.log('🔄 Preparing custom update...')
+      console.log('📁 Source:', sourcePath)
+      console.log('📁 Target:', targetPath)
+      
+      // Crea backup del file esistente
+      const backupPath = path.join(this.customInstallPath, 'Inferno Console.exe.backup')
+      if (fs.existsSync(targetPath)) {
+        fs.copyFileSync(targetPath, backupPath)
+        console.log('💾 Backup created:', backupPath)
+      }
+      
+      // Copia il nuovo file
+      fs.copyFileSync(sourcePath, targetPath)
+      console.log('✅ Update file copied to custom path')
+      
+      // Aggiorna il marker dell'installer
+      this.updateInstallerMarker(info.version)
+      
+    } catch (error) {
+      console.error('❌ Error preparing custom update:', error)
+    }
+  }
+
+  // ✅ NUOVO: Aggiorna il marker dell'installer con la nuova versione
+  updateInstallerMarker(version) {
+    try {
+      const fs = require('fs')
+      const appPath = process.execPath
+      const appDir = path.dirname(appPath)
+      const installerMarker = path.join(appDir, '..', 'installer-info.json')
+      
+      if (fs.existsSync(installerMarker)) {
+        const markerData = JSON.parse(fs.readFileSync(installerMarker, 'utf8'))
+        markerData.version = version
+        markerData.lastUpdate = new Date().toISOString()
+        
+        fs.writeFileSync(installerMarker, JSON.stringify(markerData, null, 2))
+        console.log('✅ Installer marker updated with version:', version)
+      }
+    } catch (error) {
+      console.error('❌ Error updating installer marker:', error)
+    }
+  }
 }
 
 module.exports = AppUpdater

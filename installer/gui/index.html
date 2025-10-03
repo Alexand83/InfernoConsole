@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inferno Console Installer</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="installer-container">
+        <!-- Header NSIS Style -->
+        <div class="installer-header">
+            <div class="header-content">
+                <div class="app-icon">🔥</div>
+                <div class="app-info">
+                    <h1>Inferno Console</h1>
+                    <p>Installer v1.4.98</p>
+                </div>
+            </div>
+            <div class="header-controls">
+                <button class="control-btn minimize" onclick="minimizeApp()">−</button>
+                <button class="control-btn close" onclick="closeApp()">×</button>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="installer-content">
+            <!-- Left Panel - Navigation -->
+            <div class="left-panel">
+                <div class="nav-section">
+                    <h3>Installazione</h3>
+                    <div class="nav-item active" data-step="welcome">
+                        <div class="nav-icon">🏠</div>
+                        <span>Benvenuto</span>
+                    </div>
+                    <div class="nav-item" data-step="license">
+                        <div class="nav-icon">📄</div>
+                        <span>Licenza</span>
+                    </div>
+                    <div class="nav-item" data-step="path">
+                        <div class="nav-icon">📁</div>
+                        <span>Directory</span>
+                    </div>
+                    <div class="nav-item" data-step="install">
+                        <div class="nav-icon">⚙️</div>
+                        <span>Installazione</span>
+                    </div>
+                    <div class="nav-item" data-step="complete">
+                        <div class="nav-icon">✅</div>
+                        <span>Completato</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Content -->
+            <div class="right-panel">
+                <!-- Welcome Step -->
+                <div id="step-welcome" class="step-content active">
+                    <div class="step-header">
+                        <h2>Benvenuto nell'installer di Inferno Console</h2>
+                        <p>Questo programma installerà Inferno Console sul tuo computer.</p>
+                    </div>
+                    <div class="step-body">
+                        <div class="welcome-info">
+                            <div class="info-card">
+                                <h3>🎵 Inferno Console</h3>
+                                <p>Software professionale per DJ con funzionalità avanzate di mixing e streaming.</p>
+                            </div>
+                            <div class="info-card">
+                                <h3>📋 Requisiti di Sistema</h3>
+                                <ul>
+                                    <li>Windows 10/11 (64-bit)</li>
+                                    <li>4 GB RAM (8 GB consigliati)</li>
+                                    <li>100 MB spazio libero</li>
+                                    <li>Connessione internet per download</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- License Step -->
+                <div id="step-license" class="step-content">
+                    <div class="step-header">
+                        <h2>Accordo di Licenza</h2>
+                        <p>Leggi attentamente i termini di licenza prima di procedere.</p>
+                    </div>
+                    <div class="step-body">
+                        <div class="license-text">
+                            <h3>Licenza MIT</h3>
+                            <p>Copyright (c) 2024 Inferno Console Team</p>
+                            <p>Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software...</p>
+                        </div>
+                        <div class="license-agreement">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="licenseAgree">
+                                <span class="checkmark"></span>
+                                Accetto i termini della licenza
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Path Selection Step -->
+                <div id="step-path" class="step-content">
+                    <div class="step-header">
+                        <h2>Selezione Directory di Installazione</h2>
+                        <p>Scegli dove installare Inferno Console.</p>
+                    </div>
+                    <div class="step-body">
+                        <div class="path-selector">
+                            <div class="path-input-group">
+                                <label for="installPath">Directory di installazione:</label>
+                                <div class="path-input-container">
+                                    <input type="text" id="installPath" value="C:\Program Files\Inferno Console" readonly>
+                                    <button class="browse-btn" onclick="browseFolder()">Sfoglia...</button>
+                                </div>
+                            </div>
+                            <div class="path-info">
+                                <div class="space-info">
+                                    <span>Spazio richiesto: ~120 MB</span>
+                                    <span>Spazio disponibile: <span id="freeSpace">Calcolo...</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Installation Step -->
+                <div id="step-install" class="step-content">
+                    <div class="step-header">
+                        <h2>Installazione in Corso</h2>
+                        <p>Attendere mentre Inferno Console viene installato...</p>
+                    </div>
+                    <div class="step-body">
+                        <div class="install-progress">
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="progressFill"></div>
+                                </div>
+                                <div class="progress-text" id="progressText">0%</div>
+                            </div>
+                            <div class="install-status" id="installStatus">Preparazione...</div>
+                        </div>
+                        <div class="install-log">
+                            <h4>Log di Installazione:</h4>
+                            <div class="log-content" id="logContent">
+                                <!-- Log messages will appear here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Complete Step -->
+                <div id="step-complete" class="step-content">
+                    <div class="step-header">
+                        <h2>Installazione Completata</h2>
+                        <p>Inferno Console è stato installato con successo!</p>
+                    </div>
+                    <div class="step-body">
+                        <div class="completion-info">
+                            <div class="success-icon">✅</div>
+                            <div class="completion-details">
+                                <h3>Installazione completata con successo!</h3>
+                                <p>Inferno Console è stato installato in:</p>
+                                <code id="installLocation">C:\Program Files\Inferno Console</code>
+                                <div class="completion-options">
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" id="launchApp" checked>
+                                        <span class="checkmark"></span>
+                                        Avvia Inferno Console
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" id="createShortcut" checked>
+                                        <span class="checkmark"></span>
+                                        Crea shortcut sul desktop
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer with Buttons -->
+        <div class="installer-footer">
+            <div class="footer-info">
+                <span id="footerText">Inferno Console Installer v1.4.98</span>
+            </div>
+            <div class="footer-buttons">
+                <button class="btn btn-secondary" id="backBtn" onclick="goBack()" style="display: none;">Indietro</button>
+                <button class="btn btn-primary" id="nextBtn" onclick="goNext()">Avanti</button>
+                <button class="btn btn-danger" id="cancelBtn" onclick="cancelInstall()" style="display: none;">Annulla</button>
+                <button class="btn btn-success" id="finishBtn" onclick="finishInstall()" style="display: none;">Fine</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
