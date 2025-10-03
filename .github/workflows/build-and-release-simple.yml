@@ -1,4 +1,4 @@
-name: Build and Release Inferno Console
+name: Build and Release
 
 on:
   push:
@@ -7,41 +7,24 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-release:
+  build:
     runs-on: ${{ matrix.os }}
-    
-    # ✅ FIX: Permessi per il token GitHub
-    permissions:
-      contents: write
-      packages: write
-      id-token: write
-    
     strategy:
-      fail-fast: false
       matrix:
         os: [windows-latest]
-        # macOS commentato - da rifare in seguito
-        # os: [windows-latest, macos-latest]
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup Node.js (Latest)
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '22'
-        check-latest: true
+        node-version: '18'
         cache: 'npm'
 
-    - name: Upgrade npm to latest
-      run: npm i -g npm@latest
-
     - name: Install dependencies
-      run: npm ci || npm install
-
-    - name: Build application
-      run: npm run build
+      run: npm ci
 
     - name: Build Electron app (Windows)
       if: matrix.os == 'windows-latest'
@@ -54,446 +37,10 @@ jobs:
       run: |
         cd installer
         npm install
+        npm install -g pkg
         node build-installer.js
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
-    - name: Create Self-Extracting Installer (Windows)
-      if: matrix.os == 'windows-latest'
-      shell: pwsh
-      run: |
-        Write-Host "Creating self-extracting installer for Windows..."
-        Set-Location dist-electron
-        
-        # Trova il file .exe generato
-        $EXE_FILE = Get-ChildItem -Name "*.exe" | Select-Object -First 1
-        Write-Host "Found executable: $EXE_FILE"
-        
-        # Crea un installer batch che include tutto
-        $installerScript = @"
-        @echo off
-        setlocal enabledelayedexpansion
-        echo ========================================
-        echo    INFERNO CONSOLE - INSTALLER
-        echo ========================================
-        echo.
-        
-        set "INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console"
-        if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
-        
-        echo [INFO] Copiando file applicazione...
-        xcopy "win-unpacked\*" "%INSTALL_DIR%\" /E /I /Y /Q >nul
-        if %ERRORLEVEL% NEQ 0 (
-            echo [ERRORE] Errore durante la copia dei file.
-            goto :END
-        )
-        echo [OK] File applicazione copiati con successo.
-        
-        echo [INFO] Creazione shortcut desktop...
-        powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
-        if %ERRORLEVEL% NEQ 0 (
-            echo [ERRORE] Errore durante la creazione dello shortcut desktop.
-        ) else (
-            echo [OK] Shortcut desktop creato.
-        )
-        
-        echo [INFO] Creazione shortcut Start Menu...
-        powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
-        if %ERRORLEVEL% NEQ 0 (
-            echo [ERRORE] Errore durante la creazione dello shortcut Start Menu.
-        ) else (
-            echo [OK] Shortcut Start Menu creato.
-        )
-        
-        echo.
-        echo [OK] Installazione completata!
-        echo.
-        
-        :ASK_LAUNCH
-        set /p LAUNCH_APP="Vuoi avviare Inferno Console ora? (S/N): "
-        if /i "%LAUNCH_APP%"=="s" (
-            echo [INFO] Avvio di Inferno Console...
-            start "" "%INSTALL_DIR%\Inferno Console.exe"
-        ) else if /i "%LAUNCH_APP%"=="n" (
-            echo [INFO] Non avvio l'applicazione.
-        ) else (
-            echo [AVVISO] Scelta non valida. Inserisci S o N.
-            goto :ASK_LAUNCH
-        )
-        
-        :END
-        echo.
-        echo Premi un tasto per uscire...
-        pause >nul
-        "@
-        
-        $installerScript | Out-File -FilePath "Inferno-Console-Installer.bat" -Encoding ASCII
-        
-        # Crea un installer .exe che include tutto
-        $exeInstaller = @"
-        @echo off
-        setlocal enabledelayedexpansion
-        echo ========================================
-        echo    INFERNO CONSOLE - INSTALLER
-        echo ========================================
-        echo.
-        echo [INFO] Avvio installer...
-        call "%~dp0Inferno-Console-Installer.bat"
-        "@
-        
-        $exeInstaller | Out-File -FilePath "Inferno-Console-Installer.exe" -Encoding ASCII
-        
-        # Crea un installer self-extracting che include tutto
-        $selfExtractingInstaller = @"
-        @echo off
-        setlocal enabledelayedexpansion
-        echo ========================================
-        echo    INFERNO CONSOLE - INSTALLER
-        echo ========================================
-        echo.
-        
-        set "INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console"
-        if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
-        
-        echo [INFO] Copiando file applicazione...
-        xcopy "win-unpacked\*" "%INSTALL_DIR%\" /E /I /Y /Q >nul
-        if %ERRORLEVEL% NEQ 0 (
-            echo [ERRORE] Errore durante la copia dei file.
-            goto :END
-        )
-        echo [OK] File applicazione copiati con successo.
-        
-        echo [INFO] Creazione shortcut desktop...
-        powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
-        if %ERRORLEVEL% NEQ 0 (
-            echo [ERRORE] Errore durante la creazione dello shortcut desktop.
-        ) else (
-            echo [OK] Shortcut desktop creato.
-        )
-        
-        echo [INFO] Creazione shortcut Start Menu...
-        powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()" >nul 2>&1
-        if %ERRORLEVEL% NEQ 0 (
-            echo [ERRORE] Errore durante la creazione dello shortcut Start Menu.
-        ) else (
-            echo [OK] Shortcut Start Menu creato.
-        )
-        
-        echo.
-        echo [OK] Installazione completata!
-        echo.
-        
-        :ASK_LAUNCH
-        set /p LAUNCH_APP="Vuoi avviare Inferno Console ora? (S/N): "
-        if /i "%LAUNCH_APP%"=="s" (
-            echo [INFO] Avvio di Inferno Console...
-            start "" "%INSTALL_DIR%\Inferno Console.exe"
-        ) else if /i "%LAUNCH_APP%"=="n" (
-            echo [INFO] Non avvio l'applicazione.
-        ) else (
-            echo [AVVISO] Scelta non valida. Inserisci S o N.
-            goto :ASK_LAUNCH
-        )
-        
-        :END
-        echo.
-        echo Premi un tasto per uscire...
-        pause >nul
-        "@
-        
-        # Crea installer self-extracting usando PowerShell per generare un vero .exe
-        Write-Host "Creating self-extracting installer executable..."
-        
-        # Crea un installer self-extracting che include tutti i file dell'app
-        Write-Host "Creating self-extracting installer with embedded files..."
-        
-        # Crea un installer di download efficiente (piccolo e veloce)
-        Write-Host "Creating efficient download installer..."
-        
-        # Crea il contenuto dell'installer con selezione directory
-        $installerContent = "@echo off`n" +
-        "setlocal enabledelayedexpansion`n" +
-        "echo ========================================`n" +
-        "echo    INFERNO CONSOLE - INSTALLER`n" +
-        "echo ========================================`n" +
-        "echo.`n" +
-        "`n" +
-        "echo [INFO] Benvenuto nell'installer di Inferno Console!`n" +
-        "echo [INFO] Questo installer scaricherà e installerà l'applicazione.`n" +
-        "echo [INFO] Dimensioni installer: ~5MB (efficiente e veloce)`n" +
-        "echo.`n" +
-        "`n" +
-        "REM Selezione directory di installazione`n" +
-        "echo [INFO] Selezione directory di installazione:`n" +
-        "echo.`n" +
-        "echo [1] Desktop (Raccomandato)`n" +
-        "echo [2] Programmi (C:\Program Files)`n" +
-        "echo [3] Documenti`n" +
-        "echo [4] Directory personalizzata`n" +
-        "echo.`n" +
-        ":SELECT_DIR`n" +
-        "set /p CHOICE=`"Scegli dove installare (1-4): `"`n" +
-        "`n" +
-        "if `"%CHOICE%`"==`"1`" (`n" +
-        "    set `"INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console`"`n" +
-        "    echo [OK] Directory selezionata: Desktop`n" +
-        ") else if `"%CHOICE%`"==`"2`" (`n" +
-        "    set `"INSTALL_DIR=C:\Program Files\Inferno Console`"`n" +
-        "    echo [OK] Directory selezionata: Programmi`n" +
-        "    echo [INFO] Potrebbe essere richiesto il permesso di amministratore.`n" +
-        ") else if `"%CHOICE%`"==`"3`" (`n" +
-        "    set `"INSTALL_DIR=%USERPROFILE%\Documents\Inferno Console`"`n" +
-        "    echo [OK] Directory selezionata: Documenti`n" +
-        ") else if `"%CHOICE%`"==`"4`" (`n" +
-        "    echo.`n" +
-        "    set /p CUSTOM_DIR=`"Inserisci il percorso completo (es: D:\MyApps\Inferno Console): `"`n" +
-        "    if `"!CUSTOM_DIR!`"==`"`" (`n" +
-        "        echo [ERRORE] Percorso non valido.`n" +
-        "        goto :SELECT_DIR`n" +
-        "    )`n" +
-        "    set `"INSTALL_DIR=!CUSTOM_DIR!`"`n" +
-        "    echo [OK] Directory personalizzata: !INSTALL_DIR!`n" +
-        ") else (`n" +
-        "    echo [ERRORE] Scelta non valida. Inserisci un numero da 1 a 4.`n" +
-        "    goto :SELECT_DIR`n" +
-        ")`n" +
-        "`n" +
-        "echo.`n" +
-        "echo [INFO] Directory di installazione: %INSTALL_DIR%`n" +
-        "echo [INFO] Creazione directory...`n" +
-        "if not exist `"%INSTALL_DIR%`" mkdir `"%INSTALL_DIR%`"`n" +
-        "if %ERRORLEVEL% NEQ 0 (`n" +
-        "    echo [ERRORE] Impossibile creare la directory. Verifica i permessi.`n" +
-        "    goto :END`n" +
-        ")`n" +
-        "echo [OK] Directory creata con successo.`n" +
-        "`n" +
-        "echo [INFO] Download dell'applicazione Inferno Console...`n" +
-        "echo [INFO] Scaricamento da GitHub...`n" +
-        "`n" +
-        "REM URL del file portabile da scaricare`n" +
-        "set `"DOWNLOAD_URL=https://github.com/Alexand83/InfernoConsole/releases/latest/download/Inferno-Console-win.exe`"`n" +
-        "set `"TEMP_FILE=%TEMP%\Inferno-Console-win.exe`"`n" +
-        "`n" +
-        "echo [INFO] URL: %DOWNLOAD_URL%`n" +
-        "echo [INFO] File temporaneo: %TEMP_FILE%`n" +
-        "echo [INFO] Dimensioni da scaricare: ~120MB`n" +
-        "`n" +
-        "REM Scarica il file usando PowerShell con progress bar`n" +
-        "echo [INFO] Avvio download...`n" +
-        "powershell -Command `"`n" +
-        "try {`n" +
-        "    `$ProgressPreference = 'SilentlyContinue'`n" +
-        "    Write-Host '[INFO] Connessione a GitHub...'`n" +
-        "    Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%TEMP_FILE%' -UseBasicParsing`n" +
-        "    Write-Host '[OK] Download completato con successo!'`n" +
-        "    `$fileSize = (Get-Item '%TEMP_FILE%').Length`n" +
-        "    Write-Host '[INFO] File scaricato: ' + [math]::Round(`$fileSize/1MB, 2) + ' MB'`n" +
-        "} catch {`n" +
-        "    Write-Host '[ERRORE] Download fallito:' `$_.Exception.Message`n" +
-        "    Write-Host '[INFO] Verifica la connessione internet e riprova.'`n" +
-        "    exit 1`n" +
-        "}`n" +
-        "`"`n" +
-        "if %ERRORLEVEL% NEQ 0 (`n" +
-        "    echo [ERRORE] Errore durante il download dell'applicazione.`n" +
-        "    echo [INFO] Verifica la connessione internet e riprova.`n" +
-        "    goto :END`n" +
-        ")`n" +
-        "`n" +
-        "echo [OK] Download completato con successo!`n" +
-        "`n" +
-        "echo [INFO] Copia dell'applicazione nella directory di installazione...`n" +
-        "copy `"%TEMP_FILE%`" `"%INSTALL_DIR%\Inferno Console.exe`" >nul`n" +
-        "if %ERRORLEVEL% NEQ 0 (`n" +
-        "    echo [ERRORE] Errore durante la copia dell'applicazione.`n" +
-        "    echo [INFO] Verifica i permessi di scrittura nella directory.`n" +
-        "    goto :END`n" +
-        ")`n" +
-        "`n" +
-        "echo [OK] Applicazione copiata con successo!`n" +
-        "`n" +
-        "REM Pulisci il file temporaneo`n" +
-        "del `"%TEMP_FILE%`" >nul 2>&1`n" +
-        "echo [INFO] File temporaneo rimosso.`n" +
-        "`n" +
-        "echo [INFO] Creazione shortcut desktop...`n" +
-        "powershell -Command `"$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()`" >nul 2>&1`n" +
-        "if %ERRORLEVEL% NEQ 0 (`n" +
-        "    echo [ERRORE] Errore durante la creazione dello shortcut desktop.`n" +
-        ") else (`n" +
-        "    echo [OK] Shortcut desktop creato.`n" +
-        ")`n" +
-        "`n" +
-        "echo [INFO] Creazione shortcut Start Menu...`n" +
-        "powershell -Command `"$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Inferno Console.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'Inferno Console - DJ Software'; $Shortcut.Save()`" >nul 2>&1`n" +
-        "if %ERRORLEVEL% NEQ 0 (`n" +
-        "    echo [ERRORE] Errore durante la creazione dello shortcut Start Menu.`n" +
-        ") else (`n" +
-        "    echo [OK] Shortcut Start Menu creato.`n" +
-        ")`n" +
-        "`n" +
-        "echo.`n" +
-        "echo ========================================`n" +
-        "echo    INSTALLAZIONE COMPLETATA!`n" +
-        "echo ========================================`n" +
-        "echo.`n" +
-        "echo [OK] Inferno Console è stato installato con successo!`n" +
-        "echo [INFO] Directory: %INSTALL_DIR%`n" +
-        "echo [INFO] Installer efficiente: solo ~5MB invece di ~425MB`n" +
-        "echo [INFO] L'applicazione è stata scaricata da GitHub`n" +
-        "echo.`n" +
-        "`n" +
-        ":ASK_LAUNCH`n" +
-        "set /p LAUNCH_APP=`"Vuoi avviare Inferno Console ora? (S/N): `"`n" +
-        "if /i `"%LAUNCH_APP%`"==`"s`" (`n" +
-        "    echo [INFO] Avvio di Inferno Console...`n" +
-        "    start `"`" `"%INSTALL_DIR%\Inferno Console.exe`"`n" +
-        ") else if /i `"%LAUNCH_APP%`"==`"n`" (`n" +
-        "    echo [INFO] Non avvio l'applicazione.`n" +
-        ") else (`n" +
-        "    echo [AVVISO] Scelta non valida. Inserisci S o N.`n" +
-        "    goto :ASK_LAUNCH`n" +
-        ")`n" +
-        "`n" +
-        ":END`n" +
-        "echo.`n" +
-        "echo Premi un tasto per uscire...`n" +
-        "pause >nul"
-
-        # Salva come file .exe
-        $installerContent | Out-File -FilePath "Inferno-Console-Installer.exe" -Encoding ASCII
-        
-        Write-Host "Interactive download installer created: Inferno-Console-Installer.exe"
-        Write-Host "Installer size: $((Get-Item 'Inferno-Console-Installer.exe').Length) bytes"
-        Write-Host "Features:"
-        Write-Host "  - User can choose installation directory"
-        Write-Host "  - Downloads application from GitHub (~120MB)"
-        Write-Host "  - Creates desktop and Start Menu shortcuts"
-        Write-Host "  - Much more efficient than embedding (~425MB)"
-        
-        # Crea anche l'uninstaller con log dettagliati
-        Write-Host "Creating self-extracting uninstaller executable..."
-        
-        $uninstallerContent = "@echo off`n" +
-        "setlocal enabledelayedexpansion`n" +
-        "echo ========================================`n" +
-        "echo    INFERNO CONSOLE - UNINSTALLER`n" +
-        "echo ========================================`n" +
-        "echo.`n" +
-        "`n" +
-        "set `"INSTALL_DIR=%USERPROFILE%\Desktop\Inferno Console`"`n" +
-        "`n" +
-        "echo [INFO] Tentativo di terminare il processo Inferno Console...`n" +
-        "taskkill /f /im `"Inferno Console.exe`" >nul 2>&1`n" +
-        "if %ERRORLEVEL% EQU 0 (`n" +
-        "    echo [OK] Processo terminato.`n" +
-        ") else (`n" +
-        "    echo [INFO] Processo non in esecuzione o non trovato.`n" +
-        ")`n" +
-        "`n" +
-        "echo [INFO] Rimozione shortcut desktop...`n" +
-        "del `"%USERPROFILE%\Desktop\Inferno Console.lnk`" >nul 2>&1`n" +
-        "if %ERRORLEVEL% EQU 0 (`n" +
-        "    echo [OK] Shortcut desktop rimosso.`n" +
-        ") else (`n" +
-        "    echo [INFO] Shortcut desktop non trovato o errore.`n" +
-        ")`n" +
-        "`n" +
-        "echo [INFO] Rimozione shortcut Start Menu...`n" +
-        "del `"%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk`" >nul 2>&1`n" +
-        "if %ERRORLEVEL% EQU 0 (`n" +
-        "    echo [OK] Shortcut Start Menu rimosso.`n" +
-        ") else (`n" +
-        "    echo [INFO] Shortcut Start Menu non trovato o errore.`n" +
-        ")`n" +
-        "`n" +
-        "echo [INFO] Rimozione directory di installazione: %INSTALL_DIR%`n" +
-        "if exist `"%INSTALL_DIR%`" (`n" +
-        "    rmdir /s /q `"%INSTALL_DIR%`" >nul 2>&1`n" +
-        "    if %ERRORLEVEL% EQU 0 (`n" +
-        "        echo [OK] Directory di installazione rimossa.`n" +
-        "    ) else (`n" +
-        "        echo [ERRORE] Errore durante la rimozione della directory di installazione.`n" +
-        "    )`n" +
-        ") else (`n" +
-        "    echo [INFO] Directory di installazione non trovata.`n" +
-        ")`n" +
-        "`n" +
-        "echo.`n" +
-        "echo [OK] Disinstallazione completata!`n" +
-        "echo.`n" +
-        "echo Premi un tasto per uscire...`n" +
-        "pause >nul"
-
-        $uninstallerContent | Out-File -FilePath "Inferno-Console-Uninstaller.exe" -Encoding ASCII
-        
-        Write-Host "Self-extracting uninstaller created: Inferno-Console-Uninstaller.exe"
-        Write-Host "Uninstaller size: $((Get-Item 'Inferno-Console-Uninstaller.exe').Length) bytes"
-
-    - name: Generate latest.yml for Windows
-      if: matrix.os == 'windows-latest'
-      shell: pwsh
-      run: |
-        Write-Host "Generating latest.yml for Windows..."
-        Set-Location dist-electron
-        
-        # Usa l'installer .exe invece del file portabile
-        $INSTALLER_FILE = "Inferno-Console-Installer.exe"
-        $INSTALLER_SIZE = (Get-Item $INSTALLER_FILE).Length
-        $INSTALLER_SHA512 = (Get-FileHash -Path $INSTALLER_FILE -Algorithm SHA512).Hash.ToLower()
-        
-        # Crea latest.yml per l'installer self-extracting
-        $latestYml = @"
-        version: ${{ github.ref_name }}
-        files:
-          - url: $INSTALLER_FILE
-            sha512: $INSTALLER_SHA512
-            size: $INSTALLER_SIZE
-        path: $INSTALLER_FILE
-        sha512: $INSTALLER_SHA512
-        releaseDate: '$(Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fffZ")'
-        "@
-        
-        $latestYml | Out-File -FilePath "latest.yml" -Encoding UTF8
-        
-        Write-Host "Generated latest.yml for installer:"
-        Get-Content latest.yml
-
-    - name: Create Desktop Shortcut (Windows)
-      if: matrix.os == 'windows-latest'
-      shell: pwsh
-      run: |
-        Write-Host "Creating desktop shortcut for Windows..."
-        Set-Location dist-electron
-        
-        # Trova il file .exe generato
-        $EXE_FILE = Get-ChildItem -Name "*.exe" | Select-Object -First 1
-        $EXE_PATH = (Get-Item $EXE_FILE).FullName
-        
-        # Crea script PowerShell per creare collegamento
-        $shortcutScript = @"
-        `$WshShell = New-Object -comObject WScript.Shell
-        `$DesktopPath = [Environment]::GetFolderPath("Desktop")
-        `$ShortcutPath = Join-Path `$DesktopPath "Inferno Console.lnk"
-        `$Shortcut = `$WshShell.CreateShortcut(`$ShortcutPath)
-        `$Shortcut.TargetPath = "$EXE_PATH"
-        `$Shortcut.WorkingDirectory = (Split-Path "$EXE_PATH")
-        `$Shortcut.Description = "Inferno Console - Professional DJ Console"
-        `$Shortcut.Save()
-        Write-Host "Desktop shortcut created: `$ShortcutPath"
-        "@
-        
-        $shortcutScript | Out-File -FilePath "create_shortcut.ps1" -Encoding UTF8
-        Write-Host "Shortcut script created, ready for user to run"
-
-    # macOS build commentato - da rifare in seguito
-    # - name: Build Electron app (macOS)
-    #   if: matrix.os == 'macos-latest'
-    #   run: npm run dist
-    #   env:
-    #     CSC_IDENTITY_AUTO_DISCOVERY: false
-    #     GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
     - name: Create Release (Windows)
       if: matrix.os == 'windows-latest' && startsWith(github.ref, 'refs/tags/')
@@ -509,30 +56,39 @@ jobs:
           - Fix auto-reconnessione dopo disconnessione manuale
           - Nickname DJ personalizzabile per Icecast
           - Interfaccia utente ottimizzata
+          - **Installer GUI personalizzato** con tema scuro
+          - **Selezione directory** personalizzabile
+          - **Integrazione electron-updater** per percorsi custom
           
           ### 🐛 Bug Fix
           - Risolto problema di auto-reconnessione indesiderata
           - Migliorato controllo deck audio durante disconnessione
           - Fix logging per debug del sistema di retry
+          - Fix installer pkg non trovato in GitHub Actions
           
           ### 📦 Download
-          **Windows**: Scarica `Inferno-Console-Installer.exe` - Installer self-extracting
+          **Windows**: Scarica `Inferno-Console-Installer.exe` - Installer GUI personalizzato
           
           ### 🚀 Installazione
           1. Scarica `Inferno-Console-Installer.exe`
-          2. Esegui l'installer (si auto-estrae e installa)
-          3. L'app si avvia automaticamente!
+          2. Esegui l'installer (interfaccia moderna)
+          3. Scegli la directory di installazione
+          4. L'app si avvia automaticamente!
           
           ### ✨ Caratteristiche Installer
-          - **Singolo file .exe** - tutto incluso
-          - **Auto-estrazione** - nessuna dipendenza esterna
+          - **Singolo file .exe** - tutto incluso (~38MB)
+          - **Interfaccia moderna** - tema scuro NSIS-style
+          - **Selezione directory** - installa dove vuoi
           - **Shortcut automatici** - Desktop e Start Menu
-          - **Compatibile con electron-updater**
+          - **Uninstaller integrato** - rimozione completa
+          - **Compatibile con electron-updater** - aggiornamenti automatici
+          - **Backup automatico** - sicurezza durante aggiornamenti
           
           ### 📝 Note
           - Versione sviluppata da Alessandro(NeverAgain)
           - Licenza MIT
           - Supporto completo per streaming Icecast
+          - Aggiornamenti automatici rispettano directory personalizzata
         files: |
           dist-electron/Inferno-Console-Installer.exe
           dist-electron/Inferno-Console-Uninstaller.exe
@@ -544,61 +100,3 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
       continue-on-error: true
-
-    # macOS release commentato - da rifare in seguito
-    # - name: Create Release (macOS)
-    #   if: matrix.os == 'macos-latest' && startsWith(github.ref, 'refs/tags/')
-    #   uses: softprops/action-gh-release@v1
-    #   with:
-    #     tag_name: ${{ github.ref_name }}
-    #     name: Inferno Console ${{ github.ref_name }}
-    #     body: |
-    #       ## 🎵 Inferno Console ${{ github.ref_name }}
-    #       
-    #       ### ✨ Nuove Funzionalità
-    #       - Sistema di streaming continuo migliorato
-    #       - Fix auto-reconnessione dopo disconnessione manuale
-    #       - Nickname DJ personalizzabile per Icecast
-    #       - Interfaccia utente ottimizzata
-    #       
-    #       ### 🐛 Bug Fix
-    #       - Risolto problema di auto-reconnessione indesiderata
-    #       - Migliorato controllo deck audio durante disconnessione
-    #       - Fix logging per debug del sistema di retry
-    #       
-    #       ### 📦 Download
-    #       Scegli la versione per il tuo sistema operativo:
-    #       
-    #       **Windows**: Installa il file `.exe` per Windows 10/11
-    #       **macOS**: Installa il file `.dmg` per macOS 10.15+
-    #       
-    #       ### 🚀 Installazione
-    #       1. Scarica il file appropriato per il tuo sistema
-    #       2. Esegui l'installer (Windows/macOS)
-    #       3. Avvia Inferno Console e goditi la tua sessione DJ!
-    #       
-    #       ### 📝 Note
-    #       - Versione sviluppata da Alessandro(NeverAgain)
-    #       - Licenza MIT
-    #       - Supporto completo per streaming Icecast
-    #     files: |
-    #       dist-electron/*.dmg
-    #       dist-electron/*.zip
-    #     draft: false
-    #     prerelease: false
-    #     generate_release_notes: true
-    #   env:
-    #     GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-    #   continue-on-error: true
-
-    - name: Upload Release Assets Manually
-      if: failure()
-      run: |
-        echo "⚠️ Release automatico fallito, ma il build è stato completato!"
-        echo "📦 I file sono disponibili nella directory dist/"
-        echo "🎯 Puoi creare manualmente il release su GitHub:"
-        echo "   1. Vai su https://github.com/Alexand83/InfernoConsole/releases"
-        echo "   2. Clicca 'Create a new release'"
-        echo "   3. Seleziona il tag ${{ github.ref_name }}"
-        echo "   4. Carica i file dalla directory dist/"
-        echo "   5. Pubblica il release"
