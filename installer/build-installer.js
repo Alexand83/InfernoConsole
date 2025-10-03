@@ -124,7 +124,7 @@ console.log('📦 Creating latest.yml...');
 const installerExePath = path.join(outputDir, outputExe);
 const portableExeInOutputPath = path.join(outputDir, 'Inferno-Console-win.exe');
 
-let latestYml = `version: 1.4.100
+let latestYml = `version: 1.4.102
 files:
   - url: Inferno-Console-Installer.exe
     sha512: ${require('crypto').createHash('sha512').update(fs.readFileSync(installerExePath)).digest('hex')}
@@ -150,7 +150,7 @@ console.log('✅ latest.yml created');
 console.log('📦 Creating installer package...');
 const installerPackage = {
     name: 'Inferno-Console-Installer',
-    version: '1.4.100',
+    version: '1.4.102',
     description: 'Custom installer for Inferno Console',
     main: outputExe,
     files: [

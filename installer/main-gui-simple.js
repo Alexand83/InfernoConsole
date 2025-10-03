@@ -441,7 +441,7 @@ pause
       const markerPath = path.join(this.installPath, '..', 'installer-info.json');
       const markerData = {
         installer: 'custom-gui',
-        version: '1.4.100',
+        version: '1.4.102',
         installDate: new Date().toISOString(),
         installPath: this.installPath,
         features: [
