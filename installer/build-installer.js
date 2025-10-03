@@ -167,6 +167,9 @@ const installerConfig = {
     "directories": {
         "output": "installer-dist"
     },
+    "publish": [
+        { "provider": "generic", "url": "" }
+    ],
     "files": [
         "installer-main.js",
         "index.html",
@@ -192,7 +195,7 @@ try {
     });
     
     // Build with electron-builder
-    execSync(`npx electron-builder --config installer-builder.json --win`, {
+    execSync(`npx electron-builder --config installer-builder.json --win --publish never`, {
         cwd: outputDir,
         stdio: 'inherit'
     });
