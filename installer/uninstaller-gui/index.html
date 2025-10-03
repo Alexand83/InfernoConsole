@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inferno Console Uninstaller</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="uninstaller-container">
+        <!-- Header -->
+        <div class="uninstaller-header">
+            <div class="header-content">
+                <div class="header-title">
+                    <h1>🗑️ Inferno Console Uninstaller</h1>
+                    <p>Rimuovi completamente Inferno Console dal tuo sistema</p>
+                </div>
+                <div class="header-controls">
+                    <button class="control-btn minimize-btn" onclick="minimizeApp()" title="Riduci a icona">−</button>
+                    <button class="control-btn close-btn" onclick="closeApp()" title="Chiudi">×</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="uninstaller-content">
+            <!-- Detection Step -->
+            <div id="step-detection" class="step-content active">
+                <div class="step-icon">🔍</div>
+                <h2>Rilevamento Installazione</h2>
+                <p>Sto cercando Inferno Console installato sul tuo sistema...</p>
+                <div class="loading-spinner"></div>
+            </div>
+
+            <!-- Confirmation Step -->
+            <div id="step-confirmation" class="step-content">
+                <div class="step-icon">⚠️</div>
+                <h2>Conferma Disinstallazione</h2>
+                <div class="info-card">
+                    <h3>Installazione trovata:</h3>
+                    <p><strong>Percorso:</strong> <span id="installPath"></span></p>
+                    <p><strong>Dimensione:</strong> <span id="installSize"></span></p>
+                    <p><strong>File eseguibile:</strong> <span id="exePath"></span></p>
+                </div>
+                <div class="warning-box">
+                    <h4>⚠️ Attenzione!</h4>
+                    <p>Questa azione rimuoverà <strong>completamente</strong> Inferno Console dal tuo sistema, inclusi:</p>
+                    <ul>
+                        <li>Tutti i file dell'applicazione</li>
+                        <li>Shortcut dal Desktop e Start Menu</li>
+                        <li>Impostazioni e configurazioni</li>
+                        <li>File di backup e aggiornamenti</li>
+                    </ul>
+                    <p><strong>Questa azione non può essere annullata!</strong></p>
+                </div>
+            </div>
+
+            <!-- Uninstalling Step -->
+            <div id="step-uninstalling" class="step-content">
+                <div class="step-icon">🗑️</div>
+                <h2>Disinstallazione in Corso</h2>
+                <p id="uninstallStatus">Preparazione...</p>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">0%</div>
+                </div>
+                <div class="uninstall-log" id="uninstallLog">
+                    <div class="log-content" id="logContent"></div>
+                </div>
+            </div>
+
+            <!-- Complete Step -->
+            <div id="step-complete" class="step-content">
+                <div class="step-icon">✅</div>
+                <h2>Disinstallazione Completata</h2>
+                <p>Inferno Console è stato rimosso completamente dal tuo sistema.</p>
+                <div class="success-info">
+                    <h3>Elementi rimossi:</h3>
+                    <ul>
+                        <li>✅ File dell'applicazione</li>
+                        <li>✅ Shortcut dal Desktop</li>
+                        <li>✅ Shortcut dal Start Menu</li>
+                        <li>✅ Impostazioni e configurazioni</li>
+                        <li>✅ File di backup</li>
+                    </ul>
+                </div>
+                <p class="completion-message">
+                    Grazie per aver utilizzato Inferno Console!<br>
+                    Speriamo di rivederti presto! 🎵
+                </p>
+            </div>
+
+            <!-- Not Found Step -->
+            <div id="step-notfound" class="step-content">
+                <div class="step-icon">❌</div>
+                <h2>Installazione Non Trovata</h2>
+                <p>Non è stata trovata alcuna installazione di Inferno Console sul tuo sistema.</p>
+                <div class="info-card">
+                    <h3>Possibili cause:</h3>
+                    <ul>
+                        <li>Inferno Console non è mai stato installato</li>
+                        <li>L'applicazione è già stata disinstallata</li>
+                        <li>L'installazione è stata spostata o danneggiata</li>
+                    </ul>
+                </div>
+                <p>Puoi chiudere questo uninstaller in sicurezza.</p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="uninstaller-footer">
+            <div class="footer-info">
+                <span id="footerText">Inferno Console Uninstaller v1.4.103</span>
+            </div>
+            <div class="footer-buttons">
+                <button class="btn btn-danger" id="uninstallBtn" style="display: none;">Disinstalla</button>
+                <button class="btn btn-secondary" id="cancelBtn" style="display: none;">Annulla</button>
+                <button class="btn btn-success" id="finishBtn" style="display: none;">Fine</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

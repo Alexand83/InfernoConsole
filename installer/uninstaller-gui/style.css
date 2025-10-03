@@ -1,0 +1,388 @@
+/* Reset e Base */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #1a1a1a;
+    color: #ffffff;
+    overflow: hidden;
+    user-select: none;
+}
+
+/* Container principale */
+.uninstaller-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+}
+
+/* Header */
+.uninstaller-header {
+    background: linear-gradient(135deg, #ff6b35 0%, #ee5a24 100%);
+    padding: 15px 20px;
+    border-bottom: 2px solid #ff6b35;
+    position: relative;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header-title h1 {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 5px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.header-title p {
+    font-size: 14px;
+    opacity: 0.9;
+    font-weight: 400;
+}
+
+.header-controls {
+    display: flex;
+    gap: 8px;
+    position: absolute;
+    top: 15px;
+    right: 15px;
+}
+
+.control-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.control-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+}
+
+.close-btn:hover {
+    background: #ff4757;
+}
+
+/* Main Content */
+.uninstaller-content {
+    flex: 1;
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    overflow-y: auto;
+}
+
+.step-content {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    max-width: 500px;
+    width: 100%;
+}
+
+.step-content.active {
+    display: flex;
+}
+
+.step-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+.step-content h2 {
+    font-size: 28px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: #ff6b35;
+}
+
+.step-content p {
+    font-size: 16px;
+    line-height: 1.6;
+    margin-bottom: 20px;
+    color: #cccccc;
+}
+
+/* Info Card */
+.info-card {
+    background: #2d2d2d;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+    text-align: left;
+    width: 100%;
+}
+
+.info-card h3 {
+    color: #ff6b35;
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+.info-card p {
+    margin: 8px 0;
+    font-size: 14px;
+}
+
+.info-card strong {
+    color: #ffffff;
+}
+
+/* Warning Box */
+.warning-box {
+    background: #3d1a1a;
+    border: 2px solid #ff4757;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+    text-align: left;
+    width: 100%;
+}
+
+.warning-box h4 {
+    color: #ff4757;
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+.warning-box ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.warning-box li {
+    margin: 5px 0;
+    color: #ffcccc;
+}
+
+/* Success Info */
+.success-info {
+    background: #1a3d1a;
+    border: 2px solid #2ed573;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+    text-align: left;
+    width: 100%;
+}
+
+.success-info h3 {
+    color: #2ed573;
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+.success-info ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.success-info li {
+    margin: 5px 0;
+    color: #ccffcc;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #333;
+    border-top: 4px solid #ff6b35;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Progress Bar */
+.progress-container {
+    width: 100%;
+    margin: 20px 0;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 20px;
+    background: #333;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #ff6b35, #ee5a24);
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 10px;
+}
+
+.progress-text {
+    text-align: center;
+    font-weight: 600;
+    color: #ff6b35;
+    font-size: 16px;
+}
+
+/* Uninstall Log */
+.uninstall-log {
+    background: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 20px 0;
+    width: 100%;
+    max-height: 200px;
+    overflow-y: auto;
+    text-align: left;
+}
+
+.log-content {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #cccccc;
+}
+
+.log-content .log-entry {
+    margin: 2px 0;
+    padding: 2px 0;
+}
+
+.log-content .log-success {
+    color: #2ed573;
+}
+
+.log-content .log-error {
+    color: #ff4757;
+}
+
+.log-content .log-warning {
+    color: #ffa502;
+}
+
+/* Completion Message */
+.completion-message {
+    font-size: 18px;
+    color: #2ed573;
+    font-weight: 500;
+    margin: 20px 0;
+    line-height: 1.6;
+}
+
+/* Footer */
+.uninstaller-footer {
+    background: #2d2d2d;
+    border-top: 1px solid #444;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.footer-info {
+    color: #888;
+    font-size: 12px;
+}
+
+.footer-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+/* Buttons */
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #ff4757, #ff3742);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: linear-gradient(135deg, #ff3742, #ff2f3a);
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #6c757d, #5a6268);
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: linear-gradient(135deg, #5a6268, #495057);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #2ed573, #20bf6b);
+    color: white;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #20bf6b, #1ea85b);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .uninstaller-content {
+        padding: 20px;
+    }
+    
+    .step-content h2 {
+        font-size: 24px;
+    }
+    
+    .step-icon {
+        font-size: 48px;
+    }
+}

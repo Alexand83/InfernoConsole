@@ -207,18 +207,7 @@ try {
     }
 } catch (error) {
     console.error('❌ Failed to build installer executable:', error.message);
-    console.log('🔄 Creating batch launcher as fallback...');
-    
-    // Fallback: create batch launcher
-    const installerLauncher = `@echo off
-echo Starting Inferno Console Installer...
-cd /d "%~dp0"
-cd installer
-npm start
-pause`;
-
-    fs.writeFileSync(path.join(outputDir, outputExe), installerLauncher);
-    console.log('✅ Installer batch launcher created');
+    process.exit(1);
 }
 
 // 3. Copy installer directory to output
