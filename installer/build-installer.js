@@ -122,7 +122,7 @@ console.log('✅ Uninstaller created');
 // 5. Create latest.yml for electron-updater
 console.log('📦 Creating latest.yml...');
 const installerExePath = path.join(outputDir, outputExe);
-const portableExePath = path.join(outputDir, 'Inferno-Console-win.exe');
+const portableExeInOutputPath = path.join(outputDir, 'Inferno-Console-win.exe');
 
 let latestYml = `version: 1.4.100
 files:
@@ -131,11 +131,11 @@ files:
     size: ${fs.statSync(installerExePath).size}`;
 
 // Add portable executable if it exists
-if (fs.existsSync(portableExePath)) {
+if (fs.existsSync(portableExeInOutputPath)) {
     latestYml += `
   - url: Inferno-Console-win.exe
-    sha512: ${require('crypto').createHash('sha512').update(fs.readFileSync(portableExePath)).digest('hex')}
-    size: ${fs.statSync(portableExePath).size}`;
+    sha512: ${require('crypto').createHash('sha512').update(fs.readFileSync(portableExeInOutputPath)).digest('hex')}
+    size: ${fs.statSync(portableExeInOutputPath).size}`;
 }
 
 latestYml += `
