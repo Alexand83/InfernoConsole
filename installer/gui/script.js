@@ -54,6 +54,29 @@ class NSISInstaller {
             });
         });
 
+        // Footer buttons (bind explicitly in addition to inline handlers)
+        const backBtn = document.getElementById('backBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const finishBtn = document.getElementById('finishBtn');
+        
+        if (backBtn) backBtn.addEventListener('click', () => this.goBack());
+        if (nextBtn) nextBtn.addEventListener('click', async () => {
+            // Prevent multiple clicks
+            if (this.isInstalling) {
+                console.log('Installation already in progress, ignoring click');
+                return;
+            }
+            
+            if (this.currentStep === 'path') {
+                await this.startInstallation();
+            } else {
+                await this.goNext();
+            }
+        });
+        if (cancelBtn) cancelBtn.addEventListener('click', () => this.cancelInstall());
+        if (finishBtn) finishBtn.addEventListener('click', () => this.finishInstall());
+
         // License agreement
         document.getElementById('licenseAgree').addEventListener('change', () => {
             this.updateButtons();
@@ -70,12 +93,27 @@ class NSISInstaller {
         const stepIndex = this.steps.indexOf(step);
         const currentIndex = this.steps.indexOf(this.currentStep);
         
-        // Can only go to previous steps or next step if current is completed
-        return stepIndex <= currentIndex + 1;
+        // Can ONLY go to previous steps, never forward via sidebar
+        return stepIndex < currentIndex;
+    }
+    
+    canGoNext() {
+        const currentIndex = this.steps.indexOf(this.currentStep);
+        return currentIndex < this.steps.length - 1;
     }
 
-    goToStep(step) {
-        if (!this.canNavigateToStep(step)) return;
+    goToStep(step, forced = false) {
+        console.log(`goToStep() called: ${step}, forced: ${forced}, currentStep: ${this.currentStep}`);
+        const stepIndex = this.steps.indexOf(step);
+        const currentIndex = this.steps.indexOf(this.currentStep);
+        
+        console.log(`Step indices - target: ${stepIndex}, current: ${currentIndex}`);
+        
+        // Allow if forced (Next/Back), otherwise respect canNavigateToStep
+        if (!forced && !this.canNavigateToStep(step)) {
+            console.log('Navigation blocked by canNavigateToStep');
+            return;
+        }
         
         // Hide all steps
         document.querySelectorAll('.step-content').forEach(content => {
@@ -92,6 +130,10 @@ class NSISInstaller {
         document.querySelector(`[data-step="${step}"]`).classList.add('active');
         
         this.currentStep = step;
+        console.log(`Current step updated to: ${this.currentStep}`);
+        
+        // ALWAYS update navigation and buttons after changing step
+        this.updateNavigation();
         this.updateButtons();
         
         // Special handling for each step
@@ -103,12 +145,27 @@ class NSISInstaller {
     updateNavigation() {
         document.querySelectorAll('.nav-item').forEach(item => {
             const step = item.dataset.step;
-            if (this.canNavigateToStep(step)) {
+            const stepIndex = this.steps.indexOf(step);
+            const currentIndex = this.steps.indexOf(this.currentStep);
+            
+            if (stepIndex < currentIndex) {
+                // Previous completed steps - clickable
                 item.style.opacity = '1';
                 item.style.cursor = 'pointer';
+                item.classList.add('completed');
+                item.classList.remove('disabled', 'active');
+            } else if (stepIndex === currentIndex) {
+                // Current step - active
+                item.style.opacity = '1';
+                item.style.cursor = 'default';
+                item.classList.add('active');
+                item.classList.remove('completed', 'disabled');
             } else {
-                item.style.opacity = '0.5';
+                // Future steps - completely disabled
+                item.style.opacity = '0.3';
                 item.style.cursor = 'not-allowed';
+                item.classList.add('disabled');
+                item.classList.remove('completed', 'active');
             }
         });
     }
@@ -127,47 +184,78 @@ class NSISInstaller {
         
         const currentIndex = this.steps.indexOf(this.currentStep);
         
-        switch (this.currentStep) {
-            case 'welcome':
-                nextBtn.style.display = 'inline-block';
-                nextBtn.textContent = 'Avanti';
-                break;
+        // Show back button if not on first step
+        if (currentIndex > 0) {
+            backBtn.style.display = 'inline-block';
+        }
+        
+        // Show next button based on current step
+        if (this.canGoNext()) {
+            nextBtn.style.display = 'inline-block';
+            
+            switch (this.currentStep) {
+                case 'welcome':
+                    nextBtn.textContent = 'Avanti';
+                    nextBtn.className = 'btn btn-primary';
+                    nextBtn.disabled = false;
+                    break;
                 
-            case 'license':
-                backBtn.style.display = 'inline-block';
-                nextBtn.style.display = 'inline-block';
-                nextBtn.textContent = 'Avanti';
-                nextBtn.disabled = !document.getElementById('licenseAgree').checked;
-                break;
+                case 'license':
+                    nextBtn.textContent = 'Avanti';
+                    nextBtn.className = 'btn btn-primary';
+                    nextBtn.disabled = !document.getElementById('licenseAgree').checked;
+                    break;
                 
-            case 'path':
-                backBtn.style.display = 'inline-block';
-                nextBtn.style.display = 'inline-block';
-                nextBtn.textContent = 'Installa';
-                break;
+                case 'path':
+                    nextBtn.textContent = 'Installa';
+                    nextBtn.className = 'btn btn-primary';
+                    nextBtn.disabled = false;
+                    break;
                 
-            case 'install':
-                cancelBtn.style.display = 'inline-block';
-                cancelBtn.disabled = this.isInstalling;
-                break;
-                
-            case 'complete':
-                finishBtn.style.display = 'inline-block';
-                finishBtn.textContent = 'Fine';
-                break;
+                default:
+                    nextBtn.textContent = 'Avanti';
+                    nextBtn.className = 'btn btn-primary';
+                    nextBtn.disabled = false;
+                    break;
+            }
+        }
+        
+        // Special cases
+        if (this.currentStep === 'install') {
+            cancelBtn.style.display = 'inline-block';
+            cancelBtn.disabled = this.isInstalling;
+        }
+        
+        if (this.currentStep === 'complete') {
+            finishBtn.style.display = 'inline-block';
+            finishBtn.textContent = 'Fine';
         }
     }
 
     async goNext() {
+        console.log('goNext() called, current step:', this.currentStep);
+        
         switch (this.currentStep) {
             case 'welcome':
-                this.goToStep('license');
+                console.log('Going to license...');
+                this.goToStep('license', true);
                 break;
             case 'license':
-                this.goToStep('path');
+                console.log('Going to path...');
+                this.goToStep('path', true);
                 break;
             case 'path':
+                console.log('Starting installation...');
                 await this.startInstallation();
+                break;
+            default:
+                console.log('Generic forward navigation...');
+                const currentIndex = this.steps.indexOf(this.currentStep);
+                const nextIndex = currentIndex + 1;
+                if (nextIndex < this.steps.length) {
+                    const nextStep = this.steps[nextIndex];
+                    this.goToStep(nextStep, true);
+                }
                 break;
         }
     }
@@ -175,13 +263,21 @@ class NSISInstaller {
     goBack() {
         const currentIndex = this.steps.indexOf(this.currentStep);
         if (currentIndex > 0) {
-            this.goToStep(this.steps[currentIndex - 1]);
+            this.goToStep(this.steps[currentIndex - 1], true);
         }
     }
 
     async startInstallation() {
+        console.log('startInstallation() called');
+        
+        // Prevent multiple installations
+        if (this.isInstalling) {
+            console.log('Installation already in progress, ignoring');
+            return;
+        }
+        
         this.isInstalling = true;
-        this.goToStep('install');
+        this.goToStep('install', true); // Force navigation to install step
         this.updateButtons();
         
         try {
@@ -190,6 +286,7 @@ class NSISInstaller {
             
             // Get the selected install path
             const selectedPath = document.getElementById('installPath').value;
+            console.log('Selected path:', selectedPath);
             if (!selectedPath) {
                 throw new Error('Nessun percorso di installazione selezionato');
             }
@@ -198,10 +295,12 @@ class NSISInstaller {
             this.addLog(`📁 Percorso di installazione: ${this.installPath}`);
             
             // Call the real installation
+            console.log('Calling IPC start-installation...');
             const result = await ipcRenderer.invoke('start-installation', {
                 installPath: this.installPath
             });
             
+            console.log('Installation result:', result);
             if (result.success) {
                 this.addLog('✅ Installazione completata con successo!');
                 this.updateInstallStatus('Installazione completata!');
@@ -210,7 +309,7 @@ class NSISInstaller {
                 document.getElementById('installLocation').textContent = this.installPath;
                 
                 setTimeout(() => {
-                    this.goToStep('complete');
+                    this.goToStep('complete', true); // Force navigation to complete step
                     this.updateButtons();
                 }, 1000);
             } else {
@@ -218,6 +317,7 @@ class NSISInstaller {
             }
             
         } catch (error) {
+            console.error('Installation error:', error);
             this.addLog(`❌ Errore durante l'installazione: ${error.message}`);
             this.updateInstallStatus(`Errore: ${error.message}`);
             alert(`Errore durante l'installazione: ${error.message}`);
@@ -298,16 +398,21 @@ class NSISInstaller {
         
         if (launchApp) {
             try {
-                // Use the executable path from installation result
-                const executablePath = this.installPath ? path.join(this.installPath, 'Inferno Console.exe') : null;
-                if (executablePath) {
+                // Get install path from the input field as fallback
+                const installPath = this.installPath || document.getElementById('installPath').value;
+                console.log('Install path for launch:', installPath);
+                
+                if (installPath) {
+                    const executablePath = path.join(installPath, 'Inferno-Console-win.exe');
                     this.addLog(`🚀 Tentativo avvio applicazione: ${executablePath}`);
                     const result = await ipcRenderer.invoke('open-path', executablePath);
-                    if (result.success) {
+                    
+                    if (result && result.success) {
                         this.addLog('✅ Applicazione avviata con successo!');
                     } else {
-                        this.addLog(`❌ Errore avvio applicazione: ${result.message}`);
-                        alert(`Errore: ${result.message}\n\nVerifica che l'installazione sia stata completata correttamente.`);
+                        const errorMsg = result ? result.message : 'Risultato non definito';
+                        this.addLog(`❌ Errore avvio applicazione: ${errorMsg}`);
+                        alert(`Errore: ${errorMsg}\n\nVerifica che l'installazione sia stata completata correttamente.`);
                     }
                 } else {
                     this.addLog('❌ Percorso eseguibile non trovato');
@@ -345,31 +450,7 @@ function closeApp() {
     }
 }
 
-// Global functions for buttons
-function goNext() {
-    if (window.installer) {
-        window.installer.goNext();
-    }
-}
-
-function goBack() {
-    if (window.installer) {
-        window.installer.goBack();
-    }
-}
-
-function cancelInstall() {
-    if (window.installer) {
-        window.installer.cancelInstall();
-    }
-}
-
-function finishInstall() {
-    if (window.installer) {
-        window.installer.finishInstall();
-    }
-}
-
+// Global functions for window controls and folder browsing
 function browseFolder() {
     if (window.installer) {
         window.installer.browseFolder();
@@ -378,7 +459,9 @@ function browseFolder() {
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing installer...');
     window.installer = new NSISInstaller();
+    console.log('Installer initialized:', window.installer);
 });
 
 // Handle window close

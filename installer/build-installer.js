@@ -42,61 +42,172 @@ console.log('✅ Clean completed');
 // 2. Create installer executable using electron-builder
 console.log('🔨 Creating installer executable...');
 
-// Create a simple Node.js launcher that starts Electron
-const launcherScript = `const { spawn } = require('child_process');
+// Create a simple Electron app for the installer
+const installerMain = `const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const fs = require('fs');
+const { spawn } = require('child_process');
 
-console.log('🚀 Starting Inferno Console Installer...');
+function createWindow() {
+    const mainWindow = new BrowserWindow({
+        width: 1000,
+        height: 800,
+        minWidth: 900,
+        minHeight: 700,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        },
+        frame: false,
+        titleBarStyle: 'hidden',
+        menuBarVisible: false
+    });
 
-// Find the installer directory
-const installerDir = path.join(__dirname, 'installer');
-console.log('Looking for installer directory at:', installerDir);
-if (!fs.existsSync(installerDir)) {
-    console.error('❌ Installer directory not found at:', installerDir);
-    console.log('Current directory contents:');
-    try {
-        const files = fs.readdirSync(__dirname);
-        files.forEach(file => console.log('  -', file));
-    } catch (err) {
-        console.error('Error reading directory:', err.message);
-    }
-    process.exit(1);
+    mainWindow.setMenu(null);
+    mainWindow.loadFile(path.join(__dirname, 'index.html'));
+    
+    // Open DevTools for debugging
+    mainWindow.webContents.openDevTools();
+    
+    // Handle window controls via IPC
+    ipcMain.handle('minimize-app', () => {
+        mainWindow.minimize();
+    });
+    
+    ipcMain.handle('close-app', () => {
+        mainWindow.close();
+    });
+    
+    // Handle installation logic
+    ipcMain.handle('start-installation', async (event, data) => {
+        const { installPath } = data;
+        console.log('Starting installation to:', installPath);
+        
+        // Simulate installation process
+        for (let i = 0; i <= 100; i += 10) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+            mainWindow.webContents.send('installation-progress', {
+                percentage: i,
+                message: \`Installing... \${i}%\`
+            });
+        }
+        
+        return { success: true, executablePath: path.join(installPath, 'Inferno-Console-win.exe') };
+    });
+    
+    ipcMain.handle('select-install-path', async () => {
+        const { dialog } = require('electron');
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openDirectory'],
+            title: 'Select Installation Directory'
+        });
+        
+        if (!result.canceled && result.filePaths.length > 0) {
+            return result.filePaths[0];
+        }
+        return null;
+    });
+    
+    ipcMain.handle('open-path', async (event, targetPath) => {
+        const { shell } = require('electron');
+        const fs = require('fs');
+        try {
+            if (targetPath && fs.existsSync(targetPath)) {
+                await shell.openPath(targetPath);
+                return { success: true };
+            }
+            return { success: false, message: 'File not found: ' + (targetPath || 'undefined') };
+        } catch (err) {
+            return { success: false, message: err.message };
+        }
+    });
 }
 
-// Start Electron
-const electronProcess = spawn('npx', ['electron', '.'], {
-    cwd: installerDir,
-    stdio: 'inherit',
-    shell: true
+app.whenReady().then(createWindow);
+
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+        app.quit();
+    }
 });
 
-electronProcess.on('close', (code) => {
-    console.log(\`Installer process exited with code \${code}\`);
-});
-
-electronProcess.on('error', (err) => {
-    console.error('Failed to start installer:', err);
-    process.exit(1);
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+    }
 });`;
 
-// Write launcher script
-const launcherFile = path.join(outputDir, 'installer-launcher.js');
-fs.writeFileSync(launcherFile, launcherScript);
+// Create installer package.json
+const installerPackageJson = {
+    "name": "inferno-console-installer",
+    "version": "1.4.103",
+    "description": "Inferno Console Installer",
+    "author": "Alessandro(NeverAgain)",
+    "main": "installer-main.js",
+    "scripts": {
+        "start": "electron ."
+    },
+    "devDependencies": {
+        "electron": "^38.1.0"
+    }
+};
 
-// Create executable using pkg with assets
+// Write installer files
+fs.writeFileSync(path.join(outputDir, 'installer-main.js'), installerMain);
+fs.writeFileSync(path.join(outputDir, 'package.json'), JSON.stringify(installerPackageJson, null, 2));
+
+// Copy GUI files
+fs.copyFileSync(path.join(installerDir, 'gui', 'index.html'), path.join(outputDir, 'index.html'));
+fs.copyFileSync(path.join(installerDir, 'gui', 'style.css'), path.join(outputDir, 'style.css'));
+fs.copyFileSync(path.join(installerDir, 'gui', 'script.js'), path.join(outputDir, 'script.js'));
+
+// Create electron-builder config for installer
+const installerConfig = {
+    "appId": "com.infernoconsole.installer",
+    "productName": "Inferno Console Installer",
+    "directories": {
+        "output": "installer-dist"
+    },
+    "files": [
+        "installer-main.js",
+        "index.html",
+        "style.css", 
+        "script.js",
+        "package.json"
+    ],
+    "win": {
+        "target": "portable",
+        "artifactName": "Inferno-Console-Installer.${ext}"
+    }
+};
+
+fs.writeFileSync(path.join(outputDir, 'installer-builder.json'), JSON.stringify(installerConfig, null, 2));
+
+// Build installer using electron-builder
 try {
-    execSync(`pkg ${launcherFile} --targets node18-win-x64 --output ${path.join(outputDir, outputExe)} --assets installer`, {
+    // Install dependencies first
+    console.log('Installing dependencies...');
+    execSync('npm install', {
         cwd: outputDir,
         stdio: 'inherit'
     });
-    console.log('✅ Installer executable built');
     
-    // Clean up launcher file
-    fs.removeSync(launcherFile);
+    // Build with electron-builder
+    execSync(`npx electron-builder --config installer-builder.json --win`, {
+        cwd: outputDir,
+        stdio: 'inherit'
+    });
+    
+    // Move the built installer to the correct location
+    const builtInstaller = path.join(outputDir, 'installer-dist', 'Inferno-Console-Installer.exe');
+    if (fs.existsSync(builtInstaller)) {
+        fs.moveSync(builtInstaller, path.join(outputDir, outputExe));
+        console.log('✅ Installer executable built with electron-builder');
+    } else {
+        throw new Error('Installer not found after build');
+    }
 } catch (error) {
     console.error('❌ Failed to build installer executable:', error.message);
-    console.log('🔄 Falling back to batch launcher...');
+    console.log('🔄 Creating batch launcher as fallback...');
     
     // Fallback: create batch launcher
     const installerLauncher = `@echo off
@@ -198,7 +309,7 @@ console.log('📦 Creating latest.yml...');
 const installerExePath = path.join(outputDir, outputExe);
 const portableExeInOutputPath = path.join(outputDir, 'Inferno-Console-win.exe');
 
-let latestYml = `version: 1.4.102
+let latestYml = `version: 1.4.103
 files:
   - url: Inferno-Console-Installer.exe
     sha512: ${require('crypto').createHash('sha512').update(fs.readFileSync(installerExePath)).digest('hex')}
@@ -224,7 +335,7 @@ console.log('✅ latest.yml created');
 console.log('📦 Creating installer package...');
 const installerPackage = {
     name: 'Inferno-Console-Installer',
-    version: '1.4.102',
+    version: '1.4.103',
     description: 'Custom installer for Inferno Console',
     main: outputExe,
     files: [

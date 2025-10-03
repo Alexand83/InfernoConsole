@@ -91,6 +91,8 @@ jobs:
           - **Installer GUI personalizzato** con tema scuro
           - **Selezione directory** personalizzabile
           - **Integrazione electron-updater** per percorsi custom
+          - **Risoluzione dinamica URL** per download da GitHub Releases
+          - **Fix errori navigazione** e loop infiniti
           
           ### 🐛 Bug Fix
           - Risolto problema di auto-reconnessione indesiderata

@@ -58,6 +58,8 @@ class InfernoConsoleInstallerGUI {
       // Remove menu completely
       this.mainWindow.setMenuBarVisibility(false);
       this.mainWindow.setMenu(null);
+      // Open DevTools for debugging
+      this.mainWindow.webContents.openDevTools();
     });
 
     this.mainWindow.on('closed', () => {
@@ -204,58 +206,102 @@ class InfernoConsoleInstallerGUI {
   }
 
   async downloadAppWithProgress() {
-    const downloadUrl = 'https://github.com/Alexand83/InfernoConsole/releases/latest/download/Inferno-Console-win.exe';
     const outputPath = path.join(this.installPath, 'Inferno-Console-win.exe');
-    
-    return new Promise((resolve, reject) => {
-      const download = (url) => {
-        const file = fs.createWriteStream(outputPath);
-        
-        const request = https.get(url, (response) => {
-          // Handle redirects
-          if (response.statusCode === 302 || response.statusCode === 301) {
-            const redirectUrl = response.headers.location;
-            if (redirectUrl) {
-              this.sendProgress(`Connessione al server...`, 35);
-              download(redirectUrl);
-              return;
+
+    const getJson = (url) => new Promise((resolve, reject) => {
+      const req = https.request(url, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'inferno-console-installer',
+          'Accept': 'application/vnd.github+json'
+        }
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              resolve(JSON.parse(data));
+            } else {
+              reject(new Error(`GitHub API HTTP ${res.statusCode}: ${res.statusMessage}`));
             }
-          }
-          
-          if (response.statusCode !== 200) {
-            reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+          } catch (e) { reject(e); }
+        });
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    const resolveAssetUrl = async () => {
+      // Try latest release first
+      const apiUrl = 'https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest';
+      const release = await getJson(apiUrl);
+      if (release && Array.isArray(release.assets)) {
+        const asset = release.assets.find(a => a && a.name && a.name.toLowerCase().includes('inferno-console-win.exe'));
+        if (asset && asset.browser_download_url) return asset.browser_download_url;
+      }
+      // Fallback to old static pattern
+      return 'https://github.com/Alexand83/InfernoConsole/releases/latest/download/Inferno-Console-win.exe';
+    };
+
+    const download = (url) => new Promise((resolve, reject) => {
+      const file = fs.createWriteStream(outputPath);
+      const request = https.get(url, (response) => {
+        // Handle redirects
+        if (response.statusCode === 302 || response.statusCode === 301) {
+          const redirectUrl = response.headers.location;
+          if (redirectUrl) {
+            this.sendProgress(`Connessione al server...`, 35);
+            response.destroy();
+            resolve(download(redirectUrl));
             return;
           }
+        }
 
-          const totalSize = parseInt(response.headers['content-length'], 10);
-          let downloadedSize = 0;
+        if (response.statusCode !== 200) {
+          reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+          return;
+        }
 
-          response.on('data', (chunk) => {
-            downloadedSize += chunk.length;
+        const totalSize = parseInt(response.headers['content-length'] || '0', 10);
+        let downloadedSize = 0;
+
+        response.on('data', (chunk) => {
+          downloadedSize += chunk.length;
+          if (totalSize > 0) {
+            const percent = Math.round((downloadedSize / totalSize) * 100);
             const progress = Math.round(30 + (downloadedSize / totalSize) * 30); // 30-60%
-            this.sendProgress(`Scaricamento in corso... ${Math.round((downloadedSize / totalSize) * 100)}%`, progress);
-          });
-
-          response.pipe(file);
-
-          file.on('finish', () => {
-            file.close();
-            resolve(outputPath);
-          });
-
-          file.on('error', (err) => {
-            fs.unlink(outputPath, () => {});
-            reject(err);
-          });
+            this.sendProgress(`Scaricamento in corso... ${percent}%`, progress);
+          } else {
+            this.sendProgress('Scaricamento in corso...', 45);
+          }
         });
 
-        request.on('error', (err) => {
+        response.pipe(file);
+
+        file.on('finish', () => {
+          file.close();
+          resolve(outputPath);
+        });
+
+        file.on('error', (err) => {
+          fs.unlink(outputPath, () => {});
           reject(err);
         });
-      };
-      
-      download(downloadUrl);
+      });
+      request.on('error', (err) => reject(err));
     });
+
+    try {
+      const assetUrl = await resolveAssetUrl();
+      this.sendProgress('Connessione a GitHub Releases...', 32);
+      return await download(assetUrl);
+    } catch (e) {
+      // Last-resort fallback
+      const fallback = 'https://github.com/Alexand83/InfernoConsole/releases/latest/download/Inferno-Console-win.exe';
+      this.sendProgress('Fallback URL download...', 33);
+      return await download(fallback);
+    }
   }
 
   async installApp(downloadedPath) {
@@ -441,7 +487,7 @@ pause
       const markerPath = path.join(this.installPath, '..', 'installer-info.json');
       const markerData = {
         installer: 'custom-gui',
-        version: '1.4.102',
+        version: '1.4.103',
         installDate: new Date().toISOString(),
         installPath: this.installPath,
         features: [
