@@ -58,7 +58,7 @@ class InfernoConsoleUninstallerGUI {
       this.mainWindow.setMenuBarVisibility(false);
       this.mainWindow.setMenu(null);
       // Open DevTools for debugging
-      this.mainWindow.webContents.openDevTools();
+      // this.mainWindow.webContents.openDevTools();
     });
 
     this.mainWindow.on('closed', () => {

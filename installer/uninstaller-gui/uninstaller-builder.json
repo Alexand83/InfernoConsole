@@ -1,0 +1,20 @@
+{
+  "appId": "com.infernoconsole.uninstaller",
+  "productName": "Inferno Console Uninstaller",
+  "directories": {
+    "output": "uninstaller-dist"
+  },
+  "files": [
+    "main-uninstaller.js",
+    "index.html",
+    "style.css",
+    "script.js"
+  ],
+  "win": {
+    "target": "portable",
+    "icon": "assets/icon.ico"
+  },
+  "portable": {
+    "artifactName": "Inferno-Console-Uninstaller.exe"
+  }
+}

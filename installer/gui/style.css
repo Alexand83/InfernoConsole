@@ -217,6 +217,37 @@ body {
     padding-bottom: 20px;
 }
 
+.install-options {
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.install-options h4 {
+    color: #ff6b35;
+    margin: 0 0 15px 0;
+    font-size: 16px;
+}
+
+.option-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.install-button-container {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.btn-large {
+    padding: 12px 30px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
 .step-header h2 {
     color: #ff6b35;
     font-size: 28px;
@@ -452,6 +483,10 @@ body {
     max-height: 300px;
     overflow-y: auto;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.log-header {
+    margin-bottom: 10px;
 }
 
 .install-log h4 {

@@ -49,8 +49,8 @@ jobs:
       run: |
         cd installer
         npm install
-        npm install -g pkg
         node build-installer.js
+        node build-uninstaller.js
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
@@ -74,6 +74,18 @@ jobs:
           }
         }
 
+        # Hard fail if the installer is suspiciously small (< 10MB)
+        if (Test-Path "dist-electron\Inferno-Console-Installer.exe") {
+          $installerSize = (Get-Item "dist-electron\Inferno-Console-Installer.exe").Length
+          if ($installerSize -lt 10485760) {
+            echo "❌ Installer too small: $([math]::Round($installerSize/1MB, 2)) MB"
+            exit 1
+          }
+        } else {
+          echo "❌ Installer missing"
+          exit 1
+        }
+
     - name: Create Release (Windows)
       if: matrix.os == 'windows-latest' && startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
@@ -84,39 +96,44 @@ jobs:
           ## 🎵 Inferno Console ${{ github.ref_name }}
           
           ### ✨ Nuove Funzionalità
-          - Sistema di streaming continuo migliorato
-          - Fix auto-reconnessione dopo disconnessione manuale
-          - Nickname DJ personalizzabile per Icecast
-          - Interfaccia utente ottimizzata
-          - **Installer GUI personalizzato** con tema scuro
+          - **Installer GUI professionale** con tema scuro NSIS-style
+          - **Navigazione sequenziale** - solo bottoni Avanti/Indietro
+          - **Finestra ottimizzata** (1300x1000) per log di installazione
+          - **Log puliti** senza bottoni debug inutili
+          - **Blocco navigazione** durante installazione
           - **Selezione directory** personalizzabile
+          - **Shortcut automatici** Desktop e Start Menu
+          - **Uninstaller dedicato** per rimozione completa
           - **Integrazione electron-updater** per percorsi custom
           - **Risoluzione dinamica URL** per download da GitHub Releases
-          - **Fix errori navigazione** e loop infiniti
           
           ### 🐛 Bug Fix
-          - Risolto problema di auto-reconnessione indesiderata
-          - Migliorato controllo deck audio durante disconnessione
-          - Fix logging per debug del sistema di retry
-          - Fix installer pkg non trovato in GitHub Actions
+          - Fix navigazione sidebar che permetteva salti non autorizzati
+          - Fix bottone "Avanti" che appariva nella pagina installazione
+          - Fix log che coprivano la finestra durante installazione
+          - Fix errori PowerShell per creazione shortcut
+          - Fix processi in uso durante avvio applicazione
           
           ### 📦 Download
-          **Windows**: Scarica `Inferno-Console-Installer.exe` - Installer GUI personalizzato
+          **Windows**: Scarica `Inferno-Console-Installer.exe` - Installer GUI professionale
           
           ### 🚀 Installazione
           1. Scarica `Inferno-Console-Installer.exe`
           2. Esegui l'installer (interfaccia moderna)
-          3. Scegli la directory di installazione
-          4. L'app si avvia automaticamente!
+          3. Accetta la licenza
+          4. Scegli la directory di installazione
+          5. Clicca "Inizia Installazione"
+          6. L'app si avvia automaticamente!
           
           ### ✨ Caratteristiche Installer
-          - **Singolo file .exe** - tutto incluso (~38MB)
-          - **Interfaccia moderna** - tema scuro NSIS-style
+          - **Singolo file .exe** - tutto incluso (~77MB)
+          - **Interfaccia moderna** - tema scuro professionale
+          - **Navigazione intuitiva** - flusso guidato step-by-step
           - **Selezione directory** - installa dove vuoi
           - **Shortcut automatici** - Desktop e Start Menu
-          - **Uninstaller integrato** - rimozione completa
+          - **Uninstaller dedicato** - rimozione completa
           - **Compatibile con electron-updater** - aggiornamenti automatici
-          - **Backup automatico** - sicurezza durante aggiornamenti
+          - **Log dettagliati** - monitoraggio installazione
           
           ### 📝 Note
           - Versione sviluppata da Alessandro(NeverAgain)

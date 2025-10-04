@@ -43,30 +43,533 @@ console.log('✅ Clean completed');
 console.log('🔨 Creating installer executable...');
 
 // Create a simple Electron app for the installer
-const installerMain = `const { app, BrowserWindow, ipcMain } = require('electron');
+const installerMain = `const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const https = require('https');
+const os = require('os');
 const { spawn } = require('child_process');
 
+class InstallerApp {
+    constructor() {
+        this.mainWindow = null;
+        this.installPath = '';
+        this.isInstalling = false;
+    }
+
+    sendProgress(message, percentage, isComplete = false, isError = false) {
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send('installation-progress', {
+                message: message,
+                percentage: percentage,
+                isComplete: isComplete,
+                isError: isError
+            });
+        }
+    }
+
+    async performInstallation() {
+        if (this.isInstalling) {
+            throw new Error('Installation already in progress');
+        }
+
+        this.isInstalling = true;
+        
+        try {
+            // Send progress to GUI
+            this.sendProgress('Installing...', 0);
+
+            // 0. Verify target path is writable
+            this.sendProgress('Verifica permessi cartella...', 5);
+            await this.verifyWritable(this.installPath);
+
+            // 1. Create installation directory
+            this.sendProgress('Creazione directory di installazione...', 10);
+            await this.ensureDir(this.installPath);
+            this.sendProgress('Directory creata con successo!', 20);
+
+            // 2. Download application
+            this.sendProgress('Preparazione download...', 30);
+            this.sendProgress('[DL] Inizio download applicazione...', 30);
+            const downloadPath = await this.downloadAppWithProgress();
+            this.sendProgress('[DL] Download completato con successo!', 60);
+
+            // 3. Install application
+            this.sendProgress('Installazione applicazione...', 70);
+            await this.installApp(downloadPath);
+            this.sendProgress('Applicazione installata!', 80);
+
+            // 4. Create shortcuts
+            this.sendProgress('Creazione shortcut...', 85);
+            await this.createShortcuts(this.createShortcutEnabled);
+            this.sendProgress('Shortcut creati!', 90);
+
+            // 5. Create uninstaller
+            this.sendProgress('Creazione uninstaller...', 95);
+            await this.createUninstaller();
+            this.sendProgress('Uninstaller creato!', 98);
+
+            // 6. Create installer marker
+            this.sendProgress('Creazione marker installer...', 99);
+            await this.createInstallerMarker();
+            this.sendProgress('Marker creato!', 100);
+
+            // Clean up temp file (the corrupted one)
+            const tempFileToDelete = path.join(this.installPath, 'Inferno-Console-temp.exe');
+            if (fs.existsSync(tempFileToDelete)) {
+                try {
+                    fs.unlinkSync(tempFileToDelete);
+                    this.sendProgress('🧹 File temporaneo rimosso', 95);
+                } catch (error) {
+                    this.sendProgress('⚠️ Impossibile rimuovere file temporaneo', 95);
+                }
+            }
+
+            // 7. Installation completed
+            this.sendProgress('Installazione completata!', 100);
+
+            // 8. Installation completed
+
+            this.sendProgress('Installazione completata con successo!', 100, true);
+
+            return { 
+                success: true, 
+                installPath: this.installPath,
+                executablePath: path.join(this.installPath, 'Inferno Console.exe')
+            };
+
+        } catch (error) {
+            this.sendProgress(\`Error: \${error.message}\`, 0, false, true);
+            throw error;
+        } finally {
+            this.isInstalling = false;
+        }
+    }
+
+    async verifyWritable(targetDir) {
+        return new Promise((resolve, reject) => {
+            try {
+                const probeDir = fs.existsSync(targetDir) ? targetDir : path.dirname(targetDir);
+                const testFile = path.join(probeDir, '.write-test-' + Date.now() + '.tmp');
+                fs.writeFile(testFile, 'test', (err) => {
+                    if (err) {
+                        // Check if it's Program Files or similar system directory
+                        const isSystemDir = targetDir.toLowerCase().includes('program files') || 
+                                          targetDir.toLowerCase().includes('programdata') ||
+                                          targetDir.toLowerCase().includes('windows');
+                        
+                        if (isSystemDir) {
+                            this.sendProgress('⚠️ Per installare in questa cartella servono i permessi di amministratore', 5, false, false);
+                            this.sendProgress('💡 Suggerimento: Esegui l\\'installer come amministratore o scegli una cartella diversa', 5, false, false);
+                            reject(new Error('REQUIRES_ADMIN'));
+                        } else {
+                            this.sendProgress('❌ Permessi insufficienti sulla cartella selezionata', 5, false, true);
+                            reject(new Error('Permessi insufficienti sulla cartella scelta. Prova una cartella diversa.'));
+                        }
+                    } else {
+                        fs.unlink(testFile, () => resolve());
+                    }
+                });
+            } catch (e) {
+                this.sendProgress('❌ Impossibile verificare i permessi sulla cartella selezionata', 5, false, true);
+                reject(new Error('Impossibile verificare i permessi sulla cartella selezionata'));
+            }
+        });
+    }
+
+    async ensureDir(dirPath) {
+        return new Promise((resolve, reject) => {
+            fs.mkdir(dirPath, { recursive: true }, (err) => {
+                if (err && err.code !== 'EEXIST') {
+                    reject(err);
+                } else {
+                    resolve();
+                }
+            });
+        });
+    }
+
+    async downloadAppWithProgress() {
+        const outputPath = path.join(this.installPath, 'Inferno-Console-win.exe');
+        this.sendProgress(\`[DL] Percorso download: \${outputPath}\`, 30);
+
+        const getJson = (url) => new Promise((resolve, reject) => {
+            console.log('[DL][API] GET', url);
+            this.sendProgress('[DL][API] Connessione a GitHub API...', 30);
+            const req = https.request(url, {
+                method: 'GET',
+                headers: {
+                    'User-Agent': 'inferno-console-installer',
+                    'Accept': 'application/vnd.github+json'
+                }
+            }, (res) => {
+                console.log('[DL][API] Status:', res.statusCode, 'CT:', res.headers['content-type']);
+                this.sendProgress(\`[DL][API] Status: \${res.statusCode}, Content-Type: \${res.headers['content-type']}\`, 30);
+                let data = '';
+                res.on('data', (chunk) => { data += chunk; });
+                res.on('end', () => {
+                    try {
+                        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                            resolve(JSON.parse(data));
+                        } else {
+                            const msg = \`GitHub API HTTP \${res.statusCode}: \${res.statusMessage}\`;
+                            this.sendProgress(msg, 30, false, true);
+                            reject(new Error(msg));
+                        }
+                    } catch (e) { 
+                        this.sendProgress('Errore parsing risposta API GitHub', 30, false, true);
+                        reject(e); 
+                    }
+                });
+            });
+            req.on('error', (err) => { 
+                console.error('[DL][API] Error:', err.message); 
+                this.sendProgress(\`Errore API GitHub: \${err.message}\`, 30, false, true);
+                reject(err); 
+            });
+            req.end();
+        });
+
+        const resolveAssetUrl = async () => {
+            const apiUrl = 'https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest';
+            const release = await getJson(apiUrl);
+            this.sendProgress(\`[DL] Release trovata: \${release.tag_name}\`, 31);
+            
+            if (release && Array.isArray(release.assets)) {
+                this.sendProgress(\`[DL] Assets disponibili: \${release.assets.length}\`, 31);
+                release.assets.forEach(asset => {
+                    this.sendProgress(\`[DL] - \${asset.name} (\${asset.size} bytes)\`, 31);
+                });
+                
+                const asset = release.assets.find(a => a && a.name && a.name.toLowerCase().includes('inferno-console-win.exe'));
+                if (asset && asset.browser_download_url) {
+                    console.log('[DL] Resolved asset URL:', asset.browser_download_url);
+                    this.sendProgress(\`[DL] URL release risolta: \${asset.browser_download_url}\`, 31);
+                    return asset.browser_download_url;
+                } else {
+                    this.sendProgress('[DL] Asset inferno-console-win.exe non trovato negli assets', 31);
+                }
+            } else {
+                this.sendProgress('[DL] Nessun asset trovato nella release', 31);
+            }
+            
+            console.warn('[DL] Asset non trovato via API, uso fallback latest/download');
+            this.sendProgress('[DL] Asset non trovato via API, uso URL fallback', 31);
+            return 'https://github.com/Alexand83/InfernoConsole/releases/latest/download/Inferno-Console-win.exe';
+        };
+
+        const download = (url) => new Promise((resolve, reject) => {
+            console.log('[DL] Download URL:', url);
+            this.sendProgress(\`[DL] Download URL: \${url}\`, 32);
+            const file = fs.createWriteStream(outputPath);
+            const request = https.get(url, { headers: { 'User-Agent': 'inferno-console-installer', 'Accept': 'application/octet-stream' } }, (response) => {
+                console.log('[DL] Status:', response.statusCode, 'CT:', response.headers['content-type'], 'CL:', response.headers['content-length']);
+                this.sendProgress(\`[DL] Status: \${response.statusCode}, Content-Type: \${response.headers['content-type']}, Content-Length: \${response.headers['content-length']}\`, 33);
+                
+                if ([301,302,307,308].includes(response.statusCode)) {
+                    const redirectUrl = response.headers.location;
+                    console.log('[DL] Redirect ->', redirectUrl);
+                    this.sendProgress(\`[DL] Redirecting to: \${redirectUrl}\`, 34);
+                    if (redirectUrl) {
+                        this.sendProgress('Redirect download...', 35);
+                        response.destroy();
+                        resolve(download(redirectUrl));
+                        return;
+                    } else {
+                        this.sendProgress('Redirect senza location', 35, false, true);
+                        reject(new Error('Redirect senza location'));
+                        return;
+                    }
+                }
+
+                const contentType = (response.headers['content-type'] || '').toLowerCase();
+                if (contentType.includes('text/html')) {
+                    console.error('[DL] Unexpected HTML response');
+                    this.sendProgress('[DL] Risposta HTML inattesa dal server (asset non trovato?)', 40, false, true);
+                    reject(new Error('Risposta non valida (HTML) dal server.')); 
+                    return;
+                }
+
+                if (response.statusCode !== 200) {
+                    console.error('[DL] HTTP error:', response.statusCode, response.statusMessage);
+                    this.sendProgress(\`[DL] HTTP error: \${response.statusCode} \${response.statusMessage}\`, 40, false, true);
+                    reject(new Error(\`HTTP \${response.statusCode}: \${response.statusMessage}\`));
+                    return;
+                }
+
+                const totalSize = parseInt(response.headers['content-length'] || '0', 10);
+                let downloadedSize = 0;
+
+                response.on('data', (chunk) => {
+                    downloadedSize += chunk.length;
+                    if (totalSize > 0) {
+                        const percent = Math.round((downloadedSize / totalSize) * 100);
+                        const progress = Math.round(30 + (downloadedSize / totalSize) * 30);
+                        if (percent % 5 === 0) console.log('[DL] Progress:', percent + '%');
+                        this.sendProgress(\`Scaricamento in corso... \${percent}%\`, progress);
+                    } else {
+                        this.sendProgress('Scaricamento in corso...', 45);
+                    }
+                });
+
+                response.pipe(file);
+
+                file.on('finish', () => {
+                    file.close();
+                    try {
+                        const stats = fs.statSync(outputPath);
+                        console.log('[DL] File size:', stats.size);
+                        this.sendProgress(\`[DL] File scaricato: \${stats.size} bytes\`, 55);
+                        if (!stats || stats.size < 1024 * 1024) {
+                            this.sendProgress('[DL] File scaricato troppo piccolo (<1MB)', 55, false, true);
+                            fs.unlinkSync(outputPath);
+                            return reject(new Error('Download incompleto o file troppo piccolo'));
+                        }
+                        this.sendProgress('[DL] Download completato con successo!', 60);
+                    } catch (e) {
+                        this.sendProgress('[DL] Impossibile validare il file scaricato', 55, false, true);
+                        return reject(new Error('Impossibile validare il file scaricato'));
+                    }
+                    resolve(outputPath);
+                });
+
+                file.on('error', (err) => {
+                    console.error('[DL] File stream error:', err.message);
+                    this.sendProgress(\`[DL] Errore scrittura file: \${err.message}\`, 50, false, true);
+                    fs.unlink(outputPath, () => {});
+                    reject(err);
+                });
+            });
+            request.on('error', (err) => { 
+                console.error('[DL] Request error:', err.message); 
+                this.sendProgress(\`[DL] Errore richiesta download: \${err.message}\`, 35, false, true);
+                reject(err); 
+            });
+        });
+
+        try {
+            const assetUrl = await resolveAssetUrl();
+            this.sendProgress('[DL] Connessione a GitHub Releases...', 32);
+            const downloadedPath = await download(assetUrl);
+            this.sendProgress(\`[DL] Download completato: \${downloadedPath}\`, 60);
+            
+            // Verify the downloaded file exists
+            if (!fs.existsSync(downloadedPath)) {
+                throw new Error(\`File scaricato non trovato: \${downloadedPath}\`);
+            }
+            
+            const stats = fs.statSync(downloadedPath);
+            this.sendProgress(\`[DL] File verificato: \${stats.size} bytes\`, 60);
+            
+            return downloadedPath;
+        } catch (e) {
+            console.warn('[DL] Primary URL failed:', e.message);
+            this.sendProgress(\`[DL] Errore URL principale: \${e.message}\`, 33, false, true);
+            const fallback = 'https://github.com/Alexand83/InfernoConsole/releases/latest/download/Inferno-Console-win.exe';
+            this.sendProgress('[DL] Tentativo con URL fallback...', 33);
+            const downloadedPath = await download(fallback);
+            
+            // Verify the fallback download
+            if (!fs.existsSync(downloadedPath)) {
+                throw new Error(\`File fallback non trovato: \${downloadedPath}\`);
+            }
+            
+            return downloadedPath;
+        }
+    }
+
+    async installApp(downloadedPath) {
+        this.sendProgress('[DL] Verifica file scaricato...', 70);
+        this.sendProgress(\`[DL] Percorso file: \${downloadedPath}\`, 70);
+        
+        // Verify downloaded file exists
+        if (!fs.existsSync(downloadedPath)) {
+            this.sendProgress(\`[DL] ERRORE: File non trovato: \${downloadedPath}\`, 70, false, true);
+            throw new Error('File scaricato non trovato: ' + downloadedPath);
+        }
+        
+        this.sendProgress('[DL] File scaricato verificato!', 70);
+        
+        const targetPath = path.join(this.installPath, 'Inferno-Console-win.exe');
+        const tempPath = path.join(this.installPath, 'Inferno-Console-temp.exe');
+        
+        // Strategy: Rename temp to main executable, keep corrupted as temp for deletion
+        this.sendProgress('📁 Creazione file principale funzionante...', 70);
+        
+        // Copy to temp file first (this will be the working one)
+        fs.copyFileSync(downloadedPath, tempPath);
+        this.sendProgress('✅ File temporaneo creato: Inferno-Console-temp.exe', 72);
+        
+        // Copy to target file (this might be corrupted, will be used as temp)
+        fs.copyFileSync(downloadedPath, targetPath);
+        this.sendProgress('✅ File secondario creato: Inferno-Console-win.exe', 73);
+        
+        // Kill any running Inferno Console processes before renaming
+        this.sendProgress('🔄 Chiusura processi Inferno Console esistenti...', 74);
+        try {
+            const { execSync } = require('child_process');
+            execSync('taskkill /f /im "Inferno Console.exe" /t', { stdio: 'ignore' });
+            execSync('taskkill /f /im "Inferno-Console-temp.exe" /t', { stdio: 'ignore' });
+            execSync('taskkill /f /im "Inferno-Console-win.exe" /t', { stdio: 'ignore' });
+            this.sendProgress('✅ Processi chiusi', 74);
+        } catch (error) {
+            this.sendProgress('ℹ️ Nessun processo da chiudere', 74);
+        }
+        
+        // Wait a moment for processes to fully terminate
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Rename temp to main executable (the working one)
+        const mainExePath = path.join(this.installPath, 'Inferno Console.exe');
+        fs.renameSync(tempPath, mainExePath);
+        this.sendProgress('✅ File principale rinominato: Inferno Console.exe', 75);
+        
+        // Rename target to temp (the potentially corrupted one)
+        fs.renameSync(targetPath, tempPath);
+        this.sendProgress('✅ File secondario rinominato: Inferno-Console-temp.exe', 76);
+        
+        // Verify main file exists
+        if (fs.existsSync(mainExePath)) {
+            const mainStats = fs.statSync(mainExePath);
+            this.sendProgress(\`✅ Applicazione installata: \${mainStats.size} bytes\`, 75);
+        } else {
+            this.sendProgress('❌ ERRORE: File principale non creato!', 75, false, true);
+            throw new Error('File principale non creato');
+        }
+    }
+
+    async createShortcuts(createShortcutEnabled = true) {
+        try {
+            if (!createShortcutEnabled) {
+                this.sendProgress('ℹ️ Creazione shortcut disabilitata dall\\'utente', 85);
+                return;
+            }
+            
+            // Create desktop shortcut using PowerShell
+            const desktopPath = path.join(os.homedir(), 'Desktop', 'Inferno Console.lnk');
+            const targetExe = path.join(this.installPath, 'Inferno Console.exe');
+            
+            // Create Start Menu shortcut
+            const startMenuPath = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Inferno Console.lnk');
+            
+            // Create PowerShell script for shortcuts
+            const tempScriptPath = path.join(os.tmpdir(), 'create_shortcuts.ps1');
+            const psScript = [
+                '# Create Desktop Shortcut',
+                '$WshShell = New-Object -comObject WScript.Shell',
+                '$DesktopShortcut = $WshShell.CreateShortcut("' + desktopPath + '")',
+                '$DesktopShortcut.TargetPath = "' + targetExe + '"',
+                '$DesktopShortcut.WorkingDirectory = "' + this.installPath + '"',
+                '$DesktopShortcut.Description = "Inferno Console"',
+                '$DesktopShortcut.Save()',
+                'Write-Host "Desktop shortcut created"',
+                '',
+                '# Create Start Menu Shortcut',
+                '$StartMenuShortcut = $WshShell.CreateShortcut("' + startMenuPath + '")',
+                '$StartMenuShortcut.TargetPath = "' + targetExe + '"',
+                '$StartMenuShortcut.WorkingDirectory = "' + this.installPath + '"',
+                '$StartMenuShortcut.Description = "Inferno Console"',
+                '$StartMenuShortcut.Save()',
+                'Write-Host "Start Menu shortcut created"',
+                'Write-Host "All shortcuts created successfully"'
+            ].join('\\n');
+            
+            // Write script to temporary file
+            fs.writeFileSync(tempScriptPath, psScript, 'utf8');
+            
+            // Use execSync to run the script file
+            const { execSync } = require('child_process');
+            
+            try {
+                const result = execSync('powershell -ExecutionPolicy Bypass -File "' + tempScriptPath + '"', { encoding: 'utf8' });
+                this.sendProgress('✅ Shortcut creati con successo!', 90);
+                
+            } catch (execError) {
+                this.sendProgress('❌ Errore creazione shortcut', 85, false, true);
+            } finally {
+                // Clean up temporary script file
+                try {
+                    if (fs.existsSync(tempScriptPath)) {
+                        fs.unlinkSync(tempScriptPath);
+                    }
+                } catch (cleanupError) {
+                    // Silent cleanup error
+                }
+            }
+            
+        } catch (error) {
+            this.sendProgress('❌ Errore creazione shortcut: ' + error.message, 85, false, true);
+        }
+    }
+
+    async createUninstaller() {
+        // Copy the Electron uninstaller from the dist-electron directory
+        const sourceUninstaller = path.join(__dirname, '..', 'dist-electron', 'Inferno-Console-Uninstaller.exe');
+        const targetUninstaller = path.join(this.installPath, 'Inferno-Console-Uninstaller.exe');
+        
+        if (fs.existsSync(sourceUninstaller)) {
+            fs.copyFileSync(sourceUninstaller, targetUninstaller);
+            console.log('Electron uninstaller copied to:', targetUninstaller);
+        } else {
+            console.warn('Electron uninstaller not found, creating fallback .bat');
+            const uninstallerPath = path.join(this.installPath, 'Uninstall-Inferno-Console.bat');
+            const uninstallerContent = \`@echo off
+echo Disinstallazione Inferno Console...
+rmdir /s /q "\${this.installPath}"
+del "%~f0"
+echo Disinstallazione completata!
+pause\`;
+            fs.writeFileSync(uninstallerPath, uninstallerContent);
+        }
+    }
+
+    async createInstallerMarker() {
+        const markerPath = path.join(this.installPath, 'installer-info.json');
+        const markerData = {
+            version: '1.4.103',
+            installPath: this.installPath,
+            installDate: new Date().toISOString(),
+            installerType: 'custom'
+        };
+        fs.writeFileSync(markerPath, JSON.stringify(markerData, null, 2));
+    }
+
+
+}
+
 function createWindow() {
-    const mainWindow = new BrowserWindow({
-        width: 1000,
-        height: 800,
-        minWidth: 900,
-        minHeight: 700,
+        const mainWindow = new BrowserWindow({
+            width: 1300,
+            height: 1000,
+            minWidth: 1200,
+            minHeight: 900,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false
         },
-        frame: false,
-        titleBarStyle: 'hidden',
-        menuBarVisible: false
+        frame: true,
+        titleBarStyle: 'default',
+        menuBarVisible: true
     });
 
-    mainWindow.setMenu(null);
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
     
-    // Open DevTools for debugging
-    mainWindow.webContents.openDevTools();
+    mainWindow.once('ready-to-show', () => {
+        // Build a simple menu with DevTools toggle
+        const template = [
+            {
+                label: 'View',
+                submenu: [
+                    { role: 'reload' },
+                    { role: 'forcereload' },
+                    { type: 'separator' },
+                    { label: 'Toggle Developer Tools', role: 'toggleDevTools', accelerator: 'F12' }
+                ]
+            }
+        ];
+        const menu = Menu.buildFromTemplate(template);
+        Menu.setApplicationMenu(menu);
+    });
     
     // Handle window controls via IPC
     ipcMain.handle('minimize-app', () => {
@@ -77,21 +580,22 @@ function createWindow() {
         mainWindow.close();
     });
     
+    ipcMain.handle('finish-installation', () => {
+        app.quit();
+    });
+    
     // Handle installation logic
     ipcMain.handle('start-installation', async (event, data) => {
-        const { installPath } = data;
+        const { installPath, createShortcut } = data;
         console.log('Starting installation to:', installPath);
+        console.log('Create shortcut enabled:', createShortcut);
         
-        // Simulate installation process
-        for (let i = 0; i <= 100; i += 10) {
-            await new Promise(resolve => setTimeout(resolve, 200));
-            mainWindow.webContents.send('installation-progress', {
-                percentage: i,
-                message: \`Installing... \${i}%\`
-            });
-        }
-        
-        return { success: true, executablePath: path.join(installPath, 'Inferno-Console-win.exe') };
+        // Real installation process
+        const installer = new InstallerApp();
+        installer.mainWindow = mainWindow;
+        installer.installPath = installPath;
+        installer.createShortcutEnabled = createShortcut;
+        return await installer.performInstallation();
     });
     
     ipcMain.handle('select-install-path', async () => {
@@ -111,15 +615,64 @@ function createWindow() {
         const { shell } = require('electron');
         const fs = require('fs');
         try {
+            console.log('🔍 Verifica file:', targetPath);
+            
             if (targetPath && fs.existsSync(targetPath)) {
+                const stats = fs.statSync(targetPath);
+                console.log('✅ File trovato:', stats.size, 'bytes');
                 await shell.openPath(targetPath);
                 return { success: true };
             }
+            
+            console.log('❌ File non trovato:', targetPath);
             return { success: false, message: 'File not found: ' + (targetPath || 'undefined') };
         } catch (err) {
+            console.log('❌ Errore apertura:', err.message);
             return { success: false, message: err.message };
         }
     });
+
+    
+    ipcMain.handle('force-kill-all-processes', async () => {
+        const { exec } = require('child_process');
+        return new Promise((resolve, reject) => {
+            console.log('🔄 Terminazione FORZATA di tutti i processi Inferno Console...');
+            
+            // Multiple kill commands to be absolutely sure
+            const killCommands = [
+                'taskkill /f /im "Inferno Console.exe" 2>nul',
+                'taskkill /f /im "Inferno-Console-win.exe" 2>nul',
+                'taskkill /f /im "Inferno-Console-temp.exe" 2>nul',
+                'taskkill /f /im "InfernoConsole.exe" 2>nul',
+                'wmic process where "name like \'%Inferno%\'" delete 2>nul',
+                'wmic process where "commandline like \'%Inferno%\'" delete 2>nul'
+            ];
+            
+            let completed = 0;
+            let hasError = false;
+            
+            killCommands.forEach((cmd, index) => {
+                exec(cmd, (error, stdout, stderr) => {
+                    completed++;
+                    if (error && error.code !== 1) { // Code 1 means no processes found
+                        console.log('⚠️ Errore comando ' + (index + 1) + ':', error.message);
+                        hasError = true;
+                    } else {
+                        console.log('✅ Comando ' + (index + 1) + ' completato');
+                    }
+                    
+                    if (completed === killCommands.length) {
+                        if (hasError) {
+                            console.log('⚠️ Alcuni comandi hanno avuto errori, ma continuo...');
+                        }
+                        console.log('✅ Terminazione processi completata');
+                        resolve();
+                    }
+                });
+            });
+        });
+    });
+    
 }
 
 app.whenReady().then(createWindow);
@@ -232,8 +785,20 @@ if (fs.existsSync(portableExePath)) {
     console.log('⚠️  Portable executable not found, will be created by main build');
 }
 
-// 4. Create uninstaller
-console.log('📦 Creating uninstaller...');
+// 4. Build Electron uninstaller first
+console.log('🔨 Building Electron uninstaller...');
+try {
+    execSync('node build-uninstaller.js', { 
+        cwd: installerDir, 
+        stdio: 'inherit' 
+    });
+    console.log('✅ Electron uninstaller built');
+} catch (error) {
+    console.warn('⚠️ Failed to build Electron uninstaller, will use fallback .bat');
+}
+
+// 5. Create uninstaller fallback
+console.log('📦 Creating uninstaller fallback...');
 const uninstallerContent = `@echo off
 echo ========================================
 echo    INFERNO CONSOLE - UNINSTALLER
@@ -296,7 +861,7 @@ pause >nul`;
 fs.writeFileSync(path.join(outputDir, 'Inferno-Console-Uninstaller.exe'), uninstallerContent);
 console.log('✅ Uninstaller created');
 
-// 5. Create latest.yml for electron-updater
+// 6. Create latest.yml for electron-updater
 console.log('📦 Creating latest.yml...');
 const installerExePath = path.join(outputDir, outputExe);
 const portableExeInOutputPath = path.join(outputDir, 'Inferno-Console-win.exe');
@@ -323,7 +888,7 @@ releaseDate: ${new Date().toISOString()}`;
 fs.writeFileSync(path.join(outputDir, 'latest.yml'), latestYml);
 console.log('✅ latest.yml created');
 
-// 6. Create installer package
+// 7. Create installer package
 console.log('📦 Creating installer package...');
 const installerPackage = {
     name: 'Inferno-Console-Installer',
@@ -346,7 +911,7 @@ fs.writeFileSync(
 
 console.log('✅ Installer package created');
 
-// 5. Create README for installer
+// 8. Create README for installer
 const readmeContent = `# Inferno Console Installer
 
 ## Installazione
@@ -384,7 +949,7 @@ console.log(`📁 Output: ${outputDir}`);
 console.log(`📦 Installer: ${path.join(outputDir, outputExe)}`);
 console.log(`📊 Installer size: ${(fs.statSync(path.join(outputDir, outputExe)).size / (1024 * 1024)).toFixed(2)} MB`);
 
-// 6. Create GitHub release info
+// 9. Create GitHub release info
 const releaseInfo = {
     tag_name: 'v1.4.99',
     name: 'Inferno Console v1.4.99 - Custom Installer',

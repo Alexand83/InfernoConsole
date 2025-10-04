@@ -133,6 +133,21 @@
                         <p>Attendere mentre Inferno Console viene installato...</p>
                     </div>
                     <div class="step-body">
+                        <div class="install-options">
+                            <h4>Opzioni di Installazione:</h4>
+                            <div class="option-group">
+                                <label class="checkbox-container">
+                                    <input type="checkbox" id="createShortcut" checked>
+                                    <span class="checkmark"></span>
+                                    Crea shortcut sul Desktop e nel Menu Start
+                                </label>
+                            </div>
+                            <div class="install-button-container">
+                                <button id="startInstallBtn" class="btn btn-primary btn-large">
+                                    🚀 Inizia Installazione
+                                </button>
+                            </div>
+                        </div>
                         <div class="install-progress">
                             <div class="progress-container">
                                 <div class="progress-bar">
@@ -142,12 +157,14 @@
                             </div>
                             <div class="install-status" id="installStatus">Preparazione...</div>
                         </div>
-                        <div class="install-log">
-                            <h4>Log di Installazione:</h4>
-                            <div class="log-content" id="logContent">
-                                <!-- Log messages will appear here -->
-                            </div>
-                        </div>
+        <div class="install-log">
+            <div class="log-header">
+                <h4>Log di Installazione:</h4>
+            </div>
+            <div class="log-content" id="logContent">
+                <!-- Log messages will appear here -->
+            </div>
+        </div>
                     </div>
                 </div>
 
@@ -169,11 +186,6 @@
                                         <input type="checkbox" id="launchApp" checked>
                                         <span class="checkmark"></span>
                                         Avvia Inferno Console
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" id="createShortcut" checked>
-                                        <span class="checkmark"></span>
-                                        Crea shortcut sul desktop
                                     </label>
                                 </div>
                             </div>

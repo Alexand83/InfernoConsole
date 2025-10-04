@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -42,24 +42,33 @@ class InfernoConsoleInstallerGUI {
       resizable: true,
       maximizable: true,
       show: false,
-      frame: false,
-      titleBarStyle: 'hidden',
+      frame: true,
+      titleBarStyle: 'default',
       backgroundColor: '#1a1a1a',
       center: true,
       alwaysOnTop: false,
-      autoHideMenuBar: true,
-      menuBarVisible: false
+      autoHideMenuBar: false,
+      menuBarVisible: true
     });
 
     this.mainWindow.loadFile(path.join(__dirname, 'gui', 'index.html'));
     
     this.mainWindow.once('ready-to-show', () => {
       this.mainWindow.show();
-      // Remove menu completely
-      this.mainWindow.setMenuBarVisibility(false);
-      this.mainWindow.setMenu(null);
-      // Open DevTools for debugging
-      this.mainWindow.webContents.openDevTools();
+      // Build a simple menu with DevTools toggle
+      const template = [
+        {
+          label: 'View',
+          submenu: [
+            { role: 'reload' },
+            { role: 'forcereload' },
+            { type: 'separator' },
+            { label: 'Toggle Developer Tools', role: 'toggleDevTools', accelerator: 'F12' }
+          ]
+        }
+      ];
+      const menu = Menu.buildFromTemplate(template);
+      Menu.setApplicationMenu(menu);
     });
 
     this.mainWindow.on('closed', () => {
@@ -147,6 +156,10 @@ class InfernoConsoleInstallerGUI {
       // Send progress to GUI
       this.sendProgress('Installing...', 0);
 
+      // 0. Verify target path is writable
+      this.sendProgress('Verifica permessi cartella...', 5);
+      await this.verifyWritable(this.installPath);
+
       // 1. Create installation directory
       this.sendProgress('Creazione directory di installazione...', 10);
       await this.ensureDir(this.installPath);
@@ -193,6 +206,25 @@ class InfernoConsoleInstallerGUI {
     }
   }
 
+  async verifyWritable(targetDir) {
+    return new Promise((resolve, reject) => {
+      try {
+        // Fast path: if dir doesn't exist yet, probe parent
+        const probeDir = fs.existsSync(targetDir) ? targetDir : path.dirname(targetDir);
+        const testFile = path.join(probeDir, `.write-test-${Date.now()}.tmp`);
+        fs.writeFile(testFile, 'test', (err) => {
+          if (err) {
+            reject(new Error('Permessi insufficienti sulla cartella scelta. Seleziona una cartella in Documenti/Desktop oppure esegui come amministratore.'));
+          } else {
+            fs.unlink(testFile, () => resolve());
+          }
+        });
+      } catch (e) {
+        reject(new Error('Impossibile verificare i permessi sulla cartella selezionata'));
+      }
+    });
+  }
+
   async ensureDir(dirPath) {
     return new Promise((resolve, reject) => {
       fs.mkdir(dirPath, { recursive: true }, (err) => {
@@ -209,6 +241,8 @@ class InfernoConsoleInstallerGUI {
     const outputPath = path.join(this.installPath, 'Inferno-Console-win.exe');
 
     const getJson = (url) => new Promise((resolve, reject) => {
+      console.log('[DL][API] GET', url);
+      this.sendProgress(`[DL][API] Connessione a GitHub API...`, 30);
       const req = https.request(url, {
         method: 'GET',
         headers: {
@@ -216,6 +250,8 @@ class InfernoConsoleInstallerGUI {
           'Accept': 'application/vnd.github+json'
         }
       }, (res) => {
+        console.log('[DL][API] Status:', res.statusCode, 'CT:', res.headers['content-type']);
+        this.sendProgress(`[DL][API] Status: ${res.statusCode}, Content-Type: ${res.headers['content-type']}`, 30);
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {
@@ -223,12 +259,21 @@ class InfernoConsoleInstallerGUI {
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
               resolve(JSON.parse(data));
             } else {
-              reject(new Error(`GitHub API HTTP ${res.statusCode}: ${res.statusMessage}`));
+              const msg = `GitHub API HTTP ${res.statusCode}: ${res.statusMessage}`;
+              this.sendProgress(msg, 30, false, true);
+              reject(new Error(msg));
             }
-          } catch (e) { reject(e); }
+          } catch (e) { 
+            this.sendProgress('Errore parsing risposta API GitHub', 30, false, true);
+            reject(e); 
+          }
         });
       });
-      req.on('error', reject);
+      req.on('error', (err) => { 
+        console.error('[DL][API] Error:', err.message); 
+        this.sendProgress(`Errore API GitHub: ${err.message}`, 30, false, true);
+        reject(err); 
+      });
       req.end();
     });
 
@@ -238,27 +283,54 @@ class InfernoConsoleInstallerGUI {
       const release = await getJson(apiUrl);
       if (release && Array.isArray(release.assets)) {
         const asset = release.assets.find(a => a && a.name && a.name.toLowerCase().includes('inferno-console-win.exe'));
-        if (asset && asset.browser_download_url) return asset.browser_download_url;
+        if (asset && asset.browser_download_url) {
+          console.log('[DL] Resolved asset URL:', asset.browser_download_url);
+          this.sendProgress(`[DL] URL release risolta: ${asset.browser_download_url}`, 31);
+          return asset.browser_download_url;
+        }
       }
+      console.warn('[DL] Asset non trovato via API, uso fallback latest/download');
+      this.sendProgress('[DL] Asset non trovato via API, uso URL fallback', 31);
       // Fallback to old static pattern
       return 'https://github.com/Alexand83/InfernoConsole/releases/latest/download/Inferno-Console-win.exe';
     };
 
     const download = (url) => new Promise((resolve, reject) => {
+      console.log('[DL] Download URL:', url);
+      this.sendProgress(`[DL] Download URL: ${url}`, 32);
       const file = fs.createWriteStream(outputPath);
-      const request = https.get(url, (response) => {
-        // Handle redirects
-        if (response.statusCode === 302 || response.statusCode === 301) {
+      const request = https.get(url, { headers: { 'User-Agent': 'inferno-console-installer', 'Accept': 'application/octet-stream' } }, (response) => {
+        console.log('[DL] Status:', response.statusCode, 'CT:', response.headers['content-type'], 'CL:', response.headers['content-length']);
+        this.sendProgress(`[DL] Status: ${response.statusCode}, Content-Type: ${response.headers['content-type']}, Content-Length: ${response.headers['content-length']}`, 33);
+        // Handle redirects (301, 302, 307, 308)
+        if ([301,302,307,308].includes(response.statusCode)) {
           const redirectUrl = response.headers.location;
+          console.log('[DL] Redirect ->', redirectUrl);
+          this.sendProgress(`[DL] Redirecting to: ${redirectUrl}`, 34);
           if (redirectUrl) {
-            this.sendProgress(`Connessione al server...`, 35);
+            this.sendProgress('Redirect download...', 35);
             response.destroy();
             resolve(download(redirectUrl));
+            return;
+          } else {
+            this.sendProgress('Redirect senza location', 35, false, true);
+            reject(new Error('Redirect senza location'));
             return;
           }
         }
 
+        // Reject HTML responses (likely error page)
+        const contentType = (response.headers['content-type'] || '').toLowerCase();
+        if (contentType.includes('text/html')) {
+          console.error('[DL] Unexpected HTML response');
+          this.sendProgress('[DL] Risposta HTML inattesa dal server (asset non trovato?)', 40, false, true);
+          reject(new Error('Risposta non valida (HTML) dal server.')); 
+          return;
+        }
+
         if (response.statusCode !== 200) {
+          console.error('[DL] HTTP error:', response.statusCode, response.statusMessage);
+          this.sendProgress(`[DL] HTTP error: ${response.statusCode} ${response.statusMessage}`, 40, false, true);
           reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
           return;
         }
@@ -271,6 +343,7 @@ class InfernoConsoleInstallerGUI {
           if (totalSize > 0) {
             const percent = Math.round((downloadedSize / totalSize) * 100);
             const progress = Math.round(30 + (downloadedSize / totalSize) * 30); // 30-60%
+            if (percent % 5 === 0) console.log('[DL] Progress:', percent + '%');
             this.sendProgress(`Scaricamento in corso... ${percent}%`, progress);
           } else {
             this.sendProgress('Scaricamento in corso...', 45);
@@ -281,25 +354,48 @@ class InfernoConsoleInstallerGUI {
 
         file.on('finish', () => {
           file.close();
+          try {
+            const stats = fs.statSync(outputPath);
+            console.log('[DL] File size:', stats.size);
+            this.sendProgress(`[DL] File scaricato: ${stats.size} bytes`, 55);
+            if (!stats || stats.size < 1024 * 1024) {
+              // <1MB consider as failed/incomplete
+              this.sendProgress('[DL] File scaricato troppo piccolo (<1MB)', 55, false, true);
+              fs.unlinkSync(outputPath);
+              return reject(new Error('Download incompleto o file troppo piccolo'));
+            }
+            this.sendProgress('[DL] Download completato con successo!', 60);
+          } catch (e) {
+            this.sendProgress('[DL] Impossibile validare il file scaricato', 55, false, true);
+            return reject(new Error('Impossibile validare il file scaricato'));
+          }
           resolve(outputPath);
         });
 
         file.on('error', (err) => {
+          console.error('[DL] File stream error:', err.message);
+          this.sendProgress(`[DL] Errore scrittura file: ${err.message}`, 50, false, true);
           fs.unlink(outputPath, () => {});
           reject(err);
         });
       });
-      request.on('error', (err) => reject(err));
+      request.on('error', (err) => { 
+        console.error('[DL] Request error:', err.message); 
+        this.sendProgress(`[DL] Errore richiesta download: ${err.message}`, 35, false, true);
+        reject(err); 
+      });
     });
 
     try {
       const assetUrl = await resolveAssetUrl();
-      this.sendProgress('Connessione a GitHub Releases...', 32);
+      this.sendProgress('[DL] Connessione a GitHub Releases...', 32);
       return await download(assetUrl);
     } catch (e) {
+      console.warn('[DL] Primary URL failed:', e.message);
+      this.sendProgress(`[DL] Errore URL principale: ${e.message}`, 33, false, true);
       // Last-resort fallback
       const fallback = 'https://github.com/Alexand83/InfernoConsole/releases/latest/download/Inferno-Console-win.exe';
-      this.sendProgress('Fallback URL download...', 33);
+      this.sendProgress('[DL] Tentativo con URL fallback...', 33);
       return await download(fallback);
     }
   }
@@ -530,3 +626,4 @@ app.on('activate', () => {
     installer.init();
   }
 });
+

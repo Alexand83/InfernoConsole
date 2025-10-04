@@ -222,8 +222,28 @@ function createWindow() {
   })
 }
 
+// 🧹 CLEANUP: Funzione per rimuovere il file temporaneo dell'installer
+function cleanupTempInstallerFile() {
+  try {
+    const appDir = path.dirname(process.execPath)
+    const tempFile = path.join(appDir, 'Inferno-Console-temp.exe')
+    
+    if (fs.existsSync(tempFile)) {
+      console.log('🧹 Rimozione file temporaneo installer:', tempFile)
+      fs.unlinkSync(tempFile)
+      console.log('✅ File temporaneo rimosso con successo')
+    }
+  } catch (error) {
+    console.log('⚠️ Errore rimozione file temporaneo:', error.message)
+    // Non bloccare l'avvio dell'app per questo errore
+  }
+}
+
 app.whenReady().then(() => {
   createWindow()
+  
+  // 🧹 CLEANUP: Rimuovi file temporaneo dell'installer se presente
+  cleanupTempInstallerFile()
   
   // ✅ OPTIMIZATION: Inizializza l'auto-updater in background per non bloccare l'avvio
   setTimeout(() => {

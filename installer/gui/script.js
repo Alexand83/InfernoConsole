@@ -69,7 +69,9 @@ class NSISInstaller {
             }
             
             if (this.currentStep === 'path') {
-                await this.startInstallation();
+                // Go to install step and setup button
+                this.goToStep('install', true);
+                this.setupInstallButton();
             } else {
                 await this.goNext();
             }
@@ -93,11 +95,21 @@ class NSISInstaller {
         const stepIndex = this.steps.indexOf(step);
         const currentIndex = this.steps.indexOf(this.currentStep);
         
+        // Block navigation during installation
+        if (this.isInstalling) {
+            return false;
+        }
+        
         // Can ONLY go to previous steps, never forward via sidebar
         return stepIndex < currentIndex;
     }
     
     canGoNext() {
+        // Block navigation during installation
+        if (this.isInstalling) {
+            return false;
+        }
+        
         const currentIndex = this.steps.indexOf(this.currentStep);
         return currentIndex < this.steps.length - 1;
     }
@@ -191,32 +203,37 @@ class NSISInstaller {
         
         // Show next button based on current step
         if (this.canGoNext()) {
-            nextBtn.style.display = 'inline-block';
-            
-            switch (this.currentStep) {
-                case 'welcome':
-                    nextBtn.textContent = 'Avanti';
-                    nextBtn.className = 'btn btn-primary';
-                    nextBtn.disabled = false;
-                    break;
+            // Hide "Avanti" button in install step - only show "Inizia Installazione"
+            if (this.currentStep === 'install') {
+                nextBtn.style.display = 'none';
+            } else {
+                nextBtn.style.display = 'inline-block';
                 
-                case 'license':
-                    nextBtn.textContent = 'Avanti';
-                    nextBtn.className = 'btn btn-primary';
-                    nextBtn.disabled = !document.getElementById('licenseAgree').checked;
-                    break;
-                
-                case 'path':
-                    nextBtn.textContent = 'Installa';
-                    nextBtn.className = 'btn btn-primary';
-                    nextBtn.disabled = false;
-                    break;
-                
-                default:
-                    nextBtn.textContent = 'Avanti';
-                    nextBtn.className = 'btn btn-primary';
-                    nextBtn.disabled = false;
-                    break;
+                switch (this.currentStep) {
+                    case 'welcome':
+                        nextBtn.textContent = 'Avanti';
+                        nextBtn.className = 'btn btn-primary';
+                        nextBtn.disabled = false;
+                        break;
+                    
+                    case 'license':
+                        nextBtn.textContent = 'Avanti';
+                        nextBtn.className = 'btn btn-primary';
+                        nextBtn.disabled = !document.getElementById('licenseAgree').checked;
+                        break;
+                    
+                    case 'path':
+                        nextBtn.textContent = 'Avanti';
+                        nextBtn.className = 'btn btn-primary';
+                        nextBtn.disabled = false;
+                        break;
+                    
+                    default:
+                        nextBtn.textContent = 'Avanti';
+                        nextBtn.className = 'btn btn-primary';
+                        nextBtn.disabled = false;
+                        break;
+                }
             }
         }
         
@@ -267,6 +284,37 @@ class NSISInstaller {
         }
     }
 
+    setupInstallButton() {
+        const startInstallBtn = document.getElementById('startInstallBtn');
+        const installProgress = document.querySelector('.install-progress');
+        
+        if (startInstallBtn) {
+            startInstallBtn.addEventListener('click', async () => {
+                // Hide the options and show progress + log
+                startInstallBtn.style.display = 'none';
+                installProgress.style.display = 'block';
+                
+                const installLog = document.querySelector('.install-log');
+                if (installLog) {
+                    installLog.style.display = 'block';
+                }
+                
+                // Start installation
+                await this.startInstallation();
+            });
+        }
+        
+        // Hide progress and log initially
+        if (installProgress) {
+            installProgress.style.display = 'none';
+        }
+        
+        const installLog = document.querySelector('.install-log');
+        if (installLog) {
+            installLog.style.display = 'none';
+        }
+    }
+
     async startInstallation() {
         console.log('startInstallation() called');
         
@@ -294,10 +342,16 @@ class NSISInstaller {
             this.installPath = selectedPath;
             this.addLog(`📁 Percorso di installazione: ${this.installPath}`);
             
+            // Get checkbox state
+            const createShortcut = document.getElementById('createShortcut');
+            const createShortcutEnabled = createShortcut ? createShortcut.checked : false;
+            console.log('Create shortcut enabled:', createShortcutEnabled);
+            
             // Call the real installation
             console.log('Calling IPC start-installation...');
             const result = await ipcRenderer.invoke('start-installation', {
-                installPath: this.installPath
+                installPath: this.installPath,
+                createShortcut: createShortcutEnabled
             });
             
             console.log('Installation result:', result);
@@ -320,7 +374,21 @@ class NSISInstaller {
             console.error('Installation error:', error);
             this.addLog(`❌ Errore durante l'installazione: ${error.message}`);
             this.updateInstallStatus(`Errore: ${error.message}`);
-            alert(`Errore durante l'installazione: ${error.message}`);
+            
+            // Handle admin permission error gracefully
+            if (error.message === 'REQUIRES_ADMIN') {
+                this.addLog('💡 Per installare in Program Files, esegui l\'installer come amministratore');
+                this.addLog('🔄 Oppure torna indietro e scegli una cartella diversa');
+                this.updateInstallStatus('⚠️ Permessi di amministratore richiesti per questa cartella');
+                // Don't show alert for admin permission error, just show in logs
+            } else {
+                this.addLog(`❌ Errore: ${error.message}`);
+                this.updateInstallStatus(`Errore: ${error.message}`);
+                // Only show alert for critical errors, not permission errors
+                if (!error.message.includes('permessi') && !error.message.includes('admin')) {
+                    alert(`Errore durante l'installazione: ${error.message}`);
+                }
+            }
         } finally {
             this.isInstalling = false;
             this.updateButtons();
@@ -403,17 +471,66 @@ class NSISInstaller {
                 console.log('Install path for launch:', installPath);
                 
                 if (installPath) {
-                    const executablePath = path.join(installPath, 'Inferno-Console-win.exe');
-                    this.addLog(`🚀 Tentativo avvio applicazione: ${executablePath}`);
-                    const result = await ipcRenderer.invoke('open-path', executablePath);
+                    const fs = require('fs');
+                    const candidates = [
+                        path.join(installPath, 'Inferno Console.exe'), // Main executable
+                        path.join(installPath, 'Inferno-Console-temp.exe'), // Try temp file first
+                        path.join(installPath, 'Inferno-Console-win.exe'),
+                        path.join(installPath, 'Inferno-Console-New.exe')
+                    ];
+                    const executablePath = candidates.find(p => fs.existsSync(p));
                     
-                    if (result && result.success) {
-                        this.addLog('✅ Applicazione avviata con successo!');
-                    } else {
-                        const errorMsg = result ? result.message : 'Risultato non definito';
-                        this.addLog(`❌ Errore avvio applicazione: ${errorMsg}`);
-                        alert(`Errore: ${errorMsg}\n\nVerifica che l'installazione sia stata completata correttamente.`);
+                    if (!executablePath) {
+                        const tried = candidates.join(' | ');
+                        this.addLog('❌ Percorso eseguibile non trovato');
+                        alert('Errore: Eseguibile non trovato. Percorsi provati:\n' + tried + '\n\nVerifica che l\'installazione sia stata completata correttamente.');
+                        return;
                     }
+                    
+                    this.addLog(`🚀 Chiusura forzata di tutti i processi Inferno Console...`);
+                    
+                    // Kill ALL Inferno Console processes aggressively
+                    ipcRenderer.invoke('force-kill-all-processes').then(() => {
+                        this.addLog('✅ Tutti i processi terminati con successo!');
+                        this.addLog('⏳ Attendo 3 secondi per la chiusura completa...');
+                        
+                        // Wait longer for complete process termination
+                        setTimeout(() => {
+                            this.addLog('🚀 Avvio applicazione...');
+                            
+                            // Now try to launch the app
+                            ipcRenderer.invoke('open-path', executablePath).then(result => {
+                                if (result && result.success) {
+                                    this.addLog('✅ Applicazione avviata con successo!');
+                                    
+                                    // If we launched the temp file, note it for manual cleanup
+                                    if (executablePath.includes('Inferno-Console-temp.exe')) {
+                                        this.addLog('💡 File temporaneo: Inferno-Console-temp.exe');
+                                        this.addLog('🧹 Puoi eliminarlo manualmente dopo l\'avvio');
+                                    }
+                                } else {
+                                    const errorMsg = result ? result.message : 'Risultato non definito';
+                                    this.addLog(`❌ Errore avvio applicazione: ${errorMsg}`);
+                                }
+                            }).catch(error => {
+                                this.addLog(`❌ Errore avvio applicazione: ${error.message}`);
+                            });
+                            
+                            // Close installer after starting app
+                            this.addLog('🔒 Chiusura installer...');
+                            setTimeout(() => {
+                                ipcRenderer.invoke('finish-installation');
+                            }, 1000);
+                        }, 3000); // Wait 3 seconds for complete termination
+                    }).catch(error => {
+                        this.addLog(`⚠️ Errore terminazione processi: ${error.message}`);
+                        // Try to start app anyway
+                        this.addLog('🚀 Tentativo avvio diretto...');
+                        ipcRenderer.invoke('open-path', executablePath);
+                        setTimeout(() => {
+                            ipcRenderer.invoke('finish-installation');
+                        }, 1000);
+                    });
                 } else {
                     this.addLog('❌ Percorso eseguibile non trovato');
                     alert('Errore: Percorso eseguibile non trovato. Verifica l\'installazione.');
@@ -423,15 +540,19 @@ class NSISInstaller {
                 this.addLog(`❌ Errore avvio applicazione: ${error.message}`);
                 alert(`Errore critico: ${error.message}`);
             }
+        } else {
+            // Close installer immediately if not launching app
+            this.addLog('✅ Installazione completata!');
+            this.addLog('💡 Puoi avviare Inferno Console dalla cartella di installazione');
+            this.addLog('🔗 Oppure usa lo shortcut sul desktop');
+            setTimeout(() => {
+                ipcRenderer.invoke('finish-installation');
+            }, 2000);
         }
         
         if (createShortcut) {
             // Shortcut creation would be handled by the installer logic
-            this.addLog('🔗 Shortcut creato sul desktop');
         }
-        
-        // Close the installer
-        ipcRenderer.invoke('close-app');
     }
 }
 
@@ -463,6 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.installer = new NSISInstaller();
     console.log('Installer initialized:', window.installer);
 });
+
 
 // Handle window close
 window.addEventListener('beforeunload', (event) => {
