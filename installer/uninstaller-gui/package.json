@@ -1,9 +1,13 @@
 {
   "name": "inferno-console-uninstaller",
-  "version": "1.4.103",
+  "version": "1.4.106",
   "description": "Inferno Console Uninstaller",
   "author": "Alessandro(NeverAgain)",
   "main": "main-uninstaller.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Alexand83/InfernoConsole.git"
+  },
   "scripts": {
     "start": "electron .",
     "dev": "electron .",

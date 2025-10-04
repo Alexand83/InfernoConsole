@@ -1,8 +1,12 @@
 {
   "name": "inferno-console-installer",
-  "version": "1.0.0",
+  "version": "1.4.106",
   "description": "Custom installer for Inferno Console",
   "main": "main-gui-simple.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Alexand83/InfernoConsole.git"
+  },
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
