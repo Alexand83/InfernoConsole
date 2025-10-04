@@ -547,28 +547,20 @@ function createWindow() {
             nodeIntegration: true,
             contextIsolation: false
         },
-        frame: true,
-        titleBarStyle: 'default',
-        menuBarVisible: true
+        frame: false,
+        titleBarStyle: 'hidden',
+        menuBarVisible: false,
+        resizable: true,
+        minimizable: true,
+        maximizable: false,
+        closable: true
     });
 
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
     
     mainWindow.once('ready-to-show', () => {
-        // Build a simple menu with DevTools toggle
-        const template = [
-            {
-                label: 'View',
-                submenu: [
-                    { role: 'reload' },
-                    { role: 'forcereload' },
-                    { type: 'separator' },
-                    { label: 'Toggle Developer Tools', role: 'toggleDevTools', accelerator: 'F12' }
-                ]
-            }
-        ];
-        const menu = Menu.buildFromTemplate(template);
-        Menu.setApplicationMenu(menu);
+        // Nessun menu - interfaccia pulita
+        Menu.setApplicationMenu(null);
     });
     
     // Handle window controls via IPC

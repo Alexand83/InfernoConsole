@@ -6,7 +6,9 @@ const http = require('http')
 const https = require('https')
 const fs = require('fs')
 const WebRTCServer = require('./webrtc-server')
-const youtubedl = require('youtube-dl-exec')
+        const youtubedl = require('youtube-dl-exec')
+        const ytdl = require('ytdl-core')
+        const play = require('play-dl')
 // const { YTDlpWrap } = require('yt-dlp-wrap') // Disabilitato per problemi di import
 
   // ✅ OPTIMIZATION: Ottimizzazioni per avvio ultra-veloce
@@ -1830,20 +1832,31 @@ ipcMain.handle('get-webrtc-clients', async () => {
 
         async function downloadYouTubeAudioWithFallback(url, quality, outputPath, downloadId, event) {
           const downloaders = [
-            { name: 'youtube-dl-exec', method: downloadWithYoutubeDlExec },
-            { name: 'yt-dlp', method: downloadWithYtDlp },
-            { name: 'youtube-dl', method: downloadWithYoutubeDl }
+            { name: 'youtube-dl-exec', method: downloadWithYoutubeDlExec, priority: 1 },
+            { name: 'play-dl', method: downloadWithPlayDl, priority: 2 },
+            { name: 'ytdl-core', method: downloadWithYtdlCore, priority: 3 }
           ]
+          
+          // Ordina per priorità (1 = più alta)
+          downloaders.sort((a, b) => a.priority - b.priority)
           
           for (const downloader of downloaders) {
             try {
               console.log(`🔄 [YOUTUBE] Tentativo download con ${downloader.name}...`)
               const result = await downloader.method(url, quality, outputPath, downloadId, event)
-              console.log(`✅ [YOUTUBE] Download completato con ${downloader.name}`)
-              return { success: true, ...result, method: downloader.name }
+              
+              if (result && result.filePath) {
+                console.log(`✅ [YOUTUBE] Successo con ${downloader.name}`)
+                return { success: true, ...result, method: downloader.name }
+              }
             } catch (error) {
-              console.warn(`⚠️ [YOUTUBE] ${downloader.name} fallito:`, error.message)
-              continue
+              console.warn(`❌ [YOUTUBE] ${downloader.name} fallito: ${error.message}`)
+              
+              // Se è un errore critico, passa al prossimo downloader
+              if (error.message.includes('403') || error.message.includes('Invalid URL')) {
+                console.log(`🔄 [YOUTUBE] Errore critico con ${downloader.name}, provo il prossimo...`)
+                continue
+              }
             }
           }
           
@@ -1852,6 +1865,228 @@ ipcMain.handle('get-webrtc-clients', async () => {
         
         // downloadWithYtDlpWrap rimossa per problemi di import
         
+        async function downloadWithPlayDl(url, quality, outputPath, downloadId, event) {
+          return new Promise(async (resolve, reject) => {
+            try {
+              // Crea la cartella se non esiste
+              if (!fs.existsSync(outputPath)) {
+                fs.mkdirSync(outputPath, { recursive: true })
+              }
+              
+              console.log(`🎵 [YOUTUBE] Download con play-dl: ${url}`)
+              
+              // Ottieni informazioni del video
+              const videoInfo = await play.video_info(url)
+              if (!videoInfo) {
+                throw new Error('Video non trovato')
+              }
+              
+              const title = videoInfo.video_details.title
+              const artist = videoInfo.video_details.channel?.name || 'Unknown Artist'
+              const duration = videoInfo.video_details.durationInSec || 0
+              
+              console.log(`🎵 [YOUTUBE] Titolo: ${title}`)
+              console.log(`🎵 [YOUTUBE] Artista: ${artist}`)
+              console.log(`🎵 [YOUTUBE] Durata: ${duration}s`)
+              
+              // Crea nome file sicuro
+              const safeTitle = title.replace(/[<>:"/\\|?*]/g, '_').substring(0, 100)
+              const fileName = `${safeTitle}.mp3`
+              const filePath = path.join(outputPath, fileName)
+              
+              // Ottieni stream audio - converti quality in numero e gestisci URL
+              const audioStream = await play.stream(url, {
+                quality: parseInt(quality),
+                type: 'audio',
+                seek: 0
+              })
+              
+              if (!audioStream || !audioStream.stream) {
+                throw new Error('Stream audio non disponibile')
+              }
+              
+              console.log(`🎵 [YOUTUBE] Formato audio: ${quality}kbps`)
+              
+              // Simula progresso
+              let currentProgress = 0
+              const progressInterval = setInterval(() => {
+                if (downloadId) {
+                  currentProgress += Math.random() * 10 + 5
+                  currentProgress = Math.min(95, currentProgress)
+                  
+                  event.sender.send('youtube-download-progress', {
+                    downloadId,
+                    percentage: Math.round(currentProgress),
+                    speed: 'N/A',
+                    eta: 'N/A'
+                  })
+                }
+              }, 1000)
+              
+              // Crea stream di scrittura
+              const writeStream = fs.createWriteStream(filePath)
+              
+              // Gestisci errori
+              audioStream.stream.on('error', (error) => {
+                clearInterval(progressInterval)
+                console.error('❌ [YOUTUBE] Errore stream audio play-dl:', error)
+                reject(new Error(`Errore stream audio: ${error.message}`))
+              })
+              
+              writeStream.on('error', (error) => {
+                clearInterval(progressInterval)
+                console.error('❌ [YOUTUBE] Errore scrittura file play-dl:', error)
+                reject(new Error(`Errore scrittura file: ${error.message}`))
+              })
+              
+              writeStream.on('finish', () => {
+                clearInterval(progressInterval)
+                
+                if (downloadId) {
+                  event.sender.send('youtube-download-progress', {
+                    downloadId,
+                    percentage: 100,
+                    speed: 'N/A',
+                    eta: 'N/A'
+                  })
+                }
+                
+                console.log(`✅ [YOUTUBE] Download completato: ${filePath}`)
+                
+                resolve({
+                  filePath: filePath,
+                  title: title,
+                  artist: artist,
+                  duration: duration
+                })
+              })
+              
+              // Pipa lo stream
+              audioStream.stream.pipe(writeStream)
+              
+            } catch (error) {
+              console.error('❌ [YOUTUBE] Errore play-dl:', error)
+              reject(new Error(`play-dl error: ${error.message}`))
+            }
+          })
+        }
+        
+        async function downloadWithYtdlCore(url, quality, outputPath, downloadId, event) {
+          return new Promise(async (resolve, reject) => {
+            try {
+              // Crea la cartella se non esiste
+              if (!fs.existsSync(outputPath)) {
+                fs.mkdirSync(outputPath, { recursive: true })
+              }
+              
+              console.log(`🎵 [YOUTUBE] Download con ytdl-core: ${url}`)
+              
+              // Ottieni info video
+              const videoInfo = await ytdl.getInfo(url)
+              const title = videoInfo.videoDetails.title
+              const artist = videoInfo.videoDetails.author.name
+              const duration = parseInt(videoInfo.videoDetails.lengthSeconds)
+              
+              console.log(`🎵 [YOUTUBE] Titolo: ${title}`)
+              console.log(`🎵 [YOUTUBE] Artista: ${artist}`)
+              console.log(`🎵 [YOUTUBE] Durata: ${duration}s`)
+              
+              // Trova il formato audio migliore
+              const audioFormats = ytdl.filterFormats(videoInfo.formats, 'audioonly')
+              const bestAudio = audioFormats.find(format => 
+                format.audioBitrate && format.audioBitrate >= quality * 1000
+              ) || audioFormats[0]
+              
+              if (!bestAudio) {
+                throw new Error('Nessun formato audio trovato')
+              }
+              
+              console.log(`🎵 [YOUTUBE] Formato audio: ${bestAudio.audioBitrate}kbps`)
+              
+              // Crea il nome file sicuro
+              const safeTitle = title.replace(/[<>:"/\\|?*]/g, '_').substring(0, 100)
+              const fileName = `${safeTitle}.mp3`
+              const filePath = path.join(outputPath, fileName)
+              
+              // Crea stream di download
+              const audioStream = ytdl(url, { 
+                format: bestAudio,
+                quality: 'highestaudio',
+                requestOptions: {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Referer': 'https://www.youtube.com/',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                  }
+                }
+              })
+              
+              // Crea stream di scrittura
+              const writeStream = fs.createWriteStream(filePath)
+              
+              // Simula progresso
+              let currentProgress = 0
+              const progressInterval = setInterval(() => {
+                if (downloadId) {
+                  currentProgress += Math.random() * 10 + 5
+                  currentProgress = Math.min(95, currentProgress)
+                  
+                  event.sender.send('youtube-download-progress', {
+                    downloadId,
+                    percentage: Math.round(currentProgress),
+                    speed: 'N/A',
+                    eta: 'N/A'
+                  })
+                }
+              }, 1000)
+              
+              // Gestisci errori stream
+              audioStream.on('error', (error) => {
+                clearInterval(progressInterval)
+                console.error('❌ [YOUTUBE] Errore stream audio:', error)
+                reject(new Error(`Errore stream audio: ${error.message}`))
+              })
+              
+              writeStream.on('error', (error) => {
+                clearInterval(progressInterval)
+                console.error('❌ [YOUTUBE] Errore scrittura file:', error)
+                reject(new Error(`Errore scrittura file: ${error.message}`))
+              })
+              
+              // Quando il download è completo
+              writeStream.on('finish', () => {
+                clearInterval(progressInterval)
+                
+                // Invia progresso finale
+                if (downloadId) {
+                  event.sender.send('youtube-download-progress', {
+                    downloadId,
+                    percentage: 100,
+                    speed: 'N/A',
+                    eta: 'N/A'
+                  })
+                }
+                
+                console.log(`✅ [YOUTUBE] Download completato: ${filePath}`)
+                
+                resolve({
+                  filePath: filePath,
+                  title: title,
+                  artist: artist,
+                  duration: duration
+                })
+              })
+              
+              // Collega gli stream
+              audioStream.pipe(writeStream)
+              
+            } catch (error) {
+              console.error('❌ [YOUTUBE] Errore ytdl-core:', error)
+              reject(new Error(`ytdl-core error: ${error.message}`))
+            }
+          })
+        }
+        
         async function downloadWithYoutubeDlExec(url, quality, outputPath, downloadId, event) {
             // Crea la cartella se non esiste
             if (!fs.existsSync(outputPath)) {
@@ -1859,6 +2094,27 @@ ipcMain.handle('get-webrtc-clients', async () => {
             }
             
             const outputTemplate = path.join(outputPath, '%(title)s.%(ext)s')
+            
+            // Cerca ffmpeg in diversi percorsi
+            const ffmpegPaths = [
+              path.join(__dirname, 'ffmpeg.exe'),
+              path.join(__dirname, '..', 'node_modules', 'ffmpeg-static', 'ffmpeg.exe'),
+              path.join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg.exe')
+            ]
+            
+            let ffmpegPath = null
+            for (const testPath of ffmpegPaths) {
+              if (fs.existsSync(testPath)) {
+                ffmpegPath = testPath
+                console.log(`✅ [YOUTUBE] ffmpeg trovato in: ${ffmpegPath}`)
+                break
+              }
+            }
+            
+            if (!ffmpegPath) {
+              console.warn('⚠️ [YOUTUBE] ffmpeg.exe non trovato nei percorsi standard')
+              console.log('🔄 [YOUTUBE] Tentativo con ffmpeg di sistema...')
+            }
             
             // Ottieni info video per il titolo
             let videoInfo = null
@@ -1873,7 +2129,14 @@ ipcMain.handle('get-webrtc-clients', async () => {
               console.warn('⚠️ [YOUTUBE] Errore recupero info video:', infoError.message)
             }
             
-            // Avvia download con progresso
+            // Configurazione ffmpeg
+            const ffmpegConfig = ffmpegPath ? 
+              { ffmpegLocation: ffmpegPath } : 
+              { ffmpegLocation: 'ffmpeg' }
+            
+            console.log(`🎵 [YOUTUBE] Usando ffmpeg: ${ffmpegConfig.ffmpegLocation}`)
+            
+            // Avvia download con progresso - configurazione ottimizzata
             const downloadPromise = youtubedl(url, {
               extractAudio: true,
               audioFormat: 'mp3',
@@ -1883,8 +2146,16 @@ ipcMain.handle('get-webrtc-clients', async () => {
               noCheckCertificates: true,
               addHeader: [
                 'referer:youtube.com',
-                'user-agent:googlebot'
-              ]
+                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+              ],
+              ...ffmpegConfig,
+              preferFreeFormats: true,
+              noPlaylist: true,
+              ignoreErrors: true,
+              noColor: true,
+              sleepInterval: 1,
+              maxSleepInterval: 5,
+              retries: 3
             })
             
           // Simula progresso realistico
@@ -1971,90 +2242,107 @@ ipcMain.handle('get-webrtc-clients', async () => {
             
             const outputTemplate = path.join(outputPath, '%(title)s.%(ext)s')
             
-            const ytdlp = spawn('yt-dlp', [
-              '--extract-audio',
-              '--audio-format', 'mp3',
-              '--audio-quality', quality.toString(),
-              '--output', outputTemplate,
-              '--no-warnings',
-              '--no-check-certificates',
-              '--add-header', 'referer:youtube.com',
-              '--add-header', 'user-agent:googlebot',
-              url
-            ], { stdio: ['pipe', 'pipe', 'pipe'] })
+            // Controlla se yt-dlp è disponibile
+            const ytdlp = spawn('yt-dlp', ['--version'], { stdio: ['pipe', 'pipe', 'pipe'] })
             
-            let stdout = ''
-            let stderr = ''
-            
-            ytdlp.stdout.on('data', (data) => {
-              stdout += data.toString()
+            ytdlp.on('error', (error) => {
+              console.warn('⚠️ [YOUTUBE] yt-dlp non trovato nel sistema:', error.message)
+              reject(new Error('yt-dlp non installato'))
             })
-            
-            ytdlp.stderr.on('data', (data) => {
-              stderr += data.toString()
-            })
-            
-            // Simula progresso
-            let currentProgress = 0
-            const progressInterval = setInterval(() => {
-              if (downloadId) {
-                currentProgress += Math.random() * 15 + 5
-                currentProgress = Math.min(95, currentProgress)
-                
-                event.sender.send('youtube-download-progress', {
-                  downloadId,
-                  percentage: Math.round(currentProgress),
-                  speed: 'N/A',
-                  eta: 'N/A'
-                })
-              }
-            }, 2000)
             
             ytdlp.on('close', (code) => {
-              clearInterval(progressInterval)
+              if (code !== 0) {
+                reject(new Error('yt-dlp non disponibile'))
+                return
+              }
               
-              if (code === 0) {
-                // Invia progresso finale
+              // Se yt-dlp è disponibile, procedi con il download
+              const downloadProcess = spawn('yt-dlp', [
+                '--extract-audio',
+                '--audio-format', 'mp3',
+                '--audio-quality', quality.toString(),
+                '--output', outputTemplate,
+                '--no-warnings',
+                '--no-check-certificates',
+                '--add-header', 'referer:youtube.com',
+                '--add-header', 'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                '--cookies-from-browser', 'chrome',
+                url
+              ], { stdio: ['pipe', 'pipe', 'pipe'] })
+              
+              let stdout = ''
+              let stderr = ''
+              
+              downloadProcess.stdout.on('data', (data) => {
+                stdout += data.toString()
+              })
+              
+              downloadProcess.stderr.on('data', (data) => {
+                stderr += data.toString()
+              })
+              
+              // Simula progresso
+              let currentProgress = 0
+              const progressInterval = setInterval(() => {
                 if (downloadId) {
+                  currentProgress += Math.random() * 15 + 5
+                  currentProgress = Math.min(95, currentProgress)
+                  
                   event.sender.send('youtube-download-progress', {
                     downloadId,
-                    percentage: 100,
+                    percentage: Math.round(currentProgress),
                     speed: 'N/A',
                     eta: 'N/A'
                   })
                 }
+              }, 2000)
+              
+              downloadProcess.on('close', (code) => {
+                clearInterval(progressInterval)
                 
-                // Trova il file scaricato nella cartella (il più recente)
-                const files = fs.readdirSync(outputPath).filter(file => file.endsWith('.mp3'))
-                let latestFile = null
-                let latestTime = 0
-                
-                for (const file of files) {
-                  const filePath = path.join(outputPath, file)
-                  const stats = fs.statSync(filePath)
-                  if (stats.mtime.getTime() > latestTime) {
-                    latestTime = stats.mtime.getTime()
-                    latestFile = file
+                if (code === 0) {
+                  // Invia progresso finale
+                  if (downloadId) {
+                    event.sender.send('youtube-download-progress', {
+                      downloadId,
+                      percentage: 100,
+                      speed: 'N/A',
+                      eta: 'N/A'
+                    })
                   }
+                  
+                  // Trova il file scaricato nella cartella (il più recente)
+                  const files = fs.readdirSync(outputPath).filter(file => file.endsWith('.mp3'))
+                  let latestFile = null
+                  let latestTime = 0
+                  
+                  for (const file of files) {
+                    const filePath = path.join(outputPath, file)
+                    const stats = fs.statSync(filePath)
+                    if (stats.mtime.getTime() > latestTime) {
+                      latestTime = stats.mtime.getTime()
+                      latestFile = file
+                    }
+                  }
+                  
+                  const fullFilePath = latestFile ? path.join(outputPath, latestFile) : outputPath
+                  console.log(`🎵 [YOUTUBE] File più recente trovato: ${latestFile}`)
+                  
+                  resolve({
+                    filePath: fullFilePath,
+                    title: latestFile ? latestFile.replace('.mp3', '') : 'Downloaded with yt-dlp',
+                    artist: 'Unknown Artist',
+                    duration: 0
+                  })
+                } else {
+                  reject(new Error(`yt-dlp fallito con codice ${code}: ${stderr}`))
                 }
-                
-                const fullFilePath = latestFile ? path.join(outputPath, latestFile) : outputPath
-                console.log(`🎵 [YOUTUBE] File più recente trovato: ${latestFile}`)
-                
-                resolve({
-                  filePath: fullFilePath,
-                  title: latestFile ? latestFile.replace('.mp3', '') : 'Downloaded with yt-dlp',
-                  artist: 'Unknown Artist',
-                  duration: 0
-                })
-              } else {
-                reject(new Error(`yt-dlp fallito con codice ${code}: ${stderr}`))
-              }
-            })
-            
-            ytdlp.on('error', (error) => {
-              clearInterval(progressInterval)
-              reject(new Error(`yt-dlp non trovato: ${error.message}`))
+              })
+              
+              downloadProcess.on('error', (error) => {
+                clearInterval(progressInterval)
+                reject(new Error(`yt-dlp download error: ${error.message}`))
+              })
             })
           })
         }
