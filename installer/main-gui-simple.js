@@ -431,7 +431,7 @@ class InfernoConsoleInstallerGUI {
     // Create config file
     const config = {
       installedAt: new Date().toISOString(),
-      version: '1.4.98',
+      version: '1.4.117',
       installerVersion: '1.0.0',
       installPath: this.installPath
     };
@@ -605,7 +605,7 @@ pause
       const markerPath = path.join(this.installPath, '..', 'installer-info.json');
       const markerData = {
         installer: 'custom-gui',
-        version: '1.4.103',
+        version: '1.4.117',
         installDate: new Date().toISOString(),
         installPath: this.installPath,
         features: [
