@@ -49,12 +49,17 @@ jobs:
       run: |
         echo "Building custom installer and uninstaller..."
         cd installer
+        echo "Current directory: $(Get-Location)"
         npm install
         echo "Building installer..."
         node build-installer.js
+        echo "Installer build completed, checking installer output..."
+        Get-ChildItem ../dist-electron/ | Select-Object Name, Length
         echo "Building uninstaller..."
         node build-uninstaller.js
-        echo "Build completed, checking files..."
+        echo "Uninstaller build completed, checking uninstaller output..."
+        Get-ChildItem ../dist-electron/ | Select-Object Name, Length
+        echo "All builds completed, final check..."
         Get-ChildItem ../dist-electron/ | Select-Object Name, Length
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
