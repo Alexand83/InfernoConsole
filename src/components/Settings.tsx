@@ -6,6 +6,7 @@ import { useSettings, AppSettings } from '../contexts/SettingsContext'
 import { useAudio } from '../contexts/AudioContext'
 import { useTranslation } from '../i18n'
 import UpdateChecker from './UpdateChecker'
+import UpdateManager from './UpdateManager'
 import LibrariesInfo from './LibrariesInfo'
 import { updateConfig } from '../config/updateConfig'
 import { getVersionInfo, formatVersion, getChangelog, refreshVersionInfo, downloadUpdate, installUpdate } from '../utils/versionSync'
@@ -1656,6 +1657,15 @@ const Settings = () => {
                     </p>
                   )}
                 </div>
+              </div>
+
+              {/* Delta Update Manager */}
+              <div className="bg-dj-primary rounded-lg p-6 border border-dj-accent/20">
+                <UpdateManager
+                  currentVersion={currentVersion}
+                  updateUrl={updateUrl}
+                  onUpdateChecked={(date) => setLastUpdateCheck(date)}
+                />
               </div>
 
               {/* Librerie Utilizzate */}

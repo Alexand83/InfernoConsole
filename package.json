@@ -1,7 +1,7 @@
 {
   "name": "dj-console",
-  "version": "1.4.108",
-  "buildDate": "2025-10-04T20:10:38.839Z",
+  "version": "1.4.110",
+  "buildDate": "2025-10-08T10:52:48.565Z",
   "description": "Inferno Console - Console DJ professionale con mixaggio audio avanzato, capacità di streaming e effetti in tempo reale",
   "main": "electron/main.js",
   "updater": {
@@ -26,7 +26,15 @@
     "update-version": "node scripts/update-version.js",
     "version:patch": "npm version patch && npm run update-version",
     "version:minor": "npm version minor && npm run update-version",
-    "version:major": "npm version major && npm run update-version"
+    "version:major": "npm version major && npm run update-version",
+    "build:delta": "npm run build && node scripts/generate-delta.js",
+    "release:delta": "node scripts/generate-delta-release.js",
+    "delta:generate": "node scripts/generate-delta.js",
+    "delta:test": "CURRENT_VERSION=1.4.108 NEW_VERSION=1.4.109 npm run delta:generate",
+    "delta:test-system": "node scripts/test-delta-system.js",
+    "delta:full-test": "npm run delta:test-system && npm run delta:test",
+    "release:create": "node scripts/create-release.js",
+    "release:auto": "npm run build && npm run release:delta"
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",

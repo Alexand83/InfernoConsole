@@ -80,9 +80,10 @@ class InfernoConsoleInstallerGUI {
     // Get install paths
     ipcMain.handle('get-install-paths', () => {
       return {
+        documents: path.join(os.homedir(), 'Documents', 'Inferno Console'),
         desktop: path.join(os.homedir(), 'Desktop', 'Inferno Console'),
-        programs: 'C:\\Program Files\\Inferno Console',
-        documents: path.join(os.homedir(), 'Documents', 'Inferno Console')
+        localappdata: path.join(os.homedir(), 'AppData', 'Local', 'Inferno Console'),
+        programs: 'C:\\Program Files\\Inferno Console'
       };
     });
 
@@ -209,16 +210,37 @@ class InfernoConsoleInstallerGUI {
   async verifyWritable(targetDir) {
     return new Promise((resolve, reject) => {
       try {
-        // Fast path: if dir doesn't exist yet, probe parent
-        const probeDir = fs.existsSync(targetDir) ? targetDir : path.dirname(targetDir);
-        const testFile = path.join(probeDir, `.write-test-${Date.now()}.tmp`);
-        fs.writeFile(testFile, 'test', (err) => {
-          if (err) {
-            reject(new Error('Permessi insufficienti sulla cartella scelta. Seleziona una cartella in Documenti/Desktop oppure esegui come amministratore.'));
-          } else {
-            fs.unlink(testFile, () => resolve());
-          }
-        });
+        // Check if path requires admin privileges
+        const requiresAdmin = targetDir.includes('Program Files') || 
+                             targetDir.includes('Program Files (x86)') ||
+                             targetDir.includes('C:\\Windows\\') ||
+                             targetDir.includes('C:\\ProgramData\\');
+
+        if (requiresAdmin) {
+          // Try to write a test file to check if we have admin privileges
+          const probeDir = fs.existsSync(targetDir) ? targetDir : path.dirname(targetDir);
+          const testFile = path.join(probeDir, `.write-test-${Date.now()}.tmp`);
+          
+          fs.writeFile(testFile, 'test', (err) => {
+            if (err) {
+              reject(new Error('REQUIRES_ADMIN: La cartella selezionata richiede privilegi di amministratore. Esegui l\'installer come amministratore oppure scegli una cartella diversa (Documenti, Desktop, AppData).'));
+            } else {
+              fs.unlink(testFile, () => resolve());
+            }
+          });
+        } else {
+          // For non-admin paths, just try to write
+          const probeDir = fs.existsSync(targetDir) ? targetDir : path.dirname(targetDir);
+          const testFile = path.join(probeDir, `.write-test-${Date.now()}.tmp`);
+          
+          fs.writeFile(testFile, 'test', (err) => {
+            if (err) {
+              reject(new Error('Permessi insufficienti sulla cartella scelta. Seleziona una cartella diversa.'));
+            } else {
+              fs.unlink(testFile, () => resolve());
+            }
+          });
+        }
       } catch (e) {
         reject(new Error('Impossibile verificare i permessi sulla cartella selezionata'));
       }

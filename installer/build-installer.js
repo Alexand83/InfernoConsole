@@ -88,16 +88,24 @@ class InstallerApp {
             await this.ensureDir(this.installPath);
             this.sendProgress('Directory creata con successo!', 20);
 
+            // 1.1 Immediately write install path to registry (early write)
+            await this.writeInstallPathToRegistry();
+
             // 2. Download application
             this.sendProgress('Preparazione download...', 30);
             this.sendProgress('[DL] Inizio download applicazione...', 30);
             const downloadPath = await this.downloadAppWithProgress();
-            this.sendProgress('[DL] Download completato con successo!', 60);
+            this.sendProgress('[DL] Download completato con successo!', 50);
+
+            // 2.5. Download uninstaller
+            this.sendProgress('[DL] Inizio download uninstaller...', 55);
+            const uninstallerPath = await this.downloadUninstallerWithProgress();
+            this.sendProgress('[DL] Download uninstaller completato!', 60);
 
             // 3. Install application
             this.sendProgress('Installazione applicazione...', 70);
             await this.installApp(downloadPath);
-            this.sendProgress('Applicazione installata!', 80);
+            this.sendProgress('Applicazione installata!', 85);
 
             // 4. Create shortcuts
             this.sendProgress('Creazione shortcut...', 85);
@@ -105,14 +113,17 @@ class InstallerApp {
             this.sendProgress('Shortcut creati!', 90);
 
             // 5. Create uninstaller
-            this.sendProgress('Creazione uninstaller...', 95);
+            this.sendProgress('Creazione uninstaller...', 90);
             await this.createUninstaller();
-            this.sendProgress('Uninstaller creato!', 98);
+            this.sendProgress('Uninstaller creato!', 95);
 
             // 6. Create installer marker
-            this.sendProgress('Creazione marker installer...', 99);
+            this.sendProgress('Creazione marker installer...', 95);
             await this.createInstallerMarker();
-            this.sendProgress('Marker creato!', 100);
+            this.sendProgress('✅ Installazione completata al 100%!', 100);
+
+            // Write install path to registry for uninstaller (final confirm)
+            await this.writeInstallPathToRegistry();
 
             // Clean up temp file (the corrupted one)
             const tempFileToDelete = path.join(this.installPath, 'Inferno-Console-temp.exe');
@@ -378,6 +389,177 @@ class InstallerApp {
         }
     }
 
+    async downloadUninstallerWithProgress() {
+        const outputPath = path.join(this.installPath, 'Inferno-Console-Uninstaller.exe');
+        this.sendProgress('[DL] Percorso uninstaller: ' + outputPath, 55);
+
+        const getJson = (url) => new Promise((resolve, reject) => {
+            console.log('[DL][UNINSTALLER] GET', url);
+            this.sendProgress('[DL][UNINSTALLER] Connessione a GitHub API...', 55);
+            const req = https.request(url, {
+                method: 'GET',
+                headers: {
+                    'User-Agent': 'inferno-console-installer',
+                    'Accept': 'application/vnd.github+json'
+                }
+            }, (res) => {
+                console.log('[DL][UNINSTALLER] Status:', res.statusCode);
+                this.sendProgress('[DL][UNINSTALLER] Status: ' + res.statusCode, 55);
+                let data = '';
+                res.on('data', (chunk) => { data += chunk; });
+                res.on('end', () => {
+                    try {
+                        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                            resolve(JSON.parse(data));
+                        } else {
+                            const msg = 'GitHub API HTTP ' + res.statusCode + ': ' + res.statusMessage;
+                            this.sendProgress(msg, 55, false, true);
+                            reject(new Error(msg));
+                        }
+                    } catch (e) { 
+                        this.sendProgress('Errore parsing risposta API GitHub per uninstaller', 55, false, true);
+                        reject(e); 
+                    }
+                });
+            });
+            req.on('error', (err) => { 
+                console.error('[DL][UNINSTALLER] Error:', err.message); 
+                this.sendProgress('Errore API GitHub uninstaller: ' + err.message, 55, false, true);
+                reject(err); 
+            });
+            req.end();
+        });
+
+        const resolveUninstallerUrl = async () => {
+            const apiUrl = 'https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest';
+            const release = await getJson(apiUrl);
+            this.sendProgress('[DL][UNINSTALLER] Release trovata: ' + release.tag_name, 56);
+            
+            if (release && Array.isArray(release.assets)) {
+                this.sendProgress('[DL][UNINSTALLER] Assets disponibili: ' + release.assets.length, 56);
+                
+                // Look for uninstaller asset
+                const uninstallerAsset = release.assets.find(asset => 
+                    asset.name === 'Inferno-Console-Uninstaller.exe'
+                );
+                
+                if (uninstallerAsset) {
+                    this.sendProgress('[DL][UNINSTALLER] Uninstaller trovato: ' + uninstallerAsset.name, 57);
+                    return uninstallerAsset.browser_download_url;
+                } else {
+                    this.sendProgress('❌ [DL][UNINSTALLER] Uninstaller non trovato negli asset!', 57, false, true);
+                    throw new Error('Uninstaller non trovato negli asset della release');
+                }
+            } else {
+                this.sendProgress('❌ [DL][UNINSTALLER] Nessun asset trovato nella release!', 57, false, true);
+                throw new Error('Nessun asset trovato nella release');
+            }
+        };
+
+        const downloadUninstaller = (url, outputPath) => new Promise((resolve, reject) => {
+            console.log('[DL][UNINSTALLER] Download URL:', url);
+            this.sendProgress('[DL][UNINSTALLER] Download da: ' + url, 58);
+            const file = fs.createWriteStream(outputPath);
+            const request = https.get(url, { 
+                headers: { 
+                    'User-Agent': 'inferno-console-installer', 
+                    'Accept': 'application/octet-stream' 
+                } 
+            }, (response) => {
+                console.log('[DL][UNINSTALLER] Status:', response.statusCode, 'CT:', response.headers['content-type'], 'CL:', response.headers['content-length']);
+                this.sendProgress('[DL][UNINSTALLER] Status: ' + response.statusCode, 58);
+                
+                if ([301,302,307,308].includes(response.statusCode)) {
+                    const redirectUrl = response.headers.location;
+                    console.log('[DL][UNINSTALLER] Redirect ->', redirectUrl);
+                    this.sendProgress('[DL][UNINSTALLER] Redirect to: ' + redirectUrl, 58);
+                    if (redirectUrl) {
+                        this.sendProgress('[DL][UNINSTALLER] Redirect download...', 58);
+                        response.destroy();
+                        resolve(downloadUninstaller(redirectUrl, outputPath));
+                        return;
+                    } else {
+                        this.sendProgress('[DL][UNINSTALLER] Redirect senza location', 58, false, true);
+                        reject(new Error('Redirect senza location'));
+                        return;
+                    }
+                }
+
+                const contentType = (response.headers['content-type'] || '').toLowerCase();
+                if (contentType.includes('text/html')) {
+                    console.error('[DL][UNINSTALLER] Unexpected HTML response');
+                    this.sendProgress('[DL][UNINSTALLER] Risposta HTML inattesa dal server', 58, false, true);
+                    reject(new Error('Risposta non valida (HTML) dal server.')); 
+                    return;
+                }
+
+                if (response.statusCode !== 200) {
+                    console.error('[DL][UNINSTALLER] HTTP error:', response.statusCode, response.statusMessage);
+                    this.sendProgress('[DL][UNINSTALLER] HTTP error: ' + response.statusCode + ' ' + response.statusMessage, 58, false, true);
+                    reject(new Error('HTTP ' + response.statusCode + ': ' + response.statusMessage));
+                    return;
+                }
+
+                const totalSize = parseInt(response.headers['content-length'] || '0', 10);
+                let downloadedSize = 0;
+
+                response.on('data', (chunk) => {
+                    downloadedSize += chunk.length;
+                    if (totalSize > 0) {
+                        const percent = Math.round((downloadedSize / totalSize) * 100);
+                        const progress = Math.round(58 + (downloadedSize / totalSize) * 20); // Da 58% a 78%
+                        if (percent % 5 === 0) console.log('[DL][UNINSTALLER] Progress:', percent + '%');
+                        this.sendProgress('[DL][UNINSTALLER] Progresso: ' + percent + '%', progress);
+                    } else {
+                        this.sendProgress('[DL][UNINSTALLER] Download in corso...', 65);
+                    }
+                });
+
+                response.pipe(file);
+
+                file.on('finish', () => {
+                    file.close();
+                    try {
+                        const stats = fs.statSync(outputPath);
+                        console.log('[DL][UNINSTALLER] File size:', stats.size);
+                        this.sendProgress('[DL][UNINSTALLER] File scaricato: ' + stats.size + ' bytes', 78);
+                        if (!stats || stats.size < 1024 * 1024) {
+                            this.sendProgress('[DL][UNINSTALLER] File scaricato troppo piccolo (<1MB)', 78, false, true);
+                            fs.unlinkSync(outputPath);
+                            return reject(new Error('Download incompleto o file troppo piccolo'));
+                        }
+                        this.sendProgress('✅ [DL][UNINSTALLER] Download completato!', 80);
+                    } catch (e) {
+                        this.sendProgress('[DL][UNINSTALLER] Impossibile validare il file scaricato', 78, false, true);
+                        return reject(new Error('Impossibile validare il file scaricato'));
+                    }
+                    resolve(outputPath);
+                });
+
+                file.on('error', (err) => {
+                    console.error('[DL][UNINSTALLER] File stream error:', err.message);
+                    this.sendProgress('[DL][UNINSTALLER] Errore scrittura file: ' + err.message, 70, false, true);
+                    fs.unlink(outputPath, () => {});
+                    reject(err);
+                });
+            });
+            request.on('error', (err) => { 
+                console.error('[DL][UNINSTALLER] Request error:', err.message); 
+                this.sendProgress('[DL][UNINSTALLER] Errore richiesta: ' + err.message, 58, false, true);
+                reject(err); 
+            });
+        });
+
+        try {
+            const uninstallerUrl = await resolveUninstallerUrl();
+            await downloadUninstaller(uninstallerUrl, outputPath);
+            return outputPath;
+        } catch (error) {
+            this.sendProgress('❌ [DL][UNINSTALLER] Errore download uninstaller: ' + error.message, 55, false, true);
+            throw error;
+        }
+    }
+
     async installApp(downloadedPath) {
         this.sendProgress('[DL] Verifica file scaricato...', 70);
         this.sendProgress(\`[DL] Percorso file: \${downloadedPath}\`, 70);
@@ -431,9 +613,9 @@ class InstallerApp {
         // Verify main file exists
         if (fs.existsSync(mainExePath)) {
             const mainStats = fs.statSync(mainExePath);
-            this.sendProgress(\`✅ Applicazione installata: \${mainStats.size} bytes\`, 75);
+            this.sendProgress(\`✅ Applicazione installata: \${mainStats.size} bytes\`, 85);
         } else {
-            this.sendProgress('❌ ERRORE: File principale non creato!', 75, false, true);
+            this.sendProgress('❌ ERRORE: File principale non creato!', 85, false, true);
             throw new Error('File principale non creato');
         }
     }
@@ -441,7 +623,7 @@ class InstallerApp {
     async createShortcuts(createShortcutEnabled = true) {
         try {
             if (!createShortcutEnabled) {
-                this.sendProgress('ℹ️ Creazione shortcut disabilitata dall\\'utente', 85);
+                this.sendProgress('ℹ️ Creazione shortcut disabilitata dall\\'utente', 90);
                 return;
             }
             
@@ -503,15 +685,25 @@ class InstallerApp {
     }
 
     async createUninstaller() {
-        // Copy the Electron uninstaller from the dist-electron directory
-        const sourceUninstaller = path.join(__dirname, '..', 'dist-electron', 'Inferno-Console-Uninstaller.exe');
+        // Check if uninstaller was already downloaded
         const targetUninstaller = path.join(this.installPath, 'Inferno-Console-Uninstaller.exe');
+        
+        if (fs.existsSync(targetUninstaller)) {
+            this.sendProgress('✅ Uninstaller già presente (scaricato da GitHub)', 95);
+            console.log('Uninstaller already downloaded from GitHub:', targetUninstaller);
+            return;
+        }
+        
+        // Fallback: Copy the Electron uninstaller from the dist-electron directory
+        const sourceUninstaller = path.join(__dirname, '..', 'dist-electron', 'Inferno-Console-Uninstaller.exe');
         
         if (fs.existsSync(sourceUninstaller)) {
             fs.copyFileSync(sourceUninstaller, targetUninstaller);
+            this.sendProgress('✅ Uninstaller copiato da build locale', 95);
             console.log('Electron uninstaller copied to:', targetUninstaller);
         } else {
             console.warn('Electron uninstaller not found, creating fallback .bat');
+            this.sendProgress('⚠️ Creazione uninstaller fallback .bat', 95);
             const uninstallerPath = path.join(this.installPath, 'Uninstall-Inferno-Console.bat');
             const uninstallerContent = \`@echo off
 echo Disinstallazione Inferno Console...
@@ -526,12 +718,38 @@ pause\`;
     async createInstallerMarker() {
         const markerPath = path.join(this.installPath, 'installer-info.json');
         const markerData = {
-            version: '1.4.103',
+            version: '1.4.108',
             installPath: this.installPath,
             installDate: new Date().toISOString(),
             installerType: 'custom'
         };
         fs.writeFileSync(markerPath, JSON.stringify(markerData, null, 2));
+    }
+
+    async writeInstallPathToRegistry() {
+        try {
+            const { execSync } = require('child_process');
+            // Escape embedded quotes for reg.exe
+            const safePath = (this.installPath || '').replace(/"/g, '""');
+            // Use quadruple backslashes here so that generated installer code contains double backslashes
+            const cmd = 'reg add "HKCU\\\\Software\\\\InfernoConsole" /v InstallPath /t REG_SZ /d "' + safePath + '" /f';
+            execSync(cmd, { stdio: 'ignore' });
+            this.sendProgress('✅ Percorso installazione salvato nel Registro di sistema (HKCU)', 100);
+        } catch (e1) {
+            try {
+                // PowerShell fallback with Registry provider (no need to escape backslashes)
+                const psPath = (this.installPath || '').replace(/'/g, "''");
+                const psCmd = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "' +
+                  "New-Item -Path 'HKCU:\\Software\\InfernoConsole' -Force | Out-Null; " +
+                  "Set-ItemProperty -Path 'HKCU:\\Software\\InfernoConsole' -Name 'InstallPath' -Value '" + psPath + "' -Force" +
+                '"';
+                const { execSync } = require('child_process');
+                execSync(psCmd, { stdio: 'ignore' });
+                this.sendProgress('✅ Percorso installazione salvato nel Registro di sistema (PowerShell fallback)', 100);
+            } catch (e2) {
+                this.sendProgress('⚠️ Impossibile scrivere nel Registro di sistema: ' + e2.message, 100);
+            }
+        }
     }
 
 
@@ -789,69 +1007,32 @@ try {
     console.warn('⚠️ Failed to build Electron uninstaller, will use fallback .bat');
 }
 
-// 5. Create uninstaller fallback
+// 5. Create uninstaller fallback (BAT) without overwriting the EXE
 console.log('📦 Creating uninstaller fallback...');
-const uninstallerContent = `@echo off
+const uninstallerBat = `@echo off
+setlocal EnableDelayedExpansion
 echo ========================================
-echo    INFERNO CONSOLE - UNINSTALLER
+echo    INFERNO CONSOLE - UNINSTALLER (FALLBACK)
 echo ========================================
 echo.
-echo [AVVISO] Questo rimuoverà Inferno Console dal sistema.
+for /f "tokens=3,*" %%A in ('reg query HKCU\Software\InfernoConsole /v InstallPath ^| find /i "REG_SZ"') do set INSTALL_DIR=%%A %%B
+if not defined INSTALL_DIR set "INSTALL_DIR=%~dp0"
+set "INSTALL_DIR=%INSTALL_DIR:~0,-1%"
+echo [INFO] Cartella: "%INSTALL_DIR%"
 echo.
-
-set "INSTALL_DIR=%USERPROFILE%\\Desktop\\Inferno Console"
-
-:CONFIRM
-set /p CONFIRM="Sei sicuro di voler disinstallare? (S/N): "
-if /i "%CONFIRM%"=="s" (
-    goto :UNINSTALL
-) else if /i "%CONFIRM%"=="n" (
-    echo [INFO] Disinstallazione annullata.
-    goto :END
-) else (
-    echo [AVVISO] Scelta non valida. Inserisci S o N.
-    goto :CONFIRM
-)
-
-:UNINSTALL
 echo [INFO] Rimozione file applicazione...
 if exist "%INSTALL_DIR%" (
     rmdir /s /q "%INSTALL_DIR%" 2>nul
-    if %ERRORLEVEL% NEQ 0 (
-        echo [ERRORE] Impossibile rimuovere alcuni file. Prova a chiudere l'applicazione e riprova.
-    ) else (
-        echo [OK] File applicazione rimossi.
-    )
-) else (
-    echo [INFO] Directory non trovata, probabilmente già rimossa.
 )
+echo [INFO] Rimozione shortcut...
+if exist "%USERPROFILE%\Desktop\Inferno Console.lnk" del "%USERPROFILE%\Desktop\Inferno Console.lnk" 2>nul
+if exist "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk" del "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Inferno Console.lnk" 2>nul
+echo [OK] Disinstallazione completata.
+endlocal
+exit /b 0`;
 
-echo [INFO] Rimozione shortcut desktop...
-if exist "%USERPROFILE%\\Desktop\\Inferno Console.lnk" (
-    del "%USERPROFILE%\\Desktop\\Inferno Console.lnk" 2>nul
-    echo [OK] Shortcut desktop rimosso.
-)
-
-echo [INFO] Rimozione shortcut Start Menu...
-if exist "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Inferno Console.lnk" (
-    del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Inferno Console.lnk" 2>nul
-    echo [OK] Shortcut Start Menu rimosso.
-)
-
-echo.
-echo ========================================
-echo    DISINSTALLAZIONE COMPLETATA!
-echo ========================================
-echo.
-echo [OK] Inferno Console è stato rimosso dal sistema.
-echo.
-
-:END
-echo Premi un tasto per uscire...
-pause >nul`;
-
-fs.writeFileSync(path.join(outputDir, 'Inferno-Console-Uninstaller.exe'), uninstallerContent);
-console.log('✅ Uninstaller created');
+fs.writeFileSync(path.join(outputDir, 'Uninstall-Inferno-Console.bat'), uninstallerBat);
+console.log('✅ Uninstaller fallback BAT created');
 
 // 6. Create latest.yml for electron-updater
 console.log('📦 Creating latest.yml...');

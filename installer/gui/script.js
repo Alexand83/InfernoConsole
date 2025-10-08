@@ -5,16 +5,17 @@ class NSISInstaller {
     constructor() {
         this.currentStep = 'welcome';
         this.steps = ['welcome', 'license', 'path', 'install', 'complete'];
-        this.installPath = 'C:\\Program Files\\Inferno Console';
+        this.installPath = ''; // Will be set from backend
         this.isInstalling = false;
         
         this.init();
     }
 
-    init() {
+    async init() {
         console.log('🚀 Initializing NSIS-style Installer...');
         
         this.setupEventListeners();
+        await this.loadInstallOptions();
         this.updateNavigation();
         this.updateButtons();
         this.calculateFreeSpace();
@@ -41,6 +42,123 @@ class NSISInstaller {
                 }
             }
         });
+    }
+
+    async loadInstallOptions() {
+        try {
+            const installPaths = await ipcRenderer.invoke('get-install-paths');
+            console.log('Install paths loaded:', installPaths);
+            
+            // Set default to Documents (most accessible)
+            this.installPath = installPaths.documents;
+            
+            // Update the path input field
+            const pathInput = document.getElementById('installPath');
+            if (pathInput) {
+                pathInput.value = this.installPath;
+            }
+            
+            // Create dropdown for path selection
+            this.createPathSelector(installPaths);
+            
+        } catch (error) {
+            console.error('Error loading install options:', error);
+            // Fallback to Documents
+            this.installPath = path.join(require('os').homedir(), 'Documents', 'Inferno Console');
+            const pathInput = document.getElementById('installPath');
+            if (pathInput) {
+                pathInput.value = this.installPath;
+            }
+        }
+    }
+
+    createPathSelector(installPaths) {
+        const pathInputGroup = document.querySelector('.path-input-group');
+        if (!pathInputGroup) return;
+        
+        // Create dropdown container
+        const dropdownContainer = document.createElement('div');
+        dropdownContainer.className = 'path-dropdown-container';
+        dropdownContainer.innerHTML = `
+            <label for="pathSelector">Seleziona una cartella predefinita:</label>
+            <select id="pathSelector" class="path-selector">
+                <option value="${installPaths.documents}">📁 Documenti (Raccomandato)</option>
+                <option value="${installPaths.desktop}">🖥️ Desktop</option>
+                <option value="${installPaths.localappdata}">📂 AppData Locale</option>
+                <option value="${installPaths.programs}">⚙️ Programmi (Richiede Admin)</option>
+                <option value="custom">📂 Cartella personalizzata...</option>
+            </select>
+        `;
+        
+        // Insert before the existing path input
+        pathInputGroup.insertBefore(dropdownContainer, pathInputGroup.firstChild);
+        
+        // Add event listener for dropdown
+        const pathSelector = document.getElementById('pathSelector');
+        pathSelector.addEventListener('change', (e) => {
+            if (e.target.value === 'custom') {
+                this.browseFolder();
+            } else {
+                this.installPath = e.target.value;
+                const pathInput = document.getElementById('installPath');
+                if (pathInput) {
+                    pathInput.value = this.installPath;
+                }
+                this.checkAdminRequired();
+                this.calculateFreeSpace();
+            }
+        });
+    }
+
+    checkAdminRequired() {
+        const adminWarning = document.getElementById('adminWarning');
+        if (adminWarning) {
+            adminWarning.remove();
+        }
+
+        // Check if path requires admin privileges
+        const requiresAdmin = this.installPath.includes('Program Files') || 
+                             this.installPath.includes('Program Files (x86)') ||
+                             this.installPath.includes('C:\\Windows\\') ||
+                             this.installPath.includes('C:\\ProgramData\\');
+
+        if (requiresAdmin) {
+            this.showAdminWarning();
+        }
+    }
+
+    showAdminWarning() {
+        const pathInputGroup = document.querySelector('.path-input-group');
+        if (!pathInputGroup) return;
+
+        const warningDiv = document.createElement('div');
+        warningDiv.id = 'adminWarning';
+        warningDiv.className = 'admin-warning';
+        warningDiv.innerHTML = `
+            <div class="warning-header">
+                <span class="warning-icon">⚠️</span>
+                <strong>Privilegi di Amministratore Richiesti</strong>
+            </div>
+            <div class="warning-content">
+                <p>La cartella selezionata richiede privilegi di amministratore per l'installazione.</p>
+                <p><strong>Per installare in questa cartella:</strong></p>
+                <ol>
+                    <li>Chiudi questo installer</li>
+                    <li>Tasto destro sull'installer → "Esegui come amministratore"</li>
+                    <li>Oppure: Tasto destro → "Proprietà" → "Avanzate" → "Esegui come amministratore"</li>
+                </ol>
+                <p><strong>Alternative senza admin:</strong></p>
+                <ul>
+                    <li>📁 Documenti (raccomandato)</li>
+                    <li>🖥️ Desktop</li>
+                    <li>📂 AppData Locale</li>
+                </ul>
+            </div>
+        `;
+
+        // Insert after the path input
+        const pathInputContainer = pathInputGroup.querySelector('.path-input-container');
+        pathInputContainer.parentNode.insertBefore(warningDiv, pathInputContainer.nextSibling);
     }
 
     setupEventListeners() {
@@ -376,10 +494,11 @@ class NSISInstaller {
             this.updateInstallStatus(`Errore: ${error.message}`);
             
             // Handle admin permission error gracefully
-            if (error.message === 'REQUIRES_ADMIN') {
-                this.addLog('💡 Per installare in Program Files, esegui l\'installer come amministratore');
-                this.addLog('🔄 Oppure torna indietro e scegli una cartella diversa');
+            if (error.message.includes('permessi') || error.message.includes('admin') || error.message.includes('REQUIRES_ADMIN')) {
+                this.addLog('💡 Per installare in questa cartella, esegui l\'installer come amministratore');
+                this.addLog('🔄 Oppure torna indietro e scegli una cartella diversa (Documenti, Desktop, AppData)');
                 this.updateInstallStatus('⚠️ Permessi di amministratore richiesti per questa cartella');
+                this.addLog('📋 Istruzioni: Tasto destro sull\'installer → "Esegui come amministratore"');
                 // Don't show alert for admin permission error, just show in logs
             } else {
                 this.addLog(`❌ Errore: ${error.message}`);
@@ -445,6 +564,7 @@ class NSISInstaller {
             if (selectedPath) {
                 this.installPath = selectedPath;
                 document.getElementById('installPath').value = selectedPath;
+                this.checkAdminRequired();
                 this.calculateFreeSpace();
             }
         } catch (error) {

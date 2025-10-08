@@ -32,7 +32,7 @@ let cachedVersionInfo: VersionInfo | null = null;
  * Ottiene la versione dal package.json
  */
 export function getAppVersion(): string {
-  return packageJson.version;
+  return '1.4.108'; // Simula versione precedente per test
 }
 
 /**

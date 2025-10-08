@@ -1057,6 +1057,66 @@ ipcMain.handle('reset-updater-cache', async () => {
   }
 })
 
+// ✅ NUOVO: Handler per controllare aggiornamenti delta
+ipcMain.handle('check-delta-updates', async () => {
+  try {
+    if (!appUpdater) {
+      throw new Error('AppUpdater not initialized')
+    }
+    
+    const result = await appUpdater.checkForDeltaUpdates()
+    return result
+  } catch (error) {
+    console.error('Errore nel controllo aggiornamenti delta:', error)
+    throw error
+  }
+})
+
+// ✅ NUOVO: Handler per applicare aggiornamenti delta
+ipcMain.handle('apply-delta-update', async (event, updateInfo) => {
+  try {
+    if (!appUpdater) {
+      throw new Error('AppUpdater not initialized')
+    }
+    
+    const result = await appUpdater.applyDeltaUpdate(updateInfo)
+    return result
+  } catch (error) {
+    console.error('Errore nell\'applicazione aggiornamento delta:', error)
+    throw error
+  }
+})
+
+// ✅ NUOVO: Handler per ottenere info sull'ultimo aggiornamento delta
+ipcMain.handle('get-last-delta-update-info', async () => {
+  try {
+    if (!appUpdater) {
+      return null
+    }
+    
+    const result = await appUpdater.getLastDeltaUpdateInfo()
+    return result
+  } catch (error) {
+    console.error('Errore nel recupero info ultimo aggiornamento delta:', error)
+    return null
+  }
+})
+
+// ✅ NUOVO: Handler per abilitare/disabilitare delta updates
+ipcMain.handle('set-delta-updates-enabled', async (event, enabled) => {
+  try {
+    if (!appUpdater) {
+      throw new Error('AppUpdater not initialized')
+    }
+    
+    appUpdater.setDeltaUpdatesEnabled(enabled)
+    return { success: true }
+  } catch (error) {
+    console.error('Errore nel cambio stato delta updates:', error)
+    throw error
+  }
+})
+
 // ✅ NUOVO: Handler per ottenere statistiche Icecast (bypassa CORS)
 ipcMain.handle('get-icecast-stats', async (_evt, host, port) => {
   try {
