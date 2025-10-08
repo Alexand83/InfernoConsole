@@ -2,14 +2,6 @@ const { autoUpdater } = require('electron-updater')
 const { dialog, app } = require('electron')
 const path = require('path')
 
-// Import Delta Updater
-let DeltaUpdater
-try {
-  DeltaUpdater = require('../src/utils/deltaUpdater').default
-} catch (error) {
-  console.log('⚠️ DeltaUpdater not available, using standard updater')
-}
-
 class AppUpdater {
   constructor() {
     // ✅ FIX: Configurazione corretta per auto-updater
@@ -18,22 +10,6 @@ class AppUpdater {
     } else {
       // Produzione: usa app-update.yml
       autoUpdater.updateConfigPath = path.join(__dirname, 'app-update.yml')
-    }
-    
-    // ✅ NUOVO: Inizializza Delta Updater
-    this.deltaUpdater = null
-    this.useDeltaUpdates = true // Flag per abilitare/disabilitare delta updates
-    
-    if (DeltaUpdater) {
-      try {
-        this.deltaUpdater = new DeltaUpdater()
-        console.log('✅ Delta Updater initialized')
-      } catch (error) {
-        console.error('❌ Failed to initialize Delta Updater:', error)
-        this.useDeltaUpdates = false
-      }
-    } else {
-      this.useDeltaUpdates = false
     }
     
     // ✅ NUOVO: Configurazione path di download personalizzato
@@ -714,123 +690,6 @@ updaterCacheDirName: inferno-console-updater`
     } catch (error) {
       console.error('❌ Error updating installer marker:', error)
     }
-  }
-
-  // ✅ NUOVO: Metodo per controllare aggiornamenti delta
-  async checkForDeltaUpdates() {
-    if (!this.deltaUpdater || !this.useDeltaUpdates) {
-      console.log('⚠️ Delta updates not available, falling back to standard updater')
-      return this.checkForUpdates()
-    }
-
-    try {
-      console.log('🔍 Checking for delta updates...')
-      const updateInfo = await this.deltaUpdater.checkForUpdates()
-      
-      if (updateInfo.needsUpdate) {
-        console.log(`📦 Delta update available: ${updateInfo.version}`)
-        console.log(`💾 Download size: ${this.formatBytes(updateInfo.totalSize)}`)
-        console.log(`📁 Files to update: ${updateInfo.files.length}`)
-        
-        // Invia notifica all'interfaccia
-        const { BrowserWindow } = require('electron')
-        const mainWindow = BrowserWindow.getAllWindows()[0]
-        if (mainWindow) {
-          mainWindow.webContents.send('delta-update-available', {
-            version: updateInfo.version,
-            previousVersion: updateInfo.previousVersion,
-            totalSize: updateInfo.totalSize,
-            files: updateInfo.files,
-            updateType: updateInfo.updateType
-          })
-        }
-        
-        return updateInfo
-      } else {
-        console.log('✅ App is up to date')
-        return { needsUpdate: false }
-      }
-    } catch (error) {
-      console.error('❌ Error checking for delta updates:', error)
-      console.log('🔄 Falling back to standard updater...')
-      return this.checkForUpdates()
-    }
-  }
-
-  // ✅ NUOVO: Metodo per applicare aggiornamenti delta
-  async applyDeltaUpdate(updateInfo) {
-    if (!this.deltaUpdater || !this.useDeltaUpdates) {
-      throw new Error('Delta updater not available')
-    }
-
-    try {
-      console.log('🔄 Applying delta update...')
-      
-      // Invia progresso all'interfaccia
-      const { BrowserWindow } = require('electron')
-      const mainWindow = BrowserWindow.getAllWindows()[0]
-      
-      if (mainWindow) {
-        mainWindow.webContents.send('delta-update-progress', {
-          status: 'downloading',
-          percent: 0
-        })
-      }
-      
-      // Applica l'aggiornamento
-      await this.deltaUpdater.downloadAndApplyUpdate(updateInfo)
-      
-      if (mainWindow) {
-        mainWindow.webContents.send('delta-update-progress', {
-          status: 'completed',
-          percent: 100
-        })
-      }
-      
-      console.log('✅ Delta update applied successfully')
-      return { success: true, message: 'Update applied successfully' }
-      
-    } catch (error) {
-      console.error('❌ Error applying delta update:', error)
-      
-      if (mainWindow) {
-        mainWindow.webContents.send('delta-update-progress', {
-          status: 'error',
-          error: error.message
-        })
-      }
-      
-      throw error
-    }
-  }
-
-  // ✅ NUOVO: Metodo per ottenere info sull'ultimo aggiornamento delta
-  async getLastDeltaUpdateInfo() {
-    if (!this.deltaUpdater) {
-      return null
-    }
-
-    try {
-      return await this.deltaUpdater.getLastUpdateInfo()
-    } catch (error) {
-      console.error('❌ Error getting last delta update info:', error)
-      return null
-    }
-  }
-
-  // ✅ NUOVO: Metodo per abilitare/disabilitare delta updates
-  setDeltaUpdatesEnabled(enabled) {
-    this.useDeltaUpdates = enabled
-    console.log(`🔄 Delta updates ${enabled ? 'enabled' : 'disabled'}`)
-  }
-
-  // ✅ NUOVO: Metodo helper per formattare bytes
-  formatBytes(bytes) {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 }
 
