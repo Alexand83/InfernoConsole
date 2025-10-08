@@ -24,8 +24,7 @@ class UninstallerGUI {
             
             if (completed) {
                 this.goToStep('complete');
-                // Auto-copy and auto-save log for convenience
-                try { this.copyLogToClipboard(); } catch (_) {}
+                // Auto-save log for convenience
                 try { this.saveLogToFile(); } catch (_) {}
             }
         });
@@ -35,12 +34,10 @@ class UninstallerGUI {
         // Footer buttons
         const uninstallBtn = document.getElementById('uninstallBtn');
         const cancelBtn = document.getElementById('cancelBtn');
-        const copyLogBtn = document.getElementById('copyLogBtn');
         const finishBtn = document.getElementById('finishBtn');
         
         if (uninstallBtn) uninstallBtn.addEventListener('click', () => this.startUninstallation());
         if (cancelBtn) cancelBtn.addEventListener('click', () => this.cancelUninstallation());
-        if (copyLogBtn) copyLogBtn.addEventListener('click', () => this.copyLogToClipboard());
         if (finishBtn) finishBtn.addEventListener('click', () => this.finishUninstallation());
     }
 
@@ -94,15 +91,12 @@ class UninstallerGUI {
     updateButtons() {
         const uninstallBtn = document.getElementById('uninstallBtn');
         const cancelBtn = document.getElementById('cancelBtn');
-        const copyLogBtn = document.getElementById('copyLogBtn');
         const finishBtn = document.getElementById('finishBtn');
         
         // Reset all buttons
         uninstallBtn.style.display = 'none';
         cancelBtn.style.display = 'none';
         finishBtn.style.display = 'none';
-        // Copy log: sempre visibile
-        if (copyLogBtn) copyLogBtn.style.display = 'inline-block';
 
         switch (this.currentStep) {
             case 'detection':
@@ -211,14 +205,6 @@ class UninstallerGUI {
         logContent.scrollTop = logContent.scrollHeight;
     }
 
-    copyLogToClipboard() {
-        const logContent = document.getElementById('logContent');
-        if (!logContent) return;
-    const text = this.logBuffer.join('\n');
-        navigator.clipboard.writeText(text)
-            .then(() => this.addLog('📋 Log copiato negli appunti', 'success'))
-            .catch(() => this.addLog('⚠️ Impossibile copiare il log', 'error'));
-    }
 
   saveLogToFile() {
     try {
