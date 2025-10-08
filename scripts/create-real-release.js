@@ -155,26 +155,24 @@ function prepareReleaseAssets(version) {
     }
   });
   
-  // Copia delta patches se esistono
+  // Copia delta patches come file individuali
   if (fs.existsSync(releasesDir)) {
     console.log('🔧 [REAL RELEASE] Copying delta patches...');
-    const deltaPatchesDir = path.join(releaseAssetsDir, 'delta-patches');
-    fs.mkdirSync(deltaPatchesDir, { recursive: true });
     
-    // Copia tutti i file dalla directory release
+    // Copia tutti i file dalla directory release con prefisso "delta-"
     const files = fs.readdirSync(releasesDir);
     files.forEach(file => {
       const sourcePath = path.join(releasesDir, file);
-      const destPath = path.join(deltaPatchesDir, file);
+      const destPath = path.join(releaseAssetsDir, `delta-${file}`);
       
       if (fs.statSync(sourcePath).isFile()) {
         fs.copyFileSync(sourcePath, destPath);
         const stats = fs.statSync(destPath);
-        console.log(`   ✅ ${file} (${(stats.size / 1024).toFixed(2)} KB)`);
+        console.log(`   ✅ delta-${file} (${(stats.size / 1024).toFixed(2)} KB)`);
       }
     });
     
-    console.log(`✅ [REAL RELEASE] Delta patches copied to delta-patches/`);
+    console.log(`✅ [REAL RELEASE] Delta patches copied as individual files`);
   }
   
   // Lista finale degli assets
@@ -182,17 +180,12 @@ function prepareReleaseAssets(version) {
   const finalFiles = fs.readdirSync(releaseAssetsDir, { withFileTypes: true });
   
   finalFiles.forEach(item => {
-    if (item.isDirectory()) {
-      console.log(`📁 ${item.name}/`);
-      const subFiles = fs.readdirSync(path.join(releaseAssetsDir, item.name));
-      subFiles.forEach(subFile => {
-        const subPath = path.join(releaseAssetsDir, item.name, subFile);
-        const stats = fs.statSync(subPath);
-        console.log(`   - ${subFile} (${(stats.size / 1024).toFixed(2)} KB)`);
-      });
+    const filePath = path.join(releaseAssetsDir, item.name);
+    const stats = fs.statSync(filePath);
+    
+    if (item.name.startsWith('delta-')) {
+      console.log(`🔧 ${item.name} (${(stats.size / 1024).toFixed(2)} KB)`);
     } else {
-      const filePath = path.join(releaseAssetsDir, item.name);
-      const stats = fs.statSync(filePath);
       console.log(`📄 ${item.name} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
     }
   });

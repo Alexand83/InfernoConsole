@@ -1,6 +1,6 @@
-# Release 1.4.112
+# Release 1.4.113
 
-## Changes from 1.4.111
+## Changes from 1.4.112
 
 - Delta updates support
 - Improved performance
@@ -20,4 +20,4 @@
 2. Run the setup
 3. The app will automatically apply delta updates
 
-Generated on: 2025-10-08T11:37:09.545Z
+Generated on: 2025-10-08T16:14:10.516Z

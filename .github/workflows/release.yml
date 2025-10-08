@@ -92,9 +92,14 @@ jobs:
         if (Test-Path "dist-electron/*.dmg") { Copy-Item "dist-electron/*.dmg" "release-assets/" -ErrorAction SilentlyContinue }
         if (Test-Path "dist-electron/*.AppImage") { Copy-Item "dist-electron/*.AppImage" "release-assets/" -ErrorAction SilentlyContinue }
         
-        # Copia delta patches se esistono
+        # Copia delta patches come file individuali
         if (Test-Path "releases/${{ steps.version.outputs.VERSION }}") {
-          Copy-Item -Recurse "releases/${{ steps.version.outputs.VERSION }}" "release-assets/delta-patches"
+          $deltaFiles = Get-ChildItem "releases/${{ steps.version.outputs.VERSION }}" -File
+          foreach ($file in $deltaFiles) {
+            $destName = "delta-$($file.Name)"
+            Copy-Item $file.FullName "release-assets/$destName"
+            Write-Host "Copied delta file: $destName"
+          }
         }
     
     - name: Create GitHub Release
