@@ -62,7 +62,12 @@ jobs:
     - name: Verify All Files Created (Windows)
       if: matrix.os == 'windows-latest'
       run: |
-        echo "Checking all release files..."
+        echo "Checking all release files from root directory..."
+        echo "Current directory: $(Get-Location)"
+        echo "Contents of dist-electron:"
+        Get-ChildItem dist-electron/ | Select-Object Name, Length
+        echo ""
+        echo "Checking required files..."
         $requiredFiles = @(
           "dist-electron\Inferno-Console-Installer.exe",
           "dist-electron\Inferno-Console-Uninstaller.exe", 
