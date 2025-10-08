@@ -1,6 +1,6 @@
 {
   "name": "inferno-console-installer",
-  "version": "1.4.123",
+  "version": "1.4.124",
   "description": "Custom installer for Inferno Console",
   "main": "main-gui-simple.js",
   "repository": {
