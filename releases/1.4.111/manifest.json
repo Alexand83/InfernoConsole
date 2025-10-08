@@ -1,0 +1,37 @@
+{
+  "version": "1.4.111",
+  "previousVersion": "1.4.110",
+  "timestamp": "2025-10-08T10:57:47.988Z",
+  "files": [
+    {
+      "path": "main.exe",
+      "hash": "8275b55e0895",
+      "size": 21,
+      "delta": {
+        "patchSize": 39,
+        "patchHash": "c2d7c1e83335"
+      }
+    },
+    {
+      "path": "app.asar",
+      "hash": "663401504561",
+      "size": 21,
+      "delta": {
+        "patchSize": 39,
+        "patchHash": "3f4c930ec700"
+      }
+    },
+    {
+      "path": "config.json",
+      "hash": "391463090dc9",
+      "size": 24,
+      "delta": {
+        "patchSize": 42,
+        "patchHash": "1db7a57222c0"
+      }
+    }
+  ],
+  "totalSize": 120,
+  "fullSize": 77000000,
+  "savings": "100.0%"
+}
