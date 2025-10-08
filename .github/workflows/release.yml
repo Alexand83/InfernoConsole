@@ -46,8 +46,15 @@ jobs:
     - name: Update package.json version
       shell: pwsh
       run: |
-        npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
-        echo "Updated package.json to version ${{ steps.version.outputs.VERSION }}"
+        $currentVersion = (Get-Content package.json | ConvertFrom-Json).version
+        $targetVersion = "${{ steps.version.outputs.VERSION }}"
+        
+        if ($currentVersion -ne $targetVersion) {
+          npm version $targetVersion --no-git-tag-version
+          echo "Updated package.json from $currentVersion to $targetVersion"
+        } else {
+          echo "Package.json already at version $targetVersion, skipping update"
+        }
     
     - name: Build application
       shell: pwsh
