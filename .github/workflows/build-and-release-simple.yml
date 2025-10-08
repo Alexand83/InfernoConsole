@@ -47,10 +47,15 @@ jobs:
     - name: Build Custom Installer (Windows)
       if: matrix.os == 'windows-latest'
       run: |
+        echo "Building custom installer and uninstaller..."
         cd installer
         npm install
+        echo "Building installer..."
         node build-installer.js
+        echo "Building uninstaller..."
         node build-uninstaller.js
+        echo "Build completed, checking files..."
+        ls -la dist-electron/
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
