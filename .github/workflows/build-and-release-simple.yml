@@ -55,7 +55,7 @@ jobs:
         echo "Building uninstaller..."
         node build-uninstaller.js
         echo "Build completed, checking files..."
-        Get-ChildItem dist-electron/ | Select-Object Name, Length
+        Get-ChildItem ../dist-electron/ | Select-Object Name, Length
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
