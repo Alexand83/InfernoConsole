@@ -902,7 +902,7 @@ app.on('activate', () => {
 // Create installer package.json
 const installerPackageJson = {
     "name": "inferno-console-installer",
-    "version": "1.4.127",
+    "version": "1.4.128",
     "description": "Inferno Console Installer",
     "author": "Alessandro(NeverAgain)",
     "main": "installer-main.js",
@@ -1040,7 +1040,7 @@ const installerExePath = path.join(outputDir, outputExe);
 const portableExeInOutputPath = path.join(outputDir, 'Inferno-Console-win.exe');
 
 // Read version dynamically from installer/package.json to keep latest.yml in sync
-let dynamicVersion = '1.4.127';
+let dynamicVersion = '1.4.128';
 try {
     const pkgJsonPath = path.join(__dirname, 'package.json');
     if (fs.existsSync(pkgJsonPath)) {
@@ -1075,7 +1075,7 @@ console.log('✅ latest.yml created');
 console.log('📦 Creating installer package...');
 const installerPackage = {
     name: 'Inferno-Console-Installer',
-            version: '1.4.127',
+            version: '1.4.128',
     description: 'Custom installer for Inferno Console',
     main: outputExe,
     files: [
@@ -1134,9 +1134,9 @@ console.log(`📊 Installer size: ${(fs.statSync(path.join(outputDir, outputExe)
 
 // 9. Create GitHub release info
 const releaseInfo = {
-    tag_name: 'v1.4.127',
-    name: 'Inferno Console v1.4.127 - Custom Installer',
-    body: `## 🎉 Inferno Console v1.4.127 - Custom Installer
+    tag_name: 'v1.4.128',
+    name: 'Inferno Console v1.4.128 - Custom Installer',
+    body: `## 🎉 Inferno Console v1.4.128 - Custom Installer
 
 ### ✨ Nuove Caratteristiche
 - 🎨 **Installer personalizzato** con interfaccia moderna
