@@ -902,7 +902,7 @@ app.on('activate', () => {
 // Create installer package.json
 const installerPackageJson = {
     "name": "inferno-console-installer",
-    "version": "1.4.124",
+    "version": "1.4.125",
     "description": "Inferno Console Installer",
     "author": "Alessandro(NeverAgain)",
     "main": "installer-main.js",
@@ -1039,7 +1039,17 @@ console.log('📦 Creating latest.yml...');
 const installerExePath = path.join(outputDir, outputExe);
 const portableExeInOutputPath = path.join(outputDir, 'Inferno-Console-win.exe');
 
-let latestYml = `version: 1.4.103
+// Read version dynamically from installer/package.json to keep latest.yml in sync
+let dynamicVersion = '1.4.125';
+try {
+    const pkgJsonPath = path.join(__dirname, 'package.json');
+    if (fs.existsSync(pkgJsonPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+        if (pkg && pkg.version) dynamicVersion = pkg.version;
+    }
+} catch (_) { /* fallback to default */ }
+
+let latestYml = `version: ${dynamicVersion}
 files:
   - url: Inferno-Console-Installer.exe
     sha512: ${require('crypto').createHash('sha512').update(fs.readFileSync(installerExePath)).digest('hex')}
@@ -1065,7 +1075,7 @@ console.log('✅ latest.yml created');
 console.log('📦 Creating installer package...');
 const installerPackage = {
     name: 'Inferno-Console-Installer',
-            version: '1.4.124',
+            version: '1.4.125',
     description: 'Custom installer for Inferno Console',
     main: outputExe,
     files: [
@@ -1124,9 +1134,9 @@ console.log(`📊 Installer size: ${(fs.statSync(path.join(outputDir, outputExe)
 
 // 9. Create GitHub release info
 const releaseInfo = {
-    tag_name: 'v1.4.124',
-    name: 'Inferno Console v1.4.124 - Custom Installer',
-    body: `## 🎉 Inferno Console v1.4.124 - Custom Installer
+    tag_name: 'v1.4.125',
+    name: 'Inferno Console v1.4.125 - Custom Installer',
+    body: `## 🎉 Inferno Console v1.4.125 - Custom Installer
 
 ### ✨ Nuove Caratteristiche
 - 🎨 **Installer personalizzato** con interfaccia moderna
