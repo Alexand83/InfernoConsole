@@ -1,5 +1,5 @@
 
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
 const http = require('http')
@@ -242,6 +242,9 @@ function cleanupTempInstallerFile() {
 }
 
 app.whenReady().then(() => {
+  // ✅ RIMUOVI MENU: Disabilita completamente il menu Electron per interfaccia pulita
+  Menu.setApplicationMenu(null)
+  
   createWindow()
   
   // 🧹 CLEANUP: Rimuovi file temporaneo dell'installer se presente
