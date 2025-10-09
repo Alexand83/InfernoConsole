@@ -125,7 +125,7 @@ const defaultSettings: AppSettings = {
         port: 8004,
         mount: '/live',
         username: 'source',
-        password: 'inferno@inferno',
+        password: 'inferno@inferno123',
         useSSL: false,
         isDefault: true
       }
