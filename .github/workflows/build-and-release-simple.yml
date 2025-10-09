@@ -53,10 +53,20 @@ jobs:
         npm install
         echo "Building installer..."
         node build-installer.js
+        echo "Installer build exit code: $LASTEXITCODE"
+        if ($LASTEXITCODE -ne 0) {
+          echo "❌ Installer build failed with exit code $LASTEXITCODE"
+          exit 1
+        }
         echo "Installer build completed, checking installer output..."
         Get-ChildItem ../dist-electron/ | Select-Object Name, Length
         echo "Building uninstaller..."
         node build-uninstaller.js
+        echo "Uninstaller build exit code: $LASTEXITCODE"
+        if ($LASTEXITCODE -ne 0) {
+          echo "❌ Uninstaller build failed with exit code $LASTEXITCODE"
+          exit 1
+        }
         echo "Uninstaller build completed, checking uninstaller output..."
         Get-ChildItem ../dist-electron/ | Select-Object Name, Length
         echo "All builds completed, final check..."
