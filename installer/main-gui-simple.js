@@ -83,6 +83,42 @@ class InfernoConsoleInstallerGUI {
       };
     });
 
+    // Detect existing installation (update vs fresh install)
+    ipcMain.handle('detect-existing-install', async () => {
+      try {
+        // 1) Try registry HKCU\Software\InfernoConsole InstallPath
+        try {
+          const { execSync } = require('child_process');
+          const output = execSync('reg query "HKCU\\Software\\InfernoConsole" /v InstallPath', { encoding: 'utf8' });
+          const match = output.match(/InstallPath\s+REG_SZ\s+(.+)/i);
+          if (match && match[1]) {
+            const installPath = match[1].trim();
+            if (installPath && fs.existsSync(installPath)) {
+              return { exists: true, installPath };
+            }
+          }
+        } catch (_) { /* no registry key */ }
+
+        // 2) Probe common user-writable locations used by our installer
+        const probePaths = [
+          path.join(require('os').homedir(), 'Documents', 'Inferno Console'),
+          path.join(require('os').homedir(), 'Desktop', 'Inferno Console'),
+          path.join(require('os').homedir(), 'AppData', 'Local', 'Inferno Console')
+        ];
+        for (const p of probePaths) {
+          try {
+            if (fs.existsSync(path.join(p, 'Inferno Console.exe'))) {
+              return { exists: true, installPath: p };
+            }
+          } catch (_) { /* ignore */ }
+        }
+
+        return { exists: false };
+      } catch (error) {
+        return { exists: false };
+      }
+    });
+
     // Start installation
     ipcMain.handle('start-installation', async (event, data) => {
       this.installPath = data.installPath;
@@ -257,7 +293,7 @@ class InfernoConsoleInstallerGUI {
     const outputPath = path.join(this.installPath, 'Inferno-Console-win.exe');
 
     const getJson = (url) => new Promise((resolve, reject) => {
-      this.sendProgress(`Connessione a GitHub API...`, 30);
+      this.sendProgress(`Connessione al server aggiornamenti...`, 30);
       const req = https.request(url, {
         method: 'GET',
         headers: {
@@ -273,7 +309,7 @@ class InfernoConsoleInstallerGUI {
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
               resolve(JSON.parse(data));
             } else {
-              const msg = `GitHub API HTTP ${res.statusCode}: ${res.statusMessage}`;
+              const msg = `Errore del server aggiornamenti (${res.statusCode})`;
               this.sendProgress(msg, 30, false, true);
               reject(new Error(msg));
             }
@@ -284,7 +320,7 @@ class InfernoConsoleInstallerGUI {
         });
       });
       req.on('error', (err) => { 
-        this.sendProgress(`Errore connessione: ${err.message}`, 30, false, true);
+        this.sendProgress(`Errore di connessione: ${err.message}`, 30, false, true);
         reject(err); 
       });
       req.end();
@@ -301,7 +337,7 @@ class InfernoConsoleInstallerGUI {
           return asset.browser_download_url;
         }
       }
-      this.sendProgress('Utilizzo URL di fallback', 31);
+      this.sendProgress('Preparazione download...', 31);
       // Fallback to old static pattern
       return 'https://github.com/Alexand83/InfernoConsole/releases/latest/download/Inferno-Console-win.exe';
     };
@@ -349,10 +385,9 @@ class InfernoConsoleInstallerGUI {
           if (totalSize > 0) {
             const percent = Math.round((downloadedSize / totalSize) * 100);
             const progress = Math.round(30 + (downloadedSize / totalSize) * 30); // 30-60%
-            if (percent % 5 === 0) console.log('[DL] Progress:', percent + '%');
-            this.sendProgress(`Scaricamento in corso... ${percent}%`, progress);
+            this.sendProgress(`Scaricamento... ${percent}%`, progress);
           } else {
-            this.sendProgress('Scaricamento in corso...', 45);
+            this.sendProgress('Scaricamento...', 45);
           }
         });
 
@@ -391,13 +426,13 @@ class InfernoConsoleInstallerGUI {
 
     try {
       const assetUrl = await resolveAssetUrl();
-      this.sendProgress('Connessione a GitHub Releases...', 32);
+      this.sendProgress('Connessione al server aggiornamenti...', 32);
       return await download(assetUrl);
     } catch (e) {
-      this.sendProgress(`Errore connessione: ${e.message}`, 33, false, true);
+      this.sendProgress(`Errore di connessione: ${e.message}`, 33, false, true);
       // Last-resort fallback
       const fallback = 'https://github.com/Alexand83/InfernoConsole/releases/latest/download/Inferno-Console-win.exe';
-      this.sendProgress('Tentativo con URL alternativo...', 33);
+      this.sendProgress('Ritento il download...', 33);
       return await download(fallback);
     }
   }

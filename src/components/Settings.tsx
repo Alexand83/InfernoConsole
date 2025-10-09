@@ -1776,46 +1776,7 @@ const Settings = () => {
                   </div>
                 </div>
 
-                {/* Shortcut Portabile */}
-                {isPortableApp && (
-                  <div className="bg-dj-secondary rounded-lg p-4 mb-6 border border-dj-accent/20">
-                    <h3 className="text-lg font-medium text-white mb-3 flex items-center">
-                      <Download className="w-5 h-5 mr-2" />
-                      Shortcut Desktop
-                    </h3>
-                    <div className="space-y-3">
-                      <p className="text-sm text-dj-light/60">
-                        Per le app portabili, crea manualmente uno shortcut sul Desktop.
-                      </p>
-                      {shortcutMessage && (
-                        <div className={`p-3 rounded-lg text-sm ${
-                          shortcutMessage.includes('✅') 
-                            ? 'bg-dj-success/20 text-dj-success border border-dj-success/30' 
-                            : 'bg-dj-error/20 text-dj-error border border-dj-error/30'
-                        }`}>
-                          {shortcutMessage}
-                        </div>
-                      )}
-                      <button
-                        onClick={createShortcut}
-                        disabled={isLoading}
-                        className="w-full bg-dj-accent hover:bg-dj-accent/80 disabled:bg-dj-accent/50 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center"
-                      >
-                        {isLoading ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Creazione...
-                          </>
-                        ) : (
-                          <>
-                            <Download className="w-4 h-4 mr-2" />
-                            Crea Shortcut Desktop
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {/** Shortcut Desktop section removed per request **/}
 
               </div>
             </div>

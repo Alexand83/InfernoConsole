@@ -16,6 +16,34 @@ class NSISInstaller {
         
         this.setupEventListeners();
         await this.loadInstallOptions();
+        // Auto-detect existing installation to enable update fast-path
+        try {
+            const detection = await ipcRenderer.invoke('detect-existing-install');
+            if (detection && detection.exists && detection.installPath) {
+                // Pre-fill path and skip to install step directly
+                this.installPath = detection.installPath;
+                const pathInput = document.getElementById('installPath');
+                if (pathInput) pathInput.value = this.installPath;
+                this.addLog(`🔎 Installazione esistente rilevata in: ${this.installPath}`);
+
+                // Mark license as accepted to bypass button disabling
+                const licenseAgree = document.getElementById('licenseAgree');
+                if (licenseAgree) {
+                    licenseAgree.checked = true;
+                }
+
+                // Jump to install step and start immediately
+                this.goToStep('install', true);
+                this.updateButtons();
+                // Ensure UI controls are set for install step
+                this.setupInstallButton();
+                // Start installation automatically
+                setTimeout(() => this.startInstallation(), 300);
+                return; // Stop normal init flow
+            }
+        } catch (e) {
+            // Ignore detection errors; continue normal flow
+        }
         this.updateNavigation();
         this.updateButtons();
         this.calculateFreeSpace();
@@ -31,15 +59,19 @@ class NSISInstaller {
         });
 
         ipcRenderer.on('installation-progress', (event, { message, percentage, completed, error }) => {
+            // Sanitize noisy prefixes and internal tags
+            const clean = (message || '')
+              .replace(/^\[DL\]\s*/i, '')
+              .replace(/^\[DL\]\[[^\]]+\]\s*/i, '')
+              .replace(/GitHub API/gi, 'server aggiornamenti')
+              .replace(/HTTP error:\s*/i, 'Errore download: ')
+              .replace(/Status:\s*/i, '')
+              .trim();
+
             this.updateProgress(percentage);
-            this.updateInstallStatus(message);
-            // Only add log if it's not a percentage update
-            if (!message.includes('%') && !message.includes('progress')) {
-                if (error) {
-                    this.addLog(`❌ ${message}`);
-                } else {
-                    this.addLog(`📦 ${message}`);
-                }
+            this.updateInstallStatus(clean);
+            if (clean && !clean.includes('%')) {
+                this.addLog((error ? '❌ ' : '📦 ') + clean);
             }
         });
     }
