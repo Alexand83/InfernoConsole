@@ -52,6 +52,11 @@ jobs:
         echo "Current directory: $(Get-Location)"
         npm install
         echo "Building installer..."
+        # Pass tag version to build script (strip leading 'v')
+        $VER = "${{ github.ref_name }}"
+        if ($VER -like 'v*') { $VER = $VER.Substring(1) }
+        echo "Resolved VERSION=$VER from tag ${{ github.ref_name }}"
+        $env:VERSION = $VER
         node build-installer.js
         echo "Installer build exit code: $LASTEXITCODE"
         if ($LASTEXITCODE -ne 0) {

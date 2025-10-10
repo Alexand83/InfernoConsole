@@ -7,6 +7,26 @@ const outputDir = path.join(installerDir, '..', 'dist-electron');
 const mainFile = 'main-gui-simple.js';
 const outputExe = 'Inferno-Console-Installer.exe';
 
+// ✅ Resolve version from environment tag or fallback to root package.json
+let resolvedVersion = '0.0.0';
+try {
+  const envVersionRaw = process.env.VERSION || process.env.GITHUB_REF_NAME || '';
+  const envVersion = envVersionRaw.startsWith('v') ? envVersionRaw.slice(1) : envVersionRaw;
+  if (envVersion && envVersion.trim().length > 0) {
+    resolvedVersion = envVersion.trim();
+  } else {
+    const rootPkgPath = path.join(installerDir, '..', 'package.json');
+    if (fs.existsSync(rootPkgPath)) {
+      const rootPkg = JSON.parse(fs.readFileSync(rootPkgPath, 'utf8'));
+      if (rootPkg && rootPkg.version) {
+        resolvedVersion = String(rootPkg.version);
+      }
+    }
+  }
+} catch (_) {
+  // keep default
+}
+
 console.log('\n🔨 BUILDING CUSTOM INSTALLER FOR GITHUB RELEASE\n');
 
 // 1. Clean previous builds (but preserve portable executable)
@@ -902,7 +922,7 @@ app.on('activate', () => {
 // Create installer package.json
 const installerPackageJson = {
     "name": "inferno-console-installer",
-    "version": "1.4.129",
+    "version": resolvedVersion,
     "description": "Inferno Console Installer",
     "author": "Alessandro(NeverAgain)",
     "main": "installer-main.js",
@@ -1039,17 +1059,8 @@ console.log('📦 Creating latest.yml...');
 const installerExePath = path.join(outputDir, outputExe);
 const portableExeInOutputPath = path.join(outputDir, 'Inferno-Console-win.exe');
 
-// Read version dynamically from installer/package.json to keep latest.yml in sync
-let dynamicVersion = '1.4.129';
-try {
-    const pkgJsonPath = path.join(__dirname, 'package.json');
-    if (fs.existsSync(pkgJsonPath)) {
-        const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
-        if (pkg && pkg.version) dynamicVersion = pkg.version;
-    }
-} catch (_) { /* fallback to default */ }
-
-let latestYml = `version: ${dynamicVersion}
+// Use resolvedVersion for latest.yml to stay in sync with tag/version
+let latestYml = `version: ${resolvedVersion}
 files:
   - url: Inferno-Console-Installer.exe
     sha512: ${require('crypto').createHash('sha512').update(fs.readFileSync(installerExePath)).digest('hex')}
@@ -1075,7 +1086,7 @@ console.log('✅ latest.yml created');
 console.log('📦 Creating installer package...');
 const installerPackage = {
     name: 'Inferno-Console-Installer',
-            version: '1.4.129',
+            version: resolvedVersion,
     description: 'Custom installer for Inferno Console',
     main: outputExe,
     files: [
@@ -1134,9 +1145,9 @@ console.log(`📊 Installer size: ${(fs.statSync(path.join(outputDir, outputExe)
 
 // 9. Create GitHub release info
 const releaseInfo = {
-    tag_name: 'v1.4.129',
-    name: 'Inferno Console v1.4.129 - Custom Installer',
-    body: `## 🎉 Inferno Console v1.4.129 - Custom Installer
+    tag_name: 'v' + resolvedVersion,
+    name: 'Inferno Console v' + resolvedVersion + ' - Custom Installer',
+    body: `## 🎉 Inferno Console v${resolvedVersion} - Custom Installer
 
 ### ✨ Nuove Caratteristiche
 - 🎨 **Installer personalizzato** con interfaccia moderna

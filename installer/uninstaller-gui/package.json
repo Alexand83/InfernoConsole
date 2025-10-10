@@ -1,6 +1,6 @@
 {
   "name": "inferno-console-uninstaller",
-  "version": "1.4.129",
+  "version": "1.4.130",
   "description": "Inferno Console Uninstaller",
   "author": "Alessandro(NeverAgain)",
   "main": "main-uninstaller.js",
