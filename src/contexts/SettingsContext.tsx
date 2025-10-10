@@ -199,7 +199,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   // Funzione per assicurarsi che tutte le sezioni delle impostazioni siano presenti
   const ensureAllSettings = (savedSettings: any): AppSettings => {
-    return {
+    const mergedSettings = {
       ...defaultSettings,
       ...savedSettings,
       audio: { ...defaultSettings.audio, ...savedSettings?.audio },
@@ -214,6 +214,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         defaultIcecastServerId: savedSettings?.streaming?.defaultIcecastServerId || defaultSettings.streaming.defaultIcecastServerId
       }
     }
+
+    // ✅ MIGRAZIONE PASSWORD: Aggiorna la password del server Inferno se esiste
+    if (mergedSettings.streaming.icecastServers) {
+      const infernoServer = mergedSettings.streaming.icecastServers.find(server => server.id === 'inferno-server')
+      if (infernoServer) {
+        // Aggiorna la password del server Inferno con quella più recente
+        infernoServer.password = 'inferno@inferno123'
+        console.log('🔄 [SETTINGS] Password server Inferno aggiornata automaticamente')
+      }
+    }
+
+    return mergedSettings
   }
 
   // ✅ OPTIMIZATION: Carica i settaggi dal database all'avvio - Non bloccante per avvio veloce
