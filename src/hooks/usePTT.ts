@@ -1,8 +1,9 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { useSettings } from '../contexts/SettingsContext'
 
 export const usePTT = (onPTTActivate: (active: boolean) => void) => {
   const { settings } = useSettings()
+  const isActiveRef = useRef(false)
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Solo se non stiamo digitando in un input
@@ -72,18 +73,21 @@ export const usePTT = (onPTTActivate: (active: boolean) => void) => {
       })
 
       // Controlla il tasto principale
-      const mainKeyCode = keyMap[mainKey] || letterMap[mainKey] || mainKey
-      isMatch = modifiersMatch && e.code === mainKeyCode
+      const mainKeyCode = keyMap[mainKey] || letterMap[mainKey.toUpperCase()] || mainKey
+      // Match by code OR by key (case-insensitive) to be resilient to layout/name differences
+      const keyMatches = e.code === mainKeyCode || (e.key && e.key.toUpperCase() === mainKey.toUpperCase())
+      isMatch = modifiersMatch && keyMatches
     } else {
       // Tasto singolo
-      const keyCode = keyMap[configuredKey] || letterMap[configuredKey] || configuredKey
-      isMatch = e.code === keyCode
+      const keyCode = keyMap[configuredKey] || letterMap[configuredKey.toUpperCase()] || configuredKey
+      isMatch = e.code === keyCode || (e.key && e.key.toUpperCase() === configuredKey.toUpperCase())
     }
 
-    if (isMatch && !e.repeat) {
+    if (isMatch && !e.repeat && !isActiveRef.current) {
       e.preventDefault()
       console.log(`🎤 PTT activated with key: ${configuredKey} (code: ${e.code})`)
       onPTTActivate(true)
+      isActiveRef.current = true
     }
   }, [settings.microphone.pushToTalkKey, onPTTActivate])
 
@@ -155,18 +159,34 @@ export const usePTT = (onPTTActivate: (active: boolean) => void) => {
       })
 
       // Controlla il tasto principale
-      const mainKeyCode = keyMap[mainKey] || letterMap[mainKey] || mainKey
-      isMatch = modifiersMatch && e.code === mainKeyCode
+      const mainKeyCode = keyMap[mainKey] || letterMap[mainKey.toUpperCase()] || mainKey
+      const keyMatches = e.code === mainKeyCode || (e.key && e.key.toUpperCase() === mainKey.toUpperCase())
+      isMatch = modifiersMatch && keyMatches
     } else {
       // Tasto singolo
-      const keyCode = keyMap[configuredKey] || letterMap[configuredKey] || configuredKey
-      isMatch = e.code === keyCode
+      const keyCode = keyMap[configuredKey] || letterMap[configuredKey.toUpperCase()] || configuredKey
+      isMatch = e.code === keyCode || (e.key && e.key.toUpperCase() === configuredKey.toUpperCase())
     }
 
-    if (isMatch) {
+    // Deattiva se: match esplicito OPPURE PTT è attivo e viene rilasciata QUALSIASI parte della combinazione
+    let comboPartReleased = false
+    if (configuredKey.includes('+')) {
+      const parts = configuredKey.split('+')
+      const mainKey = parts[parts.length - 1]
+      const modifiers = parts.slice(0, -1)
+      const releasedIsMain = (e.key && e.key.toUpperCase() === mainKey.toUpperCase()) || (e.code === (keyMap[mainKey] || letterMap[mainKey.toUpperCase()] || mainKey))
+      const releasedIsModifier = modifiers.some(mod => {
+        const map = { Ctrl: 'Control', Alt: 'Alt', Shift: 'Shift', Cmd: 'Meta' } as Record<string, string>
+        return (e.key && e.key === map[mod]) || (e.code === map[mod])
+      })
+      comboPartReleased = releasedIsMain || releasedIsModifier
+    }
+
+    if (isMatch || (isActiveRef.current && comboPartReleased)) {
       e.preventDefault()
       console.log(`🎤 PTT deactivated with key: ${configuredKey} (code: ${e.code})`)
       onPTTActivate(false)
+      isActiveRef.current = false
     }
   }, [settings.microphone.pushToTalkKey, onPTTActivate])
 
