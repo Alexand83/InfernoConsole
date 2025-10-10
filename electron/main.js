@@ -1656,10 +1656,67 @@ ipcMain.handle('get-webrtc-clients', async () => {
           return { success: true, url: tunnelUrl }
         })
 
-        // ✅ YOUTUBE DOWNLOADER APIs CON FALLBACK MULTIPLO
-        // Sistema di fallback: youtube-dl-exec -> yt-dlp -> youtube-dl
+        // ✅ YOUTUBE DOWNLOADER APIs CON SISTEMA AVANZATO
+        // Sistema avanzato con proxy rotation, user-agent rotation e multiple strategie
+        
+        // Importa il nuovo sistema avanzato
+        const { AdvancedYouTubeDownloader } = require('./utils/AdvancedYouTubeDownloader')
+        const { YouTubeProxyManager } = require('./utils/YouTubeProxyManager')
+        
+        // Importa il sistema VPN
+        let VPNManager
+        try {
+          VPNManager = require('./utils/VPNManager').VPNManager
+        } catch (error) {
+          console.warn('⚠️ [VPN] VPNManager non disponibile, uso fallback...')
+          VPNManager = class {
+            static getInstance() {
+              return {
+                getFreeVPNs: () => [],
+                getPremiumVPNs: () => [],
+                connectToVPN: () => Promise.resolve(false),
+                disconnectVPN: () => Promise.resolve(false),
+                getStatus: () => ({ connected: false }),
+                testVPNConnection: () => Promise.resolve(false)
+              }
+            }
+          }
+        }
+        
+        const advancedDownloader = AdvancedYouTubeDownloader.getInstance()
+        const proxyManager = YouTubeProxyManager.getInstance()
+        const vpnManager = VPNManager.getInstance()
+        
+        // Testa tutti i proxy all'avvio
+        proxyManager.testAllProxies().then(workingProxies => {
+          console.log(`✅ [PROXY] ${workingProxies.length} proxy funzionanti trovati`)
+        }).catch(error => {
+          console.warn('⚠️ [PROXY] Errore test proxy:', error.message)
+        })
         
         async function getYouTubeInfoWithFallback(url) {
+          // Prova prima il nuovo sistema avanzato
+          try {
+            console.log(`🔄 [YOUTUBE] Tentativo con sistema avanzato...`)
+            const result = await advancedDownloader.getVideoInfo(url)
+            console.log(`✅ [YOUTUBE] Successo con sistema avanzato`)
+            return { 
+              success: true, 
+              data: {
+                title: result.title || 'Titolo non disponibile',
+                duration: formatDuration(result.duration || 0),
+                thumbnail: result.thumbnail || '',
+                uploader: result.uploader || 'Canale sconosciuto',
+                view_count: formatNumber(result.view_count || 0),
+                duration_seconds: result.duration || 0
+              }, 
+              method: 'advanced-system' 
+            }
+          } catch (error) {
+            console.warn(`⚠️ [YOUTUBE] Sistema avanzato fallito:`, error.message)
+          }
+          
+          // Fallback al sistema originale
           const downloaders = [
             { name: 'yt-dlp-wrap', method: getInfoWithYtDlpWrap },
             { name: 'youtube-dl-exec', method: getInfoWithYoutubeDlExec },
@@ -1834,6 +1891,28 @@ ipcMain.handle('get-webrtc-clients', async () => {
         })
 
         async function downloadYouTubeAudioWithFallback(url, quality, outputPath, downloadId, event) {
+          // Prova prima il nuovo sistema avanzato
+          try {
+            console.log(`🔄 [YOUTUBE] Tentativo download con sistema avanzato...`)
+            const result = await advancedDownloader.downloadAudio({
+              url,
+              quality,
+              outputPath,
+              downloadId,
+              useProxy: true,
+              retries: 5,
+              timeout: 300
+            })
+            
+            if (result.success) {
+              console.log(`✅ [YOUTUBE] Successo con sistema avanzato: ${result.method}`)
+              return { success: true, ...result, method: 'advanced-system' }
+            }
+          } catch (error) {
+            console.warn(`⚠️ [YOUTUBE] Sistema avanzato fallito:`, error.message)
+          }
+          
+          // Fallback al sistema originale
           const downloaders = [
             { name: 'youtube-dl-exec', method: downloadWithYoutubeDlExec, priority: 1 },
             { name: 'play-dl', method: downloadWithPlayDl, priority: 2 },
@@ -2486,6 +2565,187 @@ ipcMain.handle('get-webrtc-clients', async () => {
             return { success: true }
           } catch (error) {
             console.error('❌ [FOLDER] Errore apertura cartella:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        // ✅ NUOVE API PER GESTIONE PROXY E SISTEMA AVANZATO
+        
+        ipcMain.handle('test-youtube-methods', async (event, url) => {
+          try {
+            console.log(`🔍 [YOUTUBE] Test metodi per URL: ${url}`)
+            const results = await advancedDownloader.testAllMethods(url)
+            console.log(`📊 [YOUTUBE] Risultati test:`, results)
+            return { success: true, results }
+          } catch (error) {
+            console.error('❌ [YOUTUBE] Errore test metodi:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('get-proxy-stats', async (event) => {
+          try {
+            const stats = proxyManager.getProxyStats()
+            return { success: true, stats }
+          } catch (error) {
+            console.error('❌ [PROXY] Errore recupero stats:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('test-all-proxies', async (event) => {
+          try {
+            console.log(`🔍 [PROXY] Test di tutti i proxy...`)
+            const workingProxies = await proxyManager.testAllProxies()
+            console.log(`✅ [PROXY] ${workingProxies.length} proxy funzionanti trovati`)
+            return { success: true, workingProxies, count: workingProxies.length }
+          } catch (error) {
+            console.error('❌ [PROXY] Errore test proxy:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('add-proxy', async (event, proxyConfig) => {
+          try {
+            console.log(`➕ [PROXY] Aggiunta proxy: ${proxyConfig.host}:${proxyConfig.port}`)
+            proxyManager.addProxy(proxyConfig)
+            
+            // Testa il proxy appena aggiunto
+            const isWorking = await proxyManager.testProxy(proxyConfig)
+            console.log(`${isWorking ? '✅' : '❌'} [PROXY] Proxy ${proxyConfig.host}:${proxyConfig.port} ${isWorking ? 'funziona' : 'non funziona'}`)
+            
+            return { success: true, working: isWorking }
+          } catch (error) {
+            console.error('❌ [PROXY] Errore aggiunta proxy:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('remove-proxy', async (event, host, port) => {
+          try {
+            console.log(`➖ [PROXY] Rimozione proxy: ${host}:${port}`)
+            proxyManager.removeProxy(host, port)
+            return { success: true }
+          } catch (error) {
+            console.error('❌ [PROXY] Errore rimozione proxy:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('force-proxy-rotation', async (event) => {
+          try {
+            console.log(`🔄 [PROXY] Forzatura rotazione proxy...`)
+            const proxy = proxyManager.getNextProxy()
+            if (proxy) {
+              console.log(`✅ [PROXY] Nuovo proxy selezionato: ${proxy.host}:${proxy.port}`)
+              return { success: true, proxy }
+            } else {
+              return { success: false, error: 'Nessun proxy disponibile' }
+            }
+          } catch (error) {
+            console.error('❌ [PROXY] Errore rotazione proxy:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        // ✅ API VPN
+        
+        ipcMain.handle('get-free-vpns', async (event) => {
+          try {
+            const vpns = vpnManager.getFreeVPNs()
+            return { success: true, vpns }
+          } catch (error) {
+            console.error('❌ [VPN] Errore recupero VPN gratuite:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('get-premium-vpns', async (event) => {
+          try {
+            const vpns = vpnManager.getPremiumVPNs()
+            return { success: true, vpns }
+          } catch (error) {
+            console.error('❌ [VPN] Errore recupero VPN premium:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('get-vpn-status', async (event) => {
+          try {
+            const status = vpnManager.getStatus()
+            return { success: true, status }
+          } catch (error) {
+            console.error('❌ [VPN] Errore recupero stato VPN:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('connect-vpn', async (event, vpnConfig) => {
+          try {
+            console.log(`🔌 [VPN] Connessione a ${vpnConfig.name}...`)
+            const success = await vpnManager.connectToVPN(vpnConfig)
+            if (success) {
+              const status = vpnManager.getStatus()
+              console.log(`✅ [VPN] Connesso a ${vpnConfig.name}`)
+              return { success: true, status }
+            } else {
+              return { success: false, error: 'Connessione VPN fallita' }
+            }
+          } catch (error) {
+            console.error('❌ [VPN] Errore connessione VPN:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('disconnect-vpn', async (event) => {
+          try {
+            console.log(`🔌 [VPN] Disconnessione VPN...`)
+            const success = await vpnManager.disconnectVPN()
+            if (success) {
+              console.log(`✅ [VPN] VPN disconnessa`)
+              return { success: true }
+            } else {
+              return { success: false, error: 'Disconnessione VPN fallita' }
+            }
+          } catch (error) {
+            console.error('❌ [VPN] Errore disconnessione VPN:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('test-vpn-connection', async (event) => {
+          try {
+            console.log(`🧪 [VPN] Test connessione VPN...`)
+            const success = await vpnManager.testVPNConnection()
+            if (success) {
+              const status = vpnManager.getStatus()
+              console.log(`✅ [VPN] Test connessione riuscito`)
+              return { success: true, ip: status.ip }
+            } else {
+              return { success: false, error: 'Test connessione VPN fallito' }
+            }
+          } catch (error) {
+            console.error('❌ [VPN] Errore test VPN:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('get-vpn-countries', async (event) => {
+          try {
+            const countries = await vpnManager.getAvailableCountries()
+            return { success: true, countries }
+          } catch (error) {
+            console.error('❌ [VPN] Errore recupero paesi VPN:', error)
+            return { success: false, error: error.message }
+          }
+        })
+
+        ipcMain.handle('get-vpn-data-usage', async (event) => {
+          try {
+            const usage = await vpnManager.getDataUsage()
+            return { success: true, usage }
+          } catch (error) {
+            console.error('❌ [VPN] Errore recupero uso dati VPN:', error)
             return { success: false, error: error.message }
           }
         })

@@ -1,13 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { useSettings } from '../../contexts/SettingsContext'
 import { usePlaylist } from '../../contexts/PlaylistContext'
-import { useYouTubeDownloader } from '../../contexts/YouTubeDownloaderContext'
 import { Download, Play, Pause, Settings, Wifi, Shield, Music, Copy, CheckCircle, AlertCircle, Clock, HardDrive } from 'lucide-react'
 import TabSystem from './TabSystem'
 import PlaylistSelector from './PlaylistSelector'
 import ProxyManager from './ProxyManager'
 import VPNManager from './VPNManager'
-import BackgroundDownloadIndicator from './BackgroundDownloadIndicator'
 
 interface VideoInfo {
   title: string
@@ -15,21 +13,12 @@ interface VideoInfo {
   thumbnail: string
   uploader: string
   view_count: string
-  duration_seconds: number
 }
 
 interface DownloadProgress {
   percentage: number
   speed: string
   eta: string
-}
-
-interface DownloadHistoryItem {
-  id: string
-  url: string
-  title: string
-  timestamp: Date
-  filePath: string
 }
 
 const YouTubeDownloader: React.FC = () => {
@@ -43,18 +32,15 @@ const YouTubeDownloader: React.FC = () => {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [downloadedFile, setDownloadedFile] = useState<string | null>(null)
-  // Usa il Context per gestire i download
-  const { 
-    state: downloaderState, 
-    addDownload, 
-    addDownloadWithId,
-    updateDownload, 
-    removeDownload, 
-    clearDownloads,
-    getActiveDownloads,
-    getCompletedDownloads,
-    getFailedDownloads
-  } = useYouTubeDownloader()
+  const [downloads, setDownloads] = useState<Array<{
+    id: string
+    url: string
+    title: string
+    progress: number
+    status: 'downloading' | 'completed' | 'error'
+    error?: string
+    filePath?: string
+  }>>([])
   const [urls, setUrls] = useState<Array<{ id: string; url: string; quality: string }>>([
     { id: '1', url: '', quality: '192' }
   ])
@@ -127,16 +113,35 @@ const YouTubeDownloader: React.FC = () => {
 
   // Listener per progresso download e libreria
   useEffect(() => {
-    const handleLibraryAdd = (event: any, data: any) => {
-      console.log('📚 [YOUTUBE] Traccia aggiunta alla libreria:', data)
+    const handleDownloadProgress = (event: any, data: any) => {
+      const { downloadId, percentage, speed, eta } = data
+      
+      setDownloads(prev => prev.map(download => 
+        download.id === downloadId 
+          ? { ...download, progress: percentage }
+          : download
+      ))
+      
+      setDownloadProgress({
+        percentage,
+        speed: speed || 'N/A',
+        eta: eta || 'N/A'
+      })
+    }
+
+    const handleLibraryAdd = (event: any, track: any) => {
+      console.log('📚 [YOUTUBE] Traccia aggiunta alla libreria:', track)
+      setSuccess(prev => prev + ` - Aggiunta alla libreria!`)
     }
 
     if (window.electronAPI?.on) {
+      window.electronAPI.on('youtube-download-progress', handleDownloadProgress)
       window.electronAPI.on('library-add-track', handleLibraryAdd)
     }
 
     return () => {
       if (window.electronAPI?.removeListener) {
+        window.electronAPI.removeListener('youtube-download-progress', handleDownloadProgress)
         window.electronAPI.removeListener('library-add-track', handleLibraryAdd)
       }
     }
@@ -144,8 +149,13 @@ const YouTubeDownloader: React.FC = () => {
 
   // Validazione URL YouTube
   const isValidYouTubeUrl = (url: string): boolean => {
-    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/
-    return youtubeRegex.test(url)
+    const patterns = [
+      /^https?:\/\/(www\.)?youtube\.com\/watch\?v=[\w-]+/,
+      /^https?:\/\/youtu\.be\/[\w-]+/,
+      /^https?:\/\/(www\.)?youtube\.com\/embed\/[\w-]+/,
+      /^https?:\/\/(www\.)?youtube\.com\/v\/[\w-]+/
+    ]
+    return patterns.some(pattern => pattern.test(url))
   }
 
   // Ottieni informazioni video
@@ -160,17 +170,21 @@ const YouTubeDownloader: React.FC = () => {
     setVideoInfo(null)
 
     try {
-      const response = await window.electronAPI.invoke('get-youtube-info', { url })
+      console.log('🎵 [YOUTUBE] Recupero info per URL:', url)
+      const response = await window.electronAPI.getYouTubeInfo(url)
+      console.log('🎵 [YOUTUBE] Risposta info:', response)
       
       if (response.success) {
         setVideoInfo(response.data)
-        setSuccess('Informazioni video caricate con successo!')
+        console.log('✅ [YOUTUBE] Info video recuperate con successo')
       } else {
-        setError(response.error || 'Errore nel caricamento delle informazioni video')
+        const errorMsg = response.error || 'Errore nel recupero delle informazioni video'
+        console.error('❌ [YOUTUBE] Errore recupero info:', errorMsg)
+        setError(errorMsg)
       }
-    } catch (error: any) {
-      console.error('Error getting video info:', error)
-      setError('Errore di connessione durante il caricamento delle informazioni')
+    } catch (err) {
+      console.error('❌ [YOUTUBE] Errore connessione:', err)
+      setError(`Errore di connessione: ${err instanceof Error ? err.message : 'Errore sconosciuto'}`)
     } finally {
       setIsLoading(false)
     }
@@ -189,16 +203,14 @@ const YouTubeDownloader: React.FC = () => {
     const downloadId = Date.now().toString()
     const downloadPath = settings.youtube?.downloadPath || './downloads/youtube/'
     
-    // Aggiungi alla lista download usando il Context con ID specifico
-    addDownloadWithId({
+    // Aggiungi alla lista download
+    setDownloads(prev => [...prev, {
       id: downloadId,
       url: targetUrl,
       title: 'Download in corso...',
       progress: 0,
-      status: 'downloading',
-      quality: targetQuality,
-      startTime: new Date()
-    })
+      status: 'downloading'
+    }])
 
     try {
       console.log('🎵 [YOUTUBE] Avvio download:', { targetUrl, targetQuality, downloadPath, downloadId })
@@ -216,14 +228,17 @@ const YouTubeDownloader: React.FC = () => {
         console.log('✅ [YOUTUBE] Download completato con successo')
         console.log('🎵 [YOUTUBE] File path ricevuto:', response.filePath)
         console.log('🎵 [YOUTUBE] Titolo ricevuto:', response.title)
-        
-        // Aggiorna il download nel Context
-        updateDownload(downloadId, {
-          status: 'completed',
-          title: response.title || 'Download completato',
-          filePath: response.filePath,
-          progress: 100
-        })
+        setDownloads(prev => prev.map(download => 
+          download.id === downloadId 
+            ? { 
+                ...download, 
+                status: 'completed', 
+                title: response.title || 'Download completato',
+                filePath: response.filePath,
+                progress: 100
+              }
+            : download
+        ))
         
         // ✅ Aggiungi alla libreria locale
         if (response.filePath) {
@@ -301,22 +316,33 @@ const YouTubeDownloader: React.FC = () => {
         if (window.electronAPI?.invoke) {
           window.electronAPI.invoke('refresh-file-manager', response.filePath)
         }
-        
-        setVideoInfo(null)
-        setUrl('')
       } else {
-        updateDownload(downloadId, {
-          status: 'error',
-          error: response.error || 'Errore durante il download'
-        })
+        const errorMsg = response.error || 'Errore durante il download'
+        console.error('❌ [YOUTUBE] Errore download:', errorMsg)
+        setDownloads(prev => prev.map(download => 
+          download.id === downloadId 
+            ? { 
+                ...download, 
+                status: 'error', 
+                error: errorMsg
+              }
+            : download
+        ))
       }
     } catch (err) {
-      updateDownload(downloadId, {
-        status: 'error',
-        error: 'Errore di connessione durante il download'
-      })
+      const errorMsg = `Errore di connessione durante il download: ${err instanceof Error ? err.message : 'Errore sconosciuto'}`
+      console.error('❌ [YOUTUBE] Errore connessione download:', err)
+      setDownloads(prev => prev.map(download => 
+        download.id === downloadId 
+          ? { 
+              ...download, 
+              status: 'error', 
+              error: errorMsg
+            }
+          : download
+      ))
     }
-  }, [url, quality, settings.youtube?.downloadPath, autoAddToPlaylist, selectedPlaylistId])
+  }, [url, quality, settings.youtube?.downloadPath])
 
   // Avvia download con info video
   const startDownload = useCallback(async () => {
@@ -424,18 +450,28 @@ const YouTubeDownloader: React.FC = () => {
         setVideoInfo(null)
         setUrl('')
       } else {
-        updateDownload(downloadId, {
-          status: 'error',
-          error: response.error || 'Errore durante il download'
-        })
+        setDownloads(prev => prev.map(download => 
+          download.id === downloadId 
+            ? { 
+                ...download, 
+                status: 'error', 
+                error: response.error || 'Errore durante il download'
+              }
+            : download
+        ))
       }
     } catch (err) {
-      updateDownload(downloadId, {
-        status: 'error',
-        error: 'Errore di connessione durante il download'
-      })
+      setDownloads(prev => prev.map(download => 
+        download.id === downloadId 
+          ? { 
+              ...download, 
+              status: 'error', 
+              error: 'Errore di connessione durante il download'
+            }
+          : download
+      ))
     }
-  }, [videoInfo, url, quality, settings.youtube?.downloadPath, autoAddToPlaylist, selectedPlaylistId])
+  }, [videoInfo, url, quality, settings.youtube?.downloadPath])
 
   // Gestione URL multipli
   const addUrlField = () => {
@@ -640,7 +676,6 @@ const YouTubeDownloader: React.FC = () => {
                     onChange={(e) => updateUrl(urlData.id, 'quality', e.target.value)}
                     className="px-3 py-2 bg-gray-600 border border-gray-500 rounded-lg focus:outline-none focus:border-blue-500 text-white"
                     disabled={isDownloading}
-                    title="Seleziona qualità audio"
                   >
                     <option value="128">128k</option>
                     <option value="192">192k</option>
@@ -678,37 +713,22 @@ const YouTubeDownloader: React.FC = () => {
           </div>
 
           {/* Lista Download */}
-          {downloaderState.downloads.length > 0 && (
+          {downloads.length > 0 && (
             <div className="bg-gray-700 rounded-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold flex items-center">
-                  <HardDrive className="mr-2" />
-                  Download in Corso
-                  {getActiveDownloads().length > 0 && (
-                    <span className="ml-2 bg-blue-600 text-white text-xs rounded-full px-2 py-1">
-                      {getActiveDownloads().length} attivi
-                    </span>
-                  )}
-                </h3>
-                {downloaderState.downloads.length > 0 && (
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Cancellare tutti i download?')) {
-                        clearDownloads()
-                      }
-                    }}
-                    className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors flex items-center"
-                  >
-                    <X size={14} className="mr-1" />
-                    Pulisci tutto
-                  </button>
+              <h3 className="text-lg font-bold mb-4 flex items-center">
+                <HardDrive className="mr-2" />
+                Download in Corso
+                {downloads.filter(d => d.status === 'downloading').length > 0 && (
+                  <span className="ml-2 bg-blue-600 text-white text-xs rounded-full px-2 py-1">
+                    {downloads.filter(d => d.status === 'downloading').length} attivi
+                  </span>
                 )}
-              </div>
+              </h3>
               <div className="space-y-3">
-                {downloaderState.downloads.map((download) => (
+                {downloads.map((download) => (
                   <div key={download.id} className="bg-gray-600 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-white truncate flex-1">{download.title}</h4>
+                      <h4 className="font-medium text-white truncate">{download.title}</h4>
                       <div className="flex items-center space-x-2">
                         {download.status === 'completed' && (
                           <CheckCircle className="text-green-400" size={20} />
@@ -719,15 +739,6 @@ const YouTubeDownloader: React.FC = () => {
                         {download.status === 'downloading' && (
                           <Clock className="text-blue-400 animate-spin" size={20} />
                         )}
-                        <X 
-                          size={16} 
-                          className="text-gray-400 cursor-pointer hover:text-red-400 transition-colors"
-                          onClick={() => {
-                            if (window.confirm('Rimuovere questo download dalla lista?')) {
-                              removeDownload(download.id)
-                            }
-                          }}
-                        />
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
@@ -877,11 +888,384 @@ const YouTubeDownloader: React.FC = () => {
           />
         </div>
 
-        {/* Tab System */}
-        <TabSystem tabs={tabs} defaultTab="download" />
-        
-        {/* Indicatore download in background */}
-        <BackgroundDownloadIndicator />
+        {/* Input URL Singolo */}
+        <div className="bg-gray-800 rounded-lg p-6 mb-6">
+          <h3 className="text-lg font-bold mb-4">🎵 Download Singolo</h3>
+          <div className="flex gap-4 mb-4">
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Incolla qui l'URL di YouTube..."
+              className="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
+              disabled={isLoading || isDownloading}
+            />
+            <button
+              onClick={async () => {
+                try {
+                  const clipboardText = await navigator.clipboard.readText()
+                  if (clipboardText && isValidYouTubeUrl(clipboardText)) {
+                    setUrl(clipboardText)
+                    setError('')
+                  } else {
+                    setError('Nessun URL YouTube valido negli appunti')
+                  }
+                } catch (err) {
+                  setError('Impossibile accedere agli appunti. Incolla manualmente l\'URL.')
+                }
+              }}
+              disabled={isLoading || isDownloading}
+              className="px-4 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+              title="Incolla URL dagli appunti"
+            >
+              📋 Incolla
+            </button>
+            <button
+              onClick={getVideoInfo}
+              disabled={!url || isLoading || isDownloading}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+            >
+              {isLoading ? 'Caricamento...' : 'Info Video'}
+            </button>
+            <button
+              onClick={() => startDirectDownload()}
+              disabled={!url || isLoading || isDownloading}
+              className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+            >
+              Download Diretto
+            </button>
+          </div>
+
+          {/* Qualità */}
+          <div className="flex items-center gap-4">
+            <label className="text-sm font-medium">Qualità audio:</label>
+            <select
+              value={quality}
+              onChange={(e) => setQuality(e.target.value)}
+              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
+              disabled={isLoading || isDownloading}
+              title="Seleziona qualità audio"
+            >
+              <option value="128">128 kbps (Standard)</option>
+              <option value="192">192 kbps (Buona)</option>
+              <option value="320">320 kbps (Alta)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Download Multipli */}
+        <div className="bg-gray-800 rounded-lg p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold">📥 Download Multipli</h3>
+            <div className="flex gap-2">
+              <button
+                onClick={addUrlField}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
+              >
+                + Aggiungi URL
+              </button>
+              <button
+                onClick={downloadAll}
+                disabled={urls.every(u => !u.url.trim()) || isDownloading}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+              >
+                Download Tutti
+              </button>
+            </div>
+          </div>
+          
+          <div className="space-y-3">
+            {urls.map((urlData, index) => (
+              <div key={urlData.id} className="flex gap-3 items-center">
+                <div className="flex-1">
+                  <input
+                    type="url"
+                    value={urlData.url}
+                    onChange={(e) => updateUrl(urlData.id, 'url', e.target.value)}
+                    placeholder={`URL ${index + 1} - Incolla qui l'URL di YouTube...`}
+                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
+                    disabled={isDownloading}
+                  />
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      const clipboardText = await navigator.clipboard.readText()
+                      if (clipboardText && isValidYouTubeUrl(clipboardText)) {
+                        updateUrl(urlData.id, 'url', clipboardText)
+                        setError('')
+                      } else {
+                        setError('Nessun URL YouTube valido negli appunti')
+                      }
+                    } catch (err) {
+                      setError('Impossibile accedere agli appunti. Incolla manualmente l\'URL.')
+                    }
+                  }}
+                  disabled={isDownloading}
+                  className="px-3 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                  title="Incolla URL dagli appunti"
+                >
+                  📋
+                </button>
+                <select
+                  value={urlData.quality}
+                  onChange={(e) => updateUrl(urlData.id, 'quality', e.target.value)}
+                  className="px-3 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
+                  disabled={isDownloading}
+                  title="Seleziona qualità audio"
+                >
+                  <option value="128">128k</option>
+                  <option value="192">192k</option>
+                  <option value="320">320k</option>
+                </select>
+                {urls.length > 1 && (
+                  <button
+                    onClick={() => removeUrlField(urlData.id)}
+                    className="px-3 py-3 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                    disabled={isDownloading}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Informazioni Video */}
+        {videoInfo && (
+          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+            <div className="flex gap-6">
+              <img
+                src={videoInfo.thumbnail}
+                alt="Thumbnail"
+                className="w-48 h-36 object-cover rounded-lg"
+              />
+              <div className="flex-1">
+                <h3 className="text-xl font-bold mb-2">{videoInfo.title}</h3>
+                <div className="space-y-2 text-sm text-gray-300">
+                  <p><span className="font-medium">Canale:</span> {videoInfo.uploader}</p>
+                  <p><span className="font-medium">Durata:</span> {videoInfo.duration}</p>
+                  <p><span className="font-medium">Visualizzazioni:</span> {videoInfo.view_count}</p>
+                </div>
+                <button
+                  onClick={startDownload}
+                  disabled={isDownloading}
+                  className="mt-4 px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+                >
+                  {isDownloading ? 'Download in corso...' : 'Scarica Audio MP3'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Lista Download */}
+        {downloads.length > 0 && (
+          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+            <h3 className="text-lg font-bold mb-4">📥 Download in Corso</h3>
+            <div className="space-y-4">
+              {downloads.map((download) => (
+                <div key={download.id} className="bg-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium text-white truncate">{download.title}</h4>
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      download.status === 'completed' ? 'bg-green-600 text-white' :
+                      download.status === 'error' ? 'bg-red-600 text-white' :
+                      'bg-blue-600 text-white'
+                    }`}>
+                      {download.status === 'completed' ? 'Completato' :
+                       download.status === 'error' ? 'Errore' :
+                       'Downloading'}
+                    </span>
+                  </div>
+                  
+                  {download.status === 'downloading' && (
+                    <div className="mb-2">
+                      <div className="flex justify-between text-sm mb-1">
+                        <span>Progresso</span>
+                        <span>{Math.round(download.progress)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-600 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${download.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {download.status === 'error' && (
+                    <p className="text-red-400 text-sm">{download.error}</p>
+                  )}
+                  
+                  {download.status === 'completed' && download.filePath && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-green-400 text-sm">✅ Download completato</p>
+                      <button
+                        onClick={() => {
+                          if (window.electronAPI?.invoke) {
+                            window.electronAPI.invoke('open-folder', download.filePath)
+                          }
+                        }}
+                        className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-sm transition-colors"
+                      >
+                        Apri Cartella
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            {downloads.length > 0 && (
+              <div className="mt-4 flex justify-between">
+                <button
+                  onClick={() => setDownloads([])}
+                  className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-sm transition-colors"
+                >
+                  Pulisci Lista
+                </button>
+                <span className="text-sm text-gray-400">
+                  {downloads.filter(d => d.status === 'downloading').length} download attivi
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Messaggi */}
+        {error && (
+          <div className="bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded-lg mb-6">
+            <div className="flex items-center">
+              <span className="text-red-400 mr-2">❌</span>
+              {error}
+            </div>
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-900 border border-green-700 text-green-200 px-4 py-3 rounded-lg mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <span className="text-green-400 mr-2">✅</span>
+                {success}
+              </div>
+              {downloadedFile && (
+                <button
+                  onClick={() => {
+                    if (window.electronAPI?.invoke) {
+                      window.electronAPI.invoke('open-folder', downloadedFile)
+                    }
+                  }}
+                  className="px-3 py-1 bg-green-700 hover:bg-green-600 rounded text-sm transition-colors"
+                >
+                  Apri Cartella
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Gestione Proxy e Sistema Avanzato */}
+        <ProxyManager />
+        <VPNManager />
+
+        {/* Selezione Playlist */}
+        <div className="bg-gray-800 rounded-lg p-6 mb-6">
+          <h3 className="text-lg font-bold mb-4 flex items-center">
+            🎵 Integrazione Playlist
+          </h3>
+          
+          <div className="space-y-4">
+            {/* Checkbox per abilitare aggiunta automatica */}
+            <div className="flex items-center space-x-3">
+              <input
+                type="checkbox"
+                id="autoAddToPlaylist"
+                checked={autoAddToPlaylist}
+                onChange={(e) => setAutoAddToPlaylist(e.target.checked)}
+                className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+              />
+              <label htmlFor="autoAddToPlaylist" className="text-sm font-medium text-gray-300">
+                Aggiungi automaticamente alla playlist dopo il download
+              </label>
+            </div>
+
+            {/* Selezione playlist */}
+            {autoAddToPlaylist && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-300">
+                  Seleziona Playlist:
+                </label>
+                <select
+                  value={selectedPlaylistId}
+                  onChange={(e) => setSelectedPlaylistId(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500 text-white"
+                  title="Seleziona playlist di destinazione"
+                >
+                  <option value="">Seleziona una playlist...</option>
+                  {playlistState.library?.playlists?.map(playlist => (
+                    <option key={playlist.id} value={playlist.id}>
+                      {playlist.name} ({playlist.tracks?.length || 0} tracce)
+                    </option>
+                  ))}
+                </select>
+                
+                {selectedPlaylistId && (
+                  <div className="text-sm text-gray-400">
+                    ✅ I video scaricati verranno aggiunti automaticamente a questa playlist
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Informazioni */}
+            <div className="bg-blue-900 border border-blue-700 rounded-lg p-3">
+              <h5 className="font-bold text-blue-200 mb-2">💡 Come Funziona</h5>
+              <ul className="text-sm text-blue-200 space-y-1">
+                <li>• Abilita l'opzione per aggiungere automaticamente i video alla playlist</li>
+                <li>• Seleziona la playlist di destinazione dal menu a tendina</li>
+                <li>• I video scaricati verranno aggiunti sia alla libreria che alla playlist</li>
+                <li>• Puoi disabilitare questa funzione in qualsiasi momento</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Configurazione Cartella */}
+        <div className="bg-gray-800 rounded-lg p-6">
+          <h3 className="text-lg font-bold mb-4">📁 Configurazione Cartella Download</h3>
+          <div className="flex gap-4">
+            <input
+              type="text"
+              value={settings.youtube?.downloadPath || './downloads/youtube/'}
+              onChange={(e) => updateCategory('youtube', { 
+                ...settings.youtube, 
+                downloadPath: e.target.value 
+              })}
+              className="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
+              placeholder="Percorso cartella download"
+            />
+            <button
+              onClick={async () => {
+                const result = await window.electronAPI.selectFolder('youtube')
+                if (result.success) {
+                  updateCategory('youtube', { 
+                    ...settings.youtube, 
+                    downloadPath: result.path 
+                  })
+                }
+              }}
+              className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors"
+            >
+              Sfoglia
+            </button>
+          </div>
+          <p className="text-sm text-gray-400 mt-2">
+            I file audio verranno salvati automaticamente in questa cartella
+          </p>
+        </div>
       </div>
     </div>
   )

@@ -15,6 +15,7 @@ import { SettingsProvider } from './contexts/SettingsContext'
 import { TimerProvider } from './contexts/TimerContext'
 import { StreamingProvider } from './contexts/StreamingContext'
 import { DJRemotoServerProvider } from './contexts/DJRemotoServerContext'
+import { YouTubeDownloaderProvider } from './contexts/YouTubeDownloaderContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import './styles/themes.css'
 import UpdateNotification from './components/UpdateNotification'
@@ -85,9 +86,10 @@ function App() {
       <TimerProvider>
         <AudioProvider>
           <PlaylistProvider>
-            <StreamingProvider>
-              <DJRemotoServerProvider>
-                <ErrorBoundary>
+            <YouTubeDownloaderProvider>
+              <StreamingProvider>
+                <DJRemotoServerProvider>
+                  <ErrorBoundary>
               <div className="flex flex-col min-h-screen bg-dj-dark">
                 <TopNav />
                 <main className="flex-1 overflow-y-auto transition-opacity duration-200 ease-in-out">
@@ -121,9 +123,10 @@ function App() {
                 {/* ✅ NUOVO: Notifiche di aggiornamento */}
                 <UpdateNotification />
               </div>
-              </ErrorBoundary>
-              </DJRemotoServerProvider>
-            </StreamingProvider>
+                  </ErrorBoundary>
+                </DJRemotoServerProvider>
+              </StreamingProvider>
+            </YouTubeDownloaderProvider>
           </PlaylistProvider>
         </AudioProvider>
       </TimerProvider>

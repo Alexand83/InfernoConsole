@@ -1,0 +1,59 @@
+{
+  "premiumProviders": [
+    {
+      "name": "Smartproxy",
+      "apiUrl": "https://api.smartproxy.com/v1/endpoint",
+      "auth": {
+        "username": "YOUR_USERNAME",
+        "password": "YOUR_PASSWORD"
+      },
+      "endpoints": [
+        {
+          "host": "gate.smartproxy.com",
+          "port": 7000,
+          "protocol": "http"
+        }
+      ],
+      "enabled": false,
+      "description": "Proxy premium con 55M+ IP in 195 località"
+    },
+    {
+      "name": "Bright Data",
+      "apiUrl": "https://api.brightdata.com/v1/proxy",
+      "auth": {
+        "username": "YOUR_USERNAME",
+        "password": "YOUR_PASSWORD"
+      },
+      "endpoints": [
+        {
+          "host": "brd.superproxy.io",
+          "port": 22225,
+          "protocol": "http"
+        }
+      ],
+      "enabled": false,
+      "description": "Proxy residenziali e datacenter ad alta velocità"
+    },
+    {
+      "name": "NetNut",
+      "apiUrl": "https://api.netnut.io/v1/proxy",
+      "auth": {
+        "username": "YOUR_USERNAME",
+        "password": "YOUR_PASSWORD"
+      },
+      "endpoints": [
+        {
+          "host": "gate.netnut.io",
+          "port": 5959,
+          "protocol": "http"
+        }
+      ],
+      "enabled": false,
+      "description": "Proxy ibridi residenziali + datacenter"
+    }
+  ],
+  "autoRotate": true,
+  "maxConcurrentTests": 5,
+  "testInterval": 300000,
+  "note": "Configura le credenziali dei provider premium per abilitare i proxy a pagamento. I proxy gratuiti funzioneranno comunque come fallback."
+}

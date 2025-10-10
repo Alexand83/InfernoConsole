@@ -25,6 +25,23 @@ declare global {
       on: (event: string, callback: (event: any, data: any) => void) => void
       removeListener: (event: string, callback: (event: any, data: any) => void) => void
       // getAppPath: RIMOSSO per versione portabile
+      
+      // Proxy APIs
+      'get-proxy-stats': () => Promise<{ success: boolean; stats?: any; error?: string }>
+      'test-all-proxies': () => Promise<{ success: boolean; workingProxies?: any[]; error?: string }>
+      'add-proxy': (proxyConfig: any) => Promise<{ success: boolean; error?: string }>
+      'remove-proxy': (host: string, port: number) => Promise<{ success: boolean; error?: string }>
+      'force-proxy-rotation': () => Promise<{ success: boolean; proxy?: any; error?: string }>
+      
+      // VPN APIs
+      'get-free-vpns': () => Promise<{ success: boolean; vpns?: any[]; error?: string }>
+      'get-premium-vpns': () => Promise<{ success: boolean; vpns?: any[]; error?: string }>
+      'get-vpn-status': () => Promise<{ success: boolean; status?: any; error?: string }>
+      'connect-vpn': (vpnConfig: any) => Promise<{ success: boolean; status?: any; error?: string }>
+      'disconnect-vpn': () => Promise<{ success: boolean; error?: string }>
+      'test-vpn-connection': () => Promise<{ success: boolean; ip?: string; error?: string }>
+      'get-vpn-countries': () => Promise<{ success: boolean; countries?: string[]; error?: string }>
+      'get-vpn-data-usage': () => Promise<{ success: boolean; usage?: number; error?: string }>
     }
     
     // Desktop Stream API
