@@ -1128,16 +1128,20 @@ const DJRemotoServerPage: React.FC = () => {
         cleanupPTTLiveAudio(clientId)
       }
       
-      // Avvia la riproduzione
-      audioElement.play().then(() => {
-        console.log(`🎤 [PTT Live Audio] Riproduzione avviata per ${djName}`)
-        
-        // ✅ CRITICAL: Aggiungi automaticamente l'audio PTT Live al destination stream
-        addPTTLiveAudioToDestinationStream(audioElement, clientId, djName)
-      }).catch(error => {
-        console.error(`❌ [PTT Live Audio] Errore avvio riproduzione per ${djName}:`, error)
-        cleanupPTTLiveAudio(clientId)
-      })
+      // ✅ FIX: NON riprodurre l'audio registrato - usa solo lo streaming live
+      // audioElement.play().then(() => {
+      //   console.log(`🎤 [PTT Live Audio] Riproduzione avviata per ${djName}`)
+      //   
+      //   // ✅ CRITICAL: Aggiungi automaticamente l'audio PTT Live al destination stream
+      //   addPTTLiveAudioToDestinationStream(audioElement, clientId, djName)
+      // }).catch(error => {
+      //   console.error(`❌ [PTT Live Audio] Errore avvio riproduzione per ${djName}:`, error)
+      //   cleanupPTTLiveAudio(clientId)
+      // })
+      
+      // ✅ FIX: Pulisci immediatamente l'audio registrato per evitare doppia riproduzione
+      console.log(`🎤 [PTT Live Audio] Audio registrato ignorato per ${djName} - uso solo streaming live`)
+      cleanupPTTLiveAudio(clientId)
       
     } catch (error) {
       console.error(`❌ [PTT Live Audio] Errore elaborazione audio da ${djName}:`, error)
@@ -2316,6 +2320,7 @@ const DJRemotoServerPage: React.FC = () => {
             serverUrl={tunnelUrl || `${serverInfo.host}:${serverInfo.port}`}
             sessionCode={serverInfo.sessionCode}
             serverMode="internet"
+            webrtcPort={serverInfo.port}
           />
         </div>
       )}

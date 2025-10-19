@@ -5,9 +5,10 @@ interface ConnectionCodeProps {
   serverUrl: string
   sessionCode: string
   serverMode: 'locale' | 'internet'
+  webrtcPort?: number // Porta del WebRTC server
 }
 
-const ConnectionCode: React.FC<ConnectionCodeProps> = ({ serverUrl, sessionCode, serverMode }) => {
+const ConnectionCode: React.FC<ConnectionCodeProps> = ({ serverUrl, sessionCode, serverMode, webrtcPort }) => {
   const [copied, setCopied] = useState(false)
 
   const generateConnectionCode = () => {
@@ -15,9 +16,10 @@ const ConnectionCode: React.FC<ConnectionCodeProps> = ({ serverUrl, sessionCode,
       // Modalità internet - URL completo + codice
       return `DJCONNECT:${serverUrl}|${sessionCode}`
     } else {
-      // Modalità locale - IP + porta + codice
+      // Modalità locale - IP + porta WebRTC + codice
       const ip = serverUrl.replace('ws://', '').replace('wss://', '')
-      return `DJCONNECT:${ip}|${sessionCode}`
+      const port = webrtcPort || 8080 // Usa la porta WebRTC se disponibile
+      return `DJCONNECT:${ip}:${port}|${sessionCode}`
     }
   }
 

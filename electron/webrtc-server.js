@@ -19,16 +19,37 @@ class WebRTCServer extends EventEmitter {
       
       server.listen(startPort, () => {
         const port = server.address().port
+        console.log(`✅ [WebRTC Server] Porta ${port} disponibile`)
         server.close(() => resolve(port))
       })
       
       server.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
-          // Prova la porta successiva
+          console.log(`⚠️ [WebRTC Server] Porta ${startPort} occupata, provo ${startPort + 1}`)
+          // Prova la porta successiva con timeout per evitare loop infiniti
+          if (startPort > 8100) {
+            reject(new Error(`Nessuna porta libera trovata tra 8080 e 8100`))
+            return
+          }
           this.findFreePort(startPort + 1).then(resolve).catch(reject)
         } else {
           reject(err)
         }
+      })
+    })
+  }
+
+  // Funzione per verificare se una porta è effettivamente libera
+  async isPortAvailable(port) {
+    return new Promise((resolve) => {
+      const server = net.createServer()
+      
+      server.listen(port, () => {
+        server.close(() => resolve(true))
+      })
+      
+      server.on('error', () => {
+        resolve(false)
       })
     })
   }
@@ -44,8 +65,15 @@ class WebRTCServer extends EventEmitter {
         this.sessionCode = this.generateSessionCode()
         console.log(`🔐 [WebRTC Server] Nuovo codice sessione generato: ${this.sessionCode}`)
         
-        // Trova una porta libera
-        const freePort = await this.findFreePort(this.port)
+        // Trova una porta libera, evitando la 8081 (usata da ngrok)
+        let freePort
+        if (this.port === 8081) {
+          // Se la porta richiesta è 8081, prova prima 8080, poi 8082, etc.
+          console.log(`🔍 [WebRTC Server] Evitando porta 8081 (ngrok), provo 8080...`)
+          freePort = await this.findFreePort(8080)
+        } else {
+          freePort = await this.findFreePort(this.port)
+        }
         this.port = freePort
         
         console.log(`🔍 [WebRTC Server] Porta ${this.port} richiesta, usando porta libera: ${freePort}`)

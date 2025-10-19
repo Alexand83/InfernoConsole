@@ -859,8 +859,19 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
         wsUrl = hostIP.startsWith('ws') ? hostIP : `wss://${hostIP.replace('https://', '')}`
         console.log(`🌐 [RemoteDJClient] 🔗 Connessione TUNNEL PUBBLICO: ${wsUrl}`)
       } else {
-        // IP locale tradizionale
-        wsUrl = `ws://${hostIP}:8081`
+        // IP locale tradizionale - estrai porta dall'IP se presente
+        let webrtcPort = 8080 // Porta di default
+        let cleanIP = hostIP
+        
+        // Se l'IP contiene una porta (es: 192.168.1.100:8082), estraila
+        if (hostIP.includes(':')) {
+          const parts = hostIP.split(':')
+          cleanIP = parts[0]
+          webrtcPort = parseInt(parts[1]) || 8080
+          console.log(`🔍 [RemoteDJClient] Porta estratta dall'IP: ${webrtcPort}`)
+        }
+        
+        wsUrl = `ws://${cleanIP}:${webrtcPort}`
         console.log(`🏠 [RemoteDJClient] 🔗 Connessione LAN locale: ${wsUrl}`)
       }
 
@@ -1437,7 +1448,7 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
     }
     
     setIsPTTLiveActive(true)
-    console.log('📡 [PTT Live] Attivato - Streaming Live + Ducking')
+    console.log('📡 [PTT Live] Attivato - Solo Streaming Live (no registrazione)')
     // Attiva il microfono per streaming live
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach(track => {
@@ -1445,8 +1456,8 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
         console.log(`📡 [PTT Live] Track ${track.id} abilitato`)
       })
     }
-    // ✅ NEW: Avvia registrazione locale da inviare in chunk all'host
-    startPTTLiveAudioRecording()
+    // ✅ FIX: NON avviare registrazione locale per evitare doppia riproduzione
+    // startPTTLiveAudioRecording() // RIMOSSO - causa doppia riproduzione
     // ✅ NEW: Invia comando PTT Live all'host via DataChannel
     sendPTTLiveCommandToHost(true)
   }
@@ -1465,8 +1476,8 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
         }
       })
     }
-    // ✅ NEW: Ferma registrazione e invia audio in chunk
-    stopPTTLiveAudioRecording()
+    // ✅ FIX: NON fermare registrazione (non avviata) per evitare errori
+    // stopPTTLiveAudioRecording() // RIMOSSO - non più necessario
     // ✅ NEW: Invia comando PTT Live all'host via DataChannel
     sendPTTLiveCommandToHost(false)
   }
