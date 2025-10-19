@@ -1,8 +1,11 @@
-version: 1.4.47
+version: 1.4.134
 files:
-  - url: Inferno-Console-1.4.47-win.exe
-    sha512: placeholder
-    size: 135372800
-path: Inferno-Console-1.4.47-win.exe
-sha512: placeholder
-releaseDate: '2025-09-27T17:40:00.000Z'
+  - url: Inferno-Console-Installer.exe
+    sha512: 6ad00d666250888e33492d0329d0858e4682cf96f55797a120560edeadd16020d6208f4527c4318e2b544e905049ecbf01a78b6d07b629a44ea126dbc7cf601e
+    size: 81118041
+  - url: Inferno-Console-win.exe
+    sha512: a0aefdbabecbad1d14a10b47504faa281fcb81c7683f8722480b87793bafb6e04f4f4525c9aa204c1cdae94efd87ee106e66089ea4e4e891cea42c07835962ff
+    size: 125368814
+path: Inferno-Console-Installer.exe
+sha512: 6ad00d666250888e33492d0329d0858e4682cf96f55797a120560edeadd16020d6208f4527c4318e2b544e905049ecbf01a78b6d07b629a44ea126dbc7cf601e
+releaseDate: 2025-10-19T17:27:53.409Z
