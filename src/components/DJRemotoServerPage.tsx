@@ -2242,7 +2242,11 @@ const DJRemotoServerPage: React.FC = () => {
             </div>
             <div className="flex items-center space-x-1">
               <button
-                onClick={() => setIsMinimized(true)}
+                onClick={() => {
+                  console.log('🔄 [DJRemotoServerPage] Click pulsante minimizza - stato attuale:', isMinimized)
+                  setIsMinimized(true)
+                  console.log('✅ [DJRemotoServerPage] setIsMinimized(true) chiamato')
+                }}
                 className="text-dj-light hover:text-white text-sm"
                 title="Riduci a icona"
               >

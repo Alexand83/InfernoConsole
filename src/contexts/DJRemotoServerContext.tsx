@@ -28,7 +28,9 @@ export const DJRemotoServerProvider: React.FC<DJRemotoServerProviderProps> = ({ 
   })
   
   const [isMinimized, setIsMinimized] = useState(() => {
-    return sessionStorage.getItem('djRemotoServer_minimized') === 'true'
+    const saved = sessionStorage.getItem('djRemotoServer_minimized') === 'true'
+    console.log('🔄 [DJRemotoServerContext] Stato iniziale isMinimized:', saved)
+    return saved
   })
 
   // ✅ CRITICAL: Save state to sessionStorage whenever it changes
@@ -37,6 +39,7 @@ export const DJRemotoServerProvider: React.FC<DJRemotoServerProviderProps> = ({ 
   }, [showPanel])
 
   useEffect(() => {
+    console.log('🔄 [DJRemotoServerContext] isMinimized cambiato a:', isMinimized)
     sessionStorage.setItem('djRemotoServer_minimized', isMinimized.toString())
     // ✅ NEW: Set global flag for client positioning
     ;(window as any).__djRemotoServerMinimized__ = isMinimized

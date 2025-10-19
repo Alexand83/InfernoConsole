@@ -5,6 +5,8 @@ import { useSettings } from '../contexts/SettingsContext'
 interface RemoteDJClientProps {
   onClose?: () => void
   onMinimize?: () => void
+  onExpand?: () => void
+  isMinimized?: boolean
 }
 
 interface ChatMessage {
@@ -15,7 +17,7 @@ interface ChatMessage {
   isSystem: boolean
 }
 
-const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) => {
+const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize, onExpand, isMinimized = false }) => {
   const { settings } = useSettings()
   // ✅ CRITICAL FIX: Salva anche lo stato di connessione e i messaggi della chat (solo sessione)
   const [isConnected, setIsConnected] = useState(() => {
@@ -1657,9 +1659,49 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
 
 
   return (
-    <div className="fixed bottom-4 right-4 w-[500px] bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-50 max-h-[600px] overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 bg-gray-800 border-b border-gray-700">
+    <div className={`fixed bottom-4 right-4 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-50 transition-all duration-300 ${
+      isMinimized 
+        ? 'w-12 h-12' 
+        : 'w-[500px] max-h-[600px] overflow-hidden'
+    }`}>
+      {isMinimized ? (
+        // ✅ Minimized state - just icon
+        <div className="relative w-full h-full">
+          {/* Pulsante di chiusura */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              console.log('🔄 [RemoteDJClient] Chiusura pannello da icona minimizzata')
+              onClose?.()
+            }}
+            className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 hover:bg-red-600 text-white text-xs rounded-full flex items-center justify-center z-10 transition-colors"
+            title="Chiudi pannello"
+          >
+            ✕
+          </button>
+          
+          {/* Icona principale */}
+          <div 
+            className="w-full h-full flex items-center justify-center cursor-pointer hover:bg-gray-700/40 rounded-lg transition-all duration-200 border-2 border-gray-600/50 hover:border-gray-500 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
+            onClick={(e) => {
+              e.stopPropagation()
+              console.log('🔄 [RemoteDJClient] Click su icona minimizzata - espansione')
+              onExpand?.()
+            }}
+            title={`DJ Remoto Client - ${isConnected ? 'CONNESSO' : 'DISCONNESSO'} - Click per espandere`}
+          >
+            <div className="relative flex flex-col items-center">
+              <span className="text-xl">🎤</span>
+              {isConnected && (
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Header */}
+          <div className="flex items-center justify-between p-3 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center space-x-2">
           <span className="text-lg">🎤</span>
           <span className="text-sm font-medium text-white">DJ Remoto</span>
@@ -1905,11 +1947,13 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize }) 
       )}
 
       {/* Footer */}
-      <div className="p-2 bg-gray-800 border-t border-gray-700">
-        <div className="text-xs text-gray-500 text-center">
-          💡 Pannello DJ Remoto - Dati salvati solo per questa sessione
-        </div>
-      </div>
+          <div className="p-2 bg-gray-800 border-t border-gray-700">
+            <div className="text-xs text-gray-500 text-center">
+              💡 Pannello DJ Remoto - Dati salvati solo per questa sessione
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
