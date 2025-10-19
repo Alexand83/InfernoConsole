@@ -291,11 +291,55 @@ class AppUpdater {
     this.checkForUpdates()
   }
 
-  checkForUpdates() {
+  async checkForUpdates() {
     try {
-      autoUpdater.checkForUpdatesAndNotify()
+      console.log('🔍 Controllo aggiornamenti tramite API GitHub...')
+      
+      // Prima prova con l'API GitHub diretta
+      try {
+        const release = await this.checkGitHubFiles()
+        const currentVersion = require('../package.json').version
+        const latestVersion = release.tag_name.replace('v', '')
+        
+        console.log(`📦 Versione corrente: ${currentVersion}`)
+        console.log(`📦 Versione più recente: ${latestVersion}`)
+        
+        if (this.isNewerVersion(latestVersion, currentVersion)) {
+          console.log('✅ Nuova versione disponibile!')
+          
+          // Trova l'installer nell'elenco degli asset
+          const installer = release.assets.find(asset => 
+            asset.name === 'Inferno-Console-Installer.exe'
+          )
+          
+          if (installer) {
+            console.log('📥 Installer trovato:', installer.name)
+            console.log('📊 Dimensione:', (installer.size / 1024 / 1024).toFixed(2), 'MB')
+            
+            // Invia notifica al renderer
+            const mainWindow = require('./main').getMainWindow()
+            if (mainWindow) {
+              mainWindow.webContents.send('update-available', {
+                version: latestVersion,
+                installer: installer,
+                release: release
+              })
+            }
+          } else {
+            console.log('❌ Installer non trovato negli asset')
+          }
+        } else {
+          console.log('✅ App già aggiornata alla versione più recente')
+        }
+        
+      } catch (githubError) {
+        console.warn('⚠️ Errore API GitHub, fallback a auto-updater:', githubError.message)
+        // Fallback al metodo originale
+        autoUpdater.checkForUpdatesAndNotify()
+      }
+      
     } catch (error) {
-      console.error('Errore durante il controllo aggiornamenti:', error)
+      console.error('❌ Errore durante il controllo aggiornamenti:', error)
     }
   }
 
@@ -521,6 +565,83 @@ updaterCacheDirName: inferno-console-updater`
       
     } catch (error) {
       console.error('❌ Errore nel ricreare il file di configurazione:', error)
+    }
+  }
+
+  // ✅ NUOVO: Metodo per confrontare le versioni
+  isNewerVersion(latest, current) {
+    const latestParts = latest.split('.').map(Number)
+    const currentParts = current.split('.').map(Number)
+    
+    for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i++) {
+      const latestPart = latestParts[i] || 0
+      const currentPart = currentParts[i] || 0
+      
+      if (latestPart > currentPart) return true
+      if (latestPart < currentPart) return false
+    }
+    
+    return false // Stessa versione
+  }
+
+  // ✅ NUOVO: Metodo per scaricare l'installer
+  async downloadInstaller(installerInfo) {
+    try {
+      const https = require('https')
+      const fs = require('fs')
+      const path = require('path')
+      
+      const downloadPath = path.join(this.customUpdateDir, installerInfo.name)
+      
+      return new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(downloadPath)
+        
+        https.get(installerInfo.browser_download_url, {
+          headers: {
+            'User-Agent': 'DJ-Console-Updater'
+          }
+        }, (res) => {
+          let downloaded = 0
+          const total = installerInfo.size
+          
+          res.on('data', (chunk) => {
+            downloaded += chunk.length
+            const percent = Math.round((downloaded / total) * 100)
+            
+            // Invia progresso al renderer
+            const mainWindow = require('./main').getMainWindow()
+            if (mainWindow) {
+              mainWindow.webContents.send('download-progress', {
+                percent: percent,
+                bytesPerSecond: 0, // Non disponibile con https.get
+                transferred: downloaded,
+                total: total
+              })
+            }
+            
+            file.write(chunk)
+          })
+          
+          res.on('end', () => {
+            file.end()
+            console.log('✅ Download installer completato:', downloadPath)
+            resolve(downloadPath)
+          })
+          
+          res.on('error', (err) => {
+            file.close()
+            fs.unlink(downloadPath, () => {}) // Rimuovi file parziale
+            reject(err)
+          })
+        }).on('error', (err) => {
+          file.close()
+          fs.unlink(downloadPath, () => {}) // Rimuovi file parziale
+          reject(err)
+        })
+      })
+    } catch (error) {
+      console.error('❌ Errore download installer:', error)
+      throw error
     }
   }
 

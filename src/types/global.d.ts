@@ -42,6 +42,10 @@ declare global {
       'test-vpn-connection': () => Promise<{ success: boolean; ip?: string; error?: string }>
       'get-vpn-countries': () => Promise<{ success: boolean; countries?: string[]; error?: string }>
       'get-vpn-data-usage': () => Promise<{ success: boolean; usage?: number; error?: string }>
+      
+      // Updater APIs
+      'check-github-files': () => Promise<{ success: boolean; release?: any; error?: string }>
+      'download-installer': (installerInfo: any) => Promise<{ success: boolean; path?: string; error?: string }>
     }
     
     // Desktop Stream API

@@ -1172,6 +1172,20 @@ ipcMain.handle('check-github-files', async () => {
   }
 })
 
+// ✅ NUOVO: Handler per scaricare installer
+ipcMain.handle('download-installer', async (event, installerInfo) => {
+  try {
+    console.log('📥 [MAIN] Download installer:', installerInfo.name)
+    const AppUpdater = require('./updater')
+    const updater = new AppUpdater()
+    const downloadPath = await updater.downloadInstaller(installerInfo)
+    return { success: true, path: downloadPath }
+  } catch (error) {
+    console.error('❌ [MAIN] Errore download installer:', error)
+    return { success: false, error: error.message }
+  }
+})
+
 // ✅ NUOVO: Funzione per creare shortcut con PowerShell (più affidabile per app portabili)
 function createShortcutWithModernLibrary(exePath) {
   try {
