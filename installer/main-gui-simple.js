@@ -5,6 +5,7 @@ const https = require('https');
 const os = require('os');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { resolveVersion } = require('./utils/version');
 
 const execAsync = promisify(exec);
 
@@ -446,7 +447,7 @@ class InfernoConsoleInstallerGUI {
     // Create config file
     const config = {
       installedAt: new Date().toISOString(),
-      version: '1.4.139',
+      version: resolveVersion(),
       installerVersion: '1.0.0',
       installPath: this.installPath
     };
@@ -620,7 +621,7 @@ pause
       const markerPath = path.join(this.installPath, '..', 'installer-info.json');
       const markerData = {
         installer: 'custom-gui',
-        version: '1.4.139',
+        version: resolveVersion(),
         installDate: new Date().toISOString(),
         installPath: this.installPath,
         features: [

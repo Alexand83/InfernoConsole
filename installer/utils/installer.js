@@ -4,6 +4,7 @@ const chalk = require('chalk');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const { AppDownloader } = require('./downloader');
+const { resolveVersion } = require('./version');
 
 const execAsync = promisify(exec);
 
@@ -57,7 +58,7 @@ class AppInstaller {
       const configPath = path.join(installPath, 'installer-config.json');
       const config = {
         installedAt: new Date().toISOString(),
-        version: '1.4.139',
+        version: resolveVersion(),
         installerVersion: '1.0.0',
         installPath: installPath,
         shortcuts: {
@@ -77,7 +78,7 @@ class AppInstaller {
   async createVersionFile(installPath) {
     try {
       const versionPath = path.join(installPath, 'version.txt');
-      const versionInfo = `Inferno Console v1.4.139
+      const versionInfo = `Inferno Console v${resolveVersion()}
 Installato il: ${new Date().toLocaleString('it-IT')}
 Directory: ${installPath}
 Installer: v1.0.0

@@ -7,6 +7,7 @@ const http = require('http');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const os = require('os');
+const { resolveVersion } = require('./utils/version');
 
 const execAsync = promisify(exec);
 
@@ -179,7 +180,7 @@ class NativeInstaller {
     // Crea file di configurazione
     const config = {
       installedAt: new Date().toISOString(),
-      version: '1.4.139',
+      version: resolveVersion(),
       installerVersion: '1.0.0',
       installPath: this.installPath
     };

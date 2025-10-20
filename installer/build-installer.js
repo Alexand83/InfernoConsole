@@ -1,31 +1,15 @@
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs-extra');
+const { resolveVersion } = require('./utils/version');
 
 const installerDir = __dirname;
 const outputDir = path.join(installerDir, '..', 'dist-electron');
 const mainFile = 'main-gui-simple.js';
 const outputExe = 'Inferno-Console-Installer.exe';
 
-// ✅ Resolve version from environment tag or fallback to root package.json
-let resolvedVersion = '0.0.0';
-try {
-  const envVersionRaw = process.env.VERSION || process.env.GITHUB_REF_NAME || '';
-  const envVersion = envVersionRaw.startsWith('v') ? envVersionRaw.slice(1) : envVersionRaw;
-  if (envVersion && envVersion.trim().length > 0) {
-    resolvedVersion = envVersion.trim();
-  } else {
-    const rootPkgPath = path.join(installerDir, '..', 'package.json');
-    if (fs.existsSync(rootPkgPath)) {
-      const rootPkg = JSON.parse(fs.readFileSync(rootPkgPath, 'utf8'));
-      if (rootPkg && rootPkg.version) {
-        resolvedVersion = String(rootPkg.version);
-      }
-    }
-  }
-} catch (_) {
-  // keep default
-}
+// ✅ Resolve version dynamically
+const resolvedVersion = resolveVersion();
 
 console.log('\n🔨 BUILDING CUSTOM INSTALLER FOR GITHUB RELEASE\n');
 

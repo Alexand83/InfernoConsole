@@ -665,9 +665,10 @@ updaterCacheDirName: inferno-console-updater`
       return new Promise((resolve, reject) => {
         const request = https.get(url, {
           headers: {
-            'User-Agent': 'DJ-Console-Updater/1.4.137',
+            'User-Agent': 'DJ-Console-Updater/1.4.139',
             'Accept': 'application/vnd.github.v3+json',
-            'Connection': 'keep-alive'
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache'
           },
           timeout: 30000 // 30 secondi timeout
         }, (res) => {
@@ -707,8 +708,12 @@ updaterCacheDirName: inferno-console-updater`
         // Gestione errori di connessione
         request.on('error', (err) => {
           console.error('❌ [GitHub API] Errore connessione:', err.message)
-          if (err.code === 'ECONNRESET' || err.code === 'EPIPE') {
-            reject(new Error('Connessione GitHub interrotta - riprova più tardi'))
+          if (err.code === 'ECONNRESET' || err.code === 'EPIPE' || err.message.includes('socket hang up')) {
+            console.log('🔄 [GitHub API] Socket hang up rilevato - tentativo di riconnessione...')
+            // Ritenta dopo 3 secondi
+            setTimeout(() => {
+              this.checkGitHubFiles().then(resolve).catch(reject)
+            }, 3000)
           } else if (err.code === 'ENOTFOUND' || err.code === 'EAI_AGAIN') {
             reject(new Error('Impossibile raggiungere GitHub - controlla la connessione internet'))
           } else {
