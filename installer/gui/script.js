@@ -16,6 +16,17 @@ class NSISInstaller {
         
         this.setupEventListeners();
         await this.loadInstallOptions();
+
+        // Update visible version labels dynamically
+        try {
+            const version = await ipcRenderer.invoke('get-version');
+            const headerP = document.querySelector('.app-info p');
+            const footerSpan = document.getElementById('footerText');
+            if (headerP) headerP.textContent = `Installer v${version}`;
+            if (footerSpan) footerSpan.textContent = `Inferno Console Installer v${version}`;
+        } catch (e) {
+            console.warn('Unable to set dynamic version label:', e.message);
+        }
         // Auto-detect existing installation to enable update fast-path
         try {
             const detection = await ipcRenderer.invoke('detect-existing-install');

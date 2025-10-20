@@ -19,8 +19,10 @@ class InfernoConsoleInstallerGUI {
   async init() {
     await app.whenReady();
     
-    this.createWindow();
+    // Register IPC handlers BEFORE creating/loading the window,
+    // so renderer can immediately invoke them on DOMContentLoaded
     this.setupIPC();
+    this.createWindow();
   }
 
   createWindow() {
@@ -74,6 +76,14 @@ class InfernoConsoleInstallerGUI {
   }
 
   setupIPC() {
+    // Expose resolved app version to renderer (HTML/JS UI)
+    ipcMain.handle('get-version', () => {
+      try {
+        return resolveVersion();
+      } catch (_) {
+        return '0.0.0';
+      }
+    });
     // Get install paths
     ipcMain.handle('get-install-paths', () => {
       return {

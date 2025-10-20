@@ -10,11 +10,17 @@ class UninstallerGUI {
         this.init();
     }
 
-    init() {
+    async init() {
         console.log('🗑️ Initializing Uninstaller GUI...');
         
         this.setupEventListeners();
         this.detectInstallation();
+        // Dynamically update version label in footer
+        try {
+            const version = await ipcRenderer.invoke('get-version');
+            const el = document.getElementById('footerText');
+            if (version && el) el.textContent = `Inferno Console Uninstaller v${version}`;
+        } catch (_) {}
         
         // Setup IPC listeners
         ipcRenderer.on('uninstall-progress', (event, { message, percentage, completed, error }) => {
