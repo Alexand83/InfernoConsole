@@ -333,13 +333,24 @@ class AppUpdater {
         }
         
       } catch (githubError) {
-        console.warn('⚠️ Errore API GitHub, fallback a auto-updater:', githubError.message)
-        // Fallback al metodo originale
-        autoUpdater.checkForUpdatesAndNotify()
+        console.warn('⚠️ Errore API GitHub:', githubError.message)
+        
+        // Mostra messaggio specifico in base al tipo di errore
+        if (githubError.message.includes('Timeout')) {
+          console.log('🔄 Timeout GitHub API - riprova più tardi')
+        } else if (githubError.message.includes('Connessione interrotta')) {
+          console.log('🔄 Connessione GitHub interrotta - riprova più tardi')
+        } else if (githubError.message.includes('Impossibile raggiungere')) {
+          console.log('🔄 Problema di connessione internet - controlla la rete')
+        } else {
+          console.log('🔄 Errore GitHub API - fallback a auto-updater')
+          // Fallback al metodo originale solo per errori non critici
+          autoUpdater.checkForUpdatesAndNotify()
+        }
       }
       
     } catch (error) {
-      console.error('❌ Errore durante il controllo aggiornamenti:', error)
+      console.error('❌ Errore durante il controllo aggiornamenti:', error.message)
     }
   }
 
@@ -652,32 +663,61 @@ updaterCacheDirName: inferno-console-updater`
       const url = 'https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest'
       
       return new Promise((resolve, reject) => {
-        https.get(url, {
+        const request = https.get(url, {
           headers: {
-            'User-Agent': 'DJ-Console-Updater',
-            'Accept': 'application/vnd.github.v3+json'
-          }
+            'User-Agent': 'DJ-Console-Updater/1.4.137',
+            'Accept': 'application/vnd.github.v3+json',
+            'Connection': 'keep-alive'
+          },
+          timeout: 30000 // 30 secondi timeout
         }, (res) => {
+          console.log('📡 [GitHub API] Status:', res.statusCode)
+          
+          if (res.statusCode !== 200) {
+            console.error('❌ [GitHub API] HTTP Error:', res.statusCode, res.statusMessage)
+            return reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`))
+          }
+          
           let data = ''
           res.on('data', (chunk) => data += chunk)
           res.on('end', () => {
             try {
               const release = JSON.parse(data)
-              console.log('🔍 Release GitHub trovata:', release.tag_name)
-              console.log('📁 Assets disponibili:', release.assets.map(a => ({
+              console.log('🔍 [GitHub API] Release trovata:', release.tag_name)
+              console.log('📁 [GitHub API] Assets disponibili:', release.assets.map(a => ({
                 name: a.name,
                 size: a.size,
                 download_url: a.browser_download_url
               })))
               resolve(release)
             } catch (err) {
-              reject(err)
+              console.error('❌ [GitHub API] Errore parsing JSON:', err.message)
+              reject(new Error('Errore parsing risposta GitHub API'))
             }
           })
-        }).on('error', reject)
+        })
+        
+        // Gestione timeout
+        request.setTimeout(30000, () => {
+          console.error('❌ [GitHub API] Timeout dopo 30 secondi')
+          request.destroy()
+          reject(new Error('Timeout connessione GitHub API'))
+        })
+        
+        // Gestione errori di connessione
+        request.on('error', (err) => {
+          console.error('❌ [GitHub API] Errore connessione:', err.message)
+          if (err.code === 'ECONNRESET' || err.code === 'EPIPE') {
+            reject(new Error('Connessione GitHub interrotta - riprova più tardi'))
+          } else if (err.code === 'ENOTFOUND' || err.code === 'EAI_AGAIN') {
+            reject(new Error('Impossibile raggiungere GitHub - controlla la connessione internet'))
+          } else {
+            reject(new Error(`Errore connessione: ${err.message}`))
+          }
+        })
       })
     } catch (error) {
-      console.error('❌ Errore nel controllo file GitHub:', error)
+      console.error('❌ [GitHub API] Errore generale:', error.message)
       throw error
     }
   }
