@@ -792,7 +792,10 @@ export class FileUploadManager {
       // ✅ CRITICAL: Estrazione metadata SOLO dal filename - ZERO analisi audio
       const metadata = this.extractMetadataFromFilename(file.name)
       
-      // ✅ ULTRA-LEGGERO: Durata stimata dal filename o 0 - NO analisi audio
+      // ✅ ULTRA-LEGGERO: Durata "ignota" di default per risparmiare RAM/CPU
+      //    (impostata a 0 così non mostra 3:00 fisso).
+      //    Solo se il filename contiene indizi evidenti (intro/short/extended)
+      //    usiamo una stima minima senza analisi audio.
       let duration = 0
       const filename = file.name.toLowerCase()
       
@@ -803,8 +806,6 @@ export class FileUploadManager {
         duration = 60 // 1 minuto per clip
       } else if (filename.includes('extended') || filename.includes('long')) {
         duration = 300 // 5 minuti per extended
-      } else {
-        duration = 180 // 3 minuti default
       }
       
       // ✅ ZERO WAVEFORM: Array vuoto - generato solo on-demand
