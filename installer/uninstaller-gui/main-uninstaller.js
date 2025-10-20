@@ -371,62 +371,92 @@ public static class NativeMethods {
         return resolve();
       }
 
+      // ✅ FIX CRITICO: Verifica sicurezza del percorso
+      const os = require('os');
+      if (this.installPath === path.join(os.homedir(), 'Desktop')) {
+        this.sendProgress('❌ PERICOLO: Percorso non sicuro rilevato! Non posso cancellare il desktop.', 50, false, true);
+        this.sendProgress('ℹ️ Disinstallazione interrotta per sicurezza.', 50, false, true);
+        return resolve();
+      }
+
       this.sendProgress('Terminazione processi in corso...', 40);
       this.killAllProcesses().then(() => {
         setTimeout(() => {
           try {
-            // 1) Raccolta percorsi (file prima, poi directory) per eliminazione progressiva
-            const { files, dirs } = this.collectPathsRecursively(this.installPath);
-            const totalItems = Math.max(1, files.length + dirs.length);
+            // ✅ FIX CRITICO: Cancella SOLO i file specifici dell'app, NON tutti i file
+            const appFiles = [
+              'Inferno Console.exe',
+              'Inferno-Console-win.exe', 
+              'Inferno-Console-temp.exe',
+              'InfernoConsole.exe',
+              'uninstall.exe',
+              'Inferno-Console-Uninstaller.exe',
+              'Uninstall-Inferno-Console.bat',
+              'installer-info.json',
+              'latest.yml',
+              'package.json',
+              'README.md',
+              'release-info.json'
+            ];
+            
+            const appDirs = [
+              'resources',
+              'locales'
+            ];
+            
             let processed = 0;
+            const totalItems = appFiles.length + appDirs.length;
 
-            // 2) Elimina file uno ad uno con avanzamento (escludi l'uninstaller in esecuzione)
-            const runningExe = process.execPath;
-            for (const filePath of files) {
-              if (filePath === runningExe) { continue; }
-              try {
-                const rel = path.relative(this.installPath, filePath);
-                this.sendProgress('Elimino file: ' + rel, Math.min(40 + Math.round((processed / totalItems) * 50), 90));
-                fs.unlinkSync(filePath);
-                this.deletedNow.push(filePath);
-              } catch (errFile) {
-                // Se in uso/bloccato → programma cancellazione al riavvio
-                this.scheduleDeleteOnReboot(filePath);
+            // 2) Elimina SOLO i file specifici dell'app
+            for (const fileName of appFiles) {
+              const filePath = path.join(this.installPath, fileName);
+              if (fs.existsSync(filePath)) {
+                try {
+                  this.sendProgress('Elimino file: ' + fileName, Math.min(40 + Math.round((processed / totalItems) * 50), 90));
+                  fs.unlinkSync(filePath);
+                  this.deletedNow.push(filePath);
+                } catch (errFile) {
+                  // Se in uso/bloccato → programma cancellazione al riavvio
+                  this.scheduleDeleteOnReboot(filePath);
+                }
               }
               processed++;
             }
 
-            // 3) Elimina directory (dalla più profonda)
-            for (const dirPath of dirs.reverse()) {
-              try {
-                const rel = path.relative(this.installPath, dirPath);
-                this.sendProgress('Elimino cartella: ' + rel, Math.min(40 + Math.round((processed / totalItems) * 50), 95));
-                fs.rmdirSync(dirPath, { recursive: false });
-                this.deletedNow.push(dirPath);
-              } catch (errDir) {
-                // Se contiene residui bloccati → programma cancellazione al riavvio
-                this.scheduleDeleteOnReboot(dirPath);
+            // 3) Elimina SOLO le cartelle specifiche dell'app
+            for (const dirName of appDirs) {
+              const dirPath = path.join(this.installPath, dirName);
+              if (fs.existsSync(dirPath)) {
+                try {
+                  this.sendProgress('Elimino cartella: ' + dirName, Math.min(40 + Math.round((processed / totalItems) * 50), 95));
+                  fs.rmdirSync(dirPath, { recursive: true });
+                  this.deletedNow.push(dirPath);
+                } catch (errDir) {
+                  // Se contiene residui bloccati → programma cancellazione al riavvio
+                  this.scheduleDeleteOnReboot(dirPath);
+                }
               }
               processed++;
             }
 
-            // 4) Prova a rimuovere la root; se l'uninstaller risiede qui, non forzare ora
+            // 4) ✅ SICUREZZA: Prova a rimuovere la root solo se è vuota
             try {
               // Se la root contiene ancora l'uninstaller, rimanda a removeUninstaller()
               if (runningExe.startsWith(this.installPath)) {
                 this.sendProgress('⏳ Cartella trattenuta finché l\'uninstaller è in esecuzione', 96);
               } else {
-                fs.rmdirSync(this.installPath, { recursive: false });
-                this.sendProgress('✅ Cartella installazione rimossa', 96);
+                // ✅ FIX: Verifica se la cartella è vuota prima di rimuoverla
+                const remainingItems = fs.readdirSync(this.installPath);
+                if (remainingItems.length === 0) {
+                  fs.rmdirSync(this.installPath, { recursive: false });
+                  this.sendProgress('✅ Cartella installazione rimossa (era vuota)', 96);
+                } else {
+                  this.sendProgress('ℹ️ Cartella non vuota, lasciata intatta per sicurezza', 96);
+                }
               }
             } catch (e) {
-              const installPathEsc = this.installPath.replace(/"/g, '""');
-              const psScript = `Remove-Item -Path "${installPathEsc}" -Recurse -Force -ErrorAction SilentlyContinue`;
-              exec(`powershell -NoProfile -Command "${psScript}"`, () => {
-                this.sendProgress('✅ Pulizia finale cartella con PowerShell', 97);
-              });
-              // E in ogni caso, programma la rimozione al riavvio
-              this.scheduleDeleteOnReboot(this.installPath);
+              // ✅ FIX: Non forzare la rimozione con PowerShell se ci sono altri file
+              this.sendProgress('ℹ️ Cartella non vuota o in uso, lasciata intatta', 97);
             }
 
             this.sendProgress('✅ File e cartelle rimossi', 98);
