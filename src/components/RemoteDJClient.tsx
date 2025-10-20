@@ -1947,13 +1947,11 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize, on
       )}
 
       {/* Footer */}
-          <div className="p-2 bg-gray-800 border-t border-gray-700">
-            <div className="text-xs text-gray-500 text-center">
-              💡 Pannello DJ Remoto - Dati salvati solo per questa sessione
-            </div>
-          </div>
-        </>
-      )}
+      <div className="p-2 bg-gray-800 border-t border-gray-700">
+        <div className="text-xs text-gray-500 text-center">
+          💡 Pannello DJ Remoto - Dati salvati solo per questa sessione
+        </div>
+      </div>
     </div>
   )
 }
