@@ -165,7 +165,7 @@ class InfernoConsoleInstaller {
       
       const regCommands = [
         `reg add "${regPath}" /v "DisplayName" /t REG_SZ /d "Inferno Console" /f`,
-        `reg add "${regPath}" /v "DisplayVersion" /t REG_SZ /d "1.4.137" /f`,
+        `reg add "${regPath}" /v "DisplayVersion" /t REG_SZ /d "1.4.138" /f`,
         `reg add "${regPath}" /v "Publisher" /t REG_SZ /d "Inferno Console Team" /f`,
         `reg add "${regPath}" /v "InstallLocation" /t REG_SZ /d "${this.installPath}" /f`,
         `reg add "${regPath}" /v "UninstallString" /t REG_SZ /d "${uninstallerPath}" /f`,

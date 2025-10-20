@@ -57,7 +57,7 @@ class AppInstaller {
       const configPath = path.join(installPath, 'installer-config.json');
       const config = {
         installedAt: new Date().toISOString(),
-        version: '1.4.137',
+        version: '1.4.138',
         installerVersion: '1.0.0',
         installPath: installPath,
         shortcuts: {
@@ -77,7 +77,7 @@ class AppInstaller {
   async createVersionFile(installPath) {
     try {
       const versionPath = path.join(installPath, 'version.txt');
-      const versionInfo = `Inferno Console v1.4.137
+      const versionInfo = `Inferno Console v1.4.138
 Installato il: ${new Date().toLocaleString('it-IT')}
 Directory: ${installPath}
 Installer: v1.0.0
@@ -197,7 +197,7 @@ pause
         installed: exists && hasConfig,
         mainExe,
         configFile,
-        version: exists ? '1.4.137' : null
+        version: exists ? '1.4.138' : null
       };
       
     } catch (error) {
