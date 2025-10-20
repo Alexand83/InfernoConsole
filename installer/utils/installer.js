@@ -160,16 +160,36 @@ if %ERRORLEVEL% EQU 0 (
     echo [AVVISO] Impossibile rimuovere dal registro (normale se non si hanno privilegi di amministratore)
 )
 
-REM Rimuovi directory di installazione
+REM Rimuovi SOLO i file specifici dell'applicazione
 echo [INFO] Rimozione file dell'applicazione...
 if exist "${installPath}" (
-    rmdir /s /q "${installPath}"
-    if %ERRORLEVEL% EQU 0 (
-        echo [OK] Directory di installazione rimossa
-    ) else (
-        echo [ERRORE] Impossibile rimuovere la directory. Alcuni file potrebbero essere in uso.
-        echo [INFO] Prova a chiudere l'applicazione e riprova.
+    REM ✅ FIX CRITICO: Verifica sicurezza del percorso
+    echo [INFO] Verifica sicurezza percorso...
+    if "${installPath}"=="%USERPROFILE%\\Desktop" (
+        echo [ERRORE] PERICOLO: Percorso non sicuro rilevato! Non posso cancellare il desktop.
+        echo [INFO] Disinstallazione interrotta per sicurezza.
+        pause
+        exit /b 1
     )
+    
+    REM ✅ FIX: Cancella SOLO i file specifici dell'app
+    echo [INFO] Rimozione file specifici dell'applicazione...
+    if exist "${installPath}\\Inferno Console.exe" del /f /q "${installPath}\\Inferno Console.exe" 2>nul
+    if exist "${installPath}\\Inferno-Console-win.exe" del /f /q "${installPath}\\Inferno-Console-win.exe" 2>nul
+    if exist "${installPath}\\Inferno-Console-temp.exe" del /f /q "${installPath}\\Inferno-Console-temp.exe" 2>nul
+    if exist "${installPath}\\uninstall.exe" del /f /q "${installPath}\\uninstall.exe" 2>nul
+    if exist "${installPath}\\Inferno-Console-Uninstaller.exe" del /f /q "${installPath}\\Inferno-Console-Uninstaller.exe" 2>nul
+    if exist "${installPath}\\installer-info.json" del /f /q "${installPath}\\installer-info.json" 2>nul
+    if exist "${installPath}\\latest.yml" del /f /q "${installPath}\\latest.yml" 2>nul
+    if exist "${installPath}\\package.json" del /f /q "${installPath}\\package.json" 2>nul
+    if exist "${installPath}\\resources" rmdir /s /q "${installPath}\\resources" 2>nul
+    if exist "${installPath}\\locales" rmdir /s /q "${installPath}\\locales" 2>nul
+    
+    REM ✅ SICUREZZA: Prova a rimuovere la cartella solo se è vuota
+    echo [INFO] Verifica se la cartella è vuota...
+    powershell -Command "try { $items = Get-ChildItem '${installPath}' -Force; if ($items.Count -eq 0) { Remove-Item '${installPath}' -Force; Write-Host '[OK] Cartella installazione rimossa (era vuota)' } else { Write-Host '[AVVISO] Cartella non vuota, lasciata intatta per sicurezza' } } catch { Write-Host '[AVVISO] Impossibile verificare/rimuovere la cartella' }"
+    
+    echo [OK] File dell'applicazione rimossi in sicurezza
 ) else (
     echo [AVVISO] Directory di installazione non trovata
 )

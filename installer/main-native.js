@@ -313,15 +313,36 @@ echo [INFO] Rimozione shortcut...
 powershell -Command "try { Remove-Item '%USERPROFILE%\\Desktop\\Inferno Console.lnk' -ErrorAction SilentlyContinue; Write-Host '[OK] Shortcut desktop rimosso' } catch { Write-Host '[AVVISO] Shortcut desktop non trovato' }" 2>nul
 powershell -Command "try { Remove-Item '%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Inferno Console.lnk' -ErrorAction SilentlyContinue; Write-Host '[OK] Shortcut Start Menu rimosso' } catch { Write-Host '[AVVISO] Shortcut Start Menu non trovato' }" 2>nul
 
-REM Rimuovi directory di installazione
+REM Rimuovi SOLO i file specifici dell'applicazione
 echo [INFO] Rimozione file dell'applicazione...
 if exist "${this.installPath}" (
-    rmdir /s /q "${this.installPath}"
-    if %ERRORLEVEL% EQU 0 (
-        echo [OK] Directory di installazione rimossa
-    ) else (
-        echo [ERRORE] Impossibile rimuovere la directory. Alcuni file potrebbero essere in uso.
+    REM ✅ FIX CRITICO: Verifica sicurezza del percorso
+    echo [INFO] Verifica sicurezza percorso...
+    if "${this.installPath}"=="%USERPROFILE%\\Desktop" (
+        echo [ERRORE] PERICOLO: Percorso non sicuro rilevato! Non posso cancellare il desktop.
+        echo [INFO] Disinstallazione interrotta per sicurezza.
+        pause
+        exit /b 1
     )
+    
+    REM ✅ FIX: Cancella SOLO i file specifici dell'app
+    echo [INFO] Rimozione file specifici dell'applicazione...
+    if exist "${this.installPath}\\Inferno Console.exe" del /f /q "${this.installPath}\\Inferno Console.exe" 2>nul
+    if exist "${this.installPath}\\Inferno-Console-win.exe" del /f /q "${this.installPath}\\Inferno-Console-win.exe" 2>nul
+    if exist "${this.installPath}\\Inferno-Console-temp.exe" del /f /q "${this.installPath}\\Inferno-Console-temp.exe" 2>nul
+    if exist "${this.installPath}\\uninstall.exe" del /f /q "${this.installPath}\\uninstall.exe" 2>nul
+    if exist "${this.installPath}\\Inferno-Console-Uninstaller.exe" del /f /q "${this.installPath}\\Inferno-Console-Uninstaller.exe" 2>nul
+    if exist "${this.installPath}\\installer-info.json" del /f /q "${this.installPath}\\installer-info.json" 2>nul
+    if exist "${this.installPath}\\latest.yml" del /f /q "${this.installPath}\\latest.yml" 2>nul
+    if exist "${this.installPath}\\package.json" del /f /q "${this.installPath}\\package.json" 2>nul
+    if exist "${this.installPath}\\resources" rmdir /s /q "${this.installPath}\\resources" 2>nul
+    if exist "${this.installPath}\\locales" rmdir /s /q "${this.installPath}\\locales" 2>nul
+    
+    REM ✅ SICUREZZA: Prova a rimuovere la cartella solo se è vuota
+    echo [INFO] Verifica se la cartella è vuota...
+    powershell -Command "try { $items = Get-ChildItem '${this.installPath}' -Force; if ($items.Count -eq 0) { Remove-Item '${this.installPath}' -Force; Write-Host '[OK] Cartella installazione rimossa (era vuota)' } else { Write-Host '[AVVISO] Cartella non vuota, lasciata intatta per sicurezza' } } catch { Write-Host '[AVVISO] Impossibile verificare/rimuovere la cartella' }"
+    
+    echo [OK] File dell'applicazione rimossi in sicurezza
 ) else (
     echo [AVVISO] Directory di installazione non trovata
 )
