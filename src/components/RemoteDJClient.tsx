@@ -1952,6 +1952,8 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize, on
           💡 Pannello DJ Remoto - Dati salvati solo per questa sessione
         </div>
       </div>
+      </>
+      )}
     </div>
   )
 }
