@@ -179,7 +179,7 @@ class NativeInstaller {
     // Crea file di configurazione
     const config = {
       installedAt: new Date().toISOString(),
-      version: '1.4.136',
+      version: '1.4.137',
       installerVersion: '1.0.0',
       installPath: this.installPath
     };
