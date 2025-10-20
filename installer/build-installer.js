@@ -722,7 +722,7 @@ pause\`;
     async createInstallerMarker() {
         const markerPath = path.join(this.installPath, 'installer-info.json');
         const markerData = {
-            version: resolvedVersion,
+            version: '${resolvedVersion}',
             installPath: this.installPath,
             installDate: new Date().toISOString(),
             installerType: 'custom'

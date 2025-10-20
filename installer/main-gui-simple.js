@@ -50,10 +50,12 @@ class InfernoConsoleInstallerGUI {
       menuBarVisible: true
     });
 
+    // Load UI (no version labels needed)
     this.mainWindow.loadFile(path.join(__dirname, 'gui', 'index.html'));
     
     this.mainWindow.once('ready-to-show', () => {
       this.mainWindow.show();
+      // No version push needed
       // Build a simple menu with DevTools toggle
       const template = [
         {
@@ -79,9 +81,28 @@ class InfernoConsoleInstallerGUI {
     // Expose resolved app version to renderer (HTML/JS UI)
     ipcMain.handle('get-version', () => {
       try {
-        return resolveVersion();
+        let v = undefined;
+        try { v = resolveVersion(); } catch (_) {}
+        if (!v || v === '0.0.0' || typeof v !== 'string') {
+          try { v = app.getVersion && app.getVersion(); } catch (_) {}
+        }
+        return v || '0.0.0';
       } catch (_) {
         return '0.0.0';
+      }
+    });
+
+    // Synchronous version (for very early UI binding)
+    ipcMain.on('get-version-sync', (event) => {
+      try {
+        let v = undefined;
+        try { v = resolveVersion(); } catch (_) {}
+        if (!v || v === '0.0.0' || typeof v !== 'string') {
+          try { v = app.getVersion && app.getVersion(); } catch (_) {}
+        }
+        event.returnValue = v || '0.0.0';
+      } catch (_) {
+        event.returnValue = '0.0.0';
       }
     });
     // Get install paths
