@@ -918,6 +918,78 @@ export class FileUploadManager {
       return null
     }
   }
+
+  // ✅ HEAVY: Import con analisi audio completa e waveform
+  async processFileWithWaveform(file: File): Promise<DatabaseTrack | null> {
+    try {
+      console.log(`🎚️ [HEAVY] Import con waveform: ${file.name} (${file.size} bytes)`) 
+      try { this.updateProgress(file, 0, 'processing') } catch {}
+
+      const metadata = this.extractMetadataFromFilename(file.name)
+
+      // Analisi completa: durata + waveform
+      const { duration, peaks } = await this.safeAnalyzeAudio(file)
+      const waveform = Array.isArray(peaks) ? peaks : []
+
+      const track: Omit<DatabaseTrack, 'id' | 'addedAt' | 'playCount' | 'rating'> = {
+        title: metadata.title,
+        artist: metadata.artist,
+        album: metadata.album,
+        genre: metadata.genre,
+        duration: duration,
+        bpm: metadata.bpm,
+        key: metadata.key,
+        energy: metadata.energy,
+        url: '',
+        blobId: undefined,
+        fileUrl: undefined,
+        waveform
+      }
+
+      const trackId = await safeDatabaseOperation(
+        () => localDatabase.addTrack(track),
+        `addTrack(heavy) for ${file.name}`
+      )
+
+      // Persist blob (Electron path se disponibile)
+      const isElectronEnv = !!((window as any).fileStore) || ((typeof navigator !== 'undefined' && (navigator.userAgent || '').includes('Electron')))
+      if (isElectronEnv && (window as any).fileStore?.saveAudio) {
+        try {
+          const buf = await file.arrayBuffer()
+          const saved = await (window as any).fileStore.saveAudio(trackId, file.name, buf)
+          if (saved?.ok && saved.path) {
+            await safeDatabaseOperation(
+              () => localDatabase.updateTrack(trackId, { blobId: trackId, url: `file://${saved.path}`, fileUrl: `file://${saved.path}` }),
+              `updateTrack file path (heavy) for ${file.name}`
+            )
+            try { await safeDatabaseOperation(() => putBlob(trackId, file), `putBlob(heavy) for ${file.name}`) } catch {}
+          } else {
+            throw new Error(saved?.error || 'saveAudio failed')
+          }
+        } catch (_) {
+          await safeDatabaseOperation(() => putBlob(trackId, file), `putBlob fallback (heavy) for ${file.name}`)
+          await safeDatabaseOperation(() => localDatabase.updateTrack(trackId, { blobId: trackId, url: `idb:${trackId}` }), `updateTrack idb fallback (heavy) for ${file.name}`)
+        }
+      } else {
+        await safeDatabaseOperation(() => putBlob(trackId, file), `putBlob(heavy) for ${file.name}`)
+        await safeDatabaseOperation(() => localDatabase.updateTrack(trackId, { blobId: trackId, url: `idb:${trackId}` }), `updateTrack idb (heavy) for ${file.name}`)
+      }
+
+      const savedTrack = await safeDatabaseOperation(
+        () => localDatabase.getTrack(trackId),
+        `getTrack(heavy) for ${file.name}`
+      )
+      if (savedTrack) {
+        try { this.updateProgress(file, 100, 'completed') } catch {}
+        return savedTrack
+      }
+      return null
+    } catch (error) {
+      console.error(`Error processing file (heavy) ${file.name}:`, error)
+      this.updateProgress(file, 0, 'error', error instanceof Error ? error.message : 'Unknown error')
+      return null
+    }
+  }
 }
 
 export default FileUploadManager

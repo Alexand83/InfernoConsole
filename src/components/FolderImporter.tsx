@@ -28,11 +28,11 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
   const [currentBatch, setCurrentBatch] = useState(0)
   const [totalBatches, setTotalBatches] = useState(0)
   const [importSettings, setImportSettings] = useState<ImportSettings>({
-    batchSize: 1, // ✅ ULTRA-LEGGERO: Solo 1 file alla volta per PC vecchissimi
-    delayBetweenBatches: 2000, // ✅ ULTRA-LEGGERO: 2 secondi di pausa tra file
-    skipWaveformGeneration: true, // ✅ ULTRA-LEGGERO: ZERO waveform generation
-    maxConcurrentFiles: 1, // ✅ ULTRA-LEGGERO: SEMPRE 1 file alla volta
-    preset: 'ultra-light' // ✅ DEFAULT: PC vecchissimi (4GB RAM)
+    batchSize: 1,
+    delayBetweenBatches: 500, // più reattivo
+    skipWaveformGeneration: false, // ✅ Abilita waveform
+    maxConcurrentFiles: 1,
+    preset: 'balanced'
   })
   const folderInputRef = useRef<HTMLInputElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -308,12 +308,11 @@ const FolderImporter: React.FC<FolderImporterProps> = ({ onImportComplete }) => 
             if (!uploadManagerRef.current) {
               throw new Error('FileUploadManager non inizializzato')
             }
-            const method = useUltraLight ? 'processFileUltraLight' : 'processFile'
+            const method = useUltraLight ? 'processFileUltraLight' : 'processFileWithWaveform'
             console.log(`⚡ [IMPORT] ${method} → ${file.name}`)
             const track = useUltraLight
               ? await uploadManagerRef.current.processFileUltraLight(file, true)
-              // @ts-expect-error: metodo processFile esiste nel manager standard
-              : await (uploadManagerRef.current as any).processFile(file)
+              : await uploadManagerRef.current.processFileWithWaveform(file)
             if (track) {
               console.log(`✅ [IMPORT] File completato: ${file.name}`)
               return track as DatabaseTrack
