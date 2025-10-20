@@ -84,8 +84,8 @@ class AppUpdater {
       isInstalling: false
     }
     
-    // Configura l'auto-updater
-    autoUpdater.checkForUpdatesAndNotify()
+    // ✅ FIX: Flag per evitare controlli multipli simultanei
+    this.isCheckingForUpdates = false
     
     // Eventi dell'auto-updater
     autoUpdater.on('checking-for-update', () => {
@@ -287,11 +287,21 @@ class AppUpdater {
       console.log('✅ Download completato, pronto per installazione tramite UI')
     })
 
-    // Controlla aggiornamenti all'avvio
-    this.checkForUpdates()
+    // ✅ FIX: Controlla aggiornamenti solo una volta all'avvio, non in loop
+    setTimeout(() => {
+      this.checkForUpdates()
+    }, 5000) // Aspetta 5 secondi dopo l'avvio
   }
 
   async checkForUpdates() {
+    // ✅ FIX: Evita controlli multipli simultanei
+    if (this.isCheckingForUpdates) {
+      console.log('⚠️ Controllo aggiornamenti già in corso, salto...')
+      return
+    }
+    
+    this.isCheckingForUpdates = true
+    
     try {
       console.log('🔍 Controllo aggiornamenti tramite API GitHub...')
       
@@ -351,6 +361,9 @@ class AppUpdater {
       
     } catch (error) {
       console.error('❌ Errore durante il controllo aggiornamenti:', error.message)
+    } finally {
+      // ✅ FIX: Reset del flag dopo il controllo
+      this.isCheckingForUpdates = false
     }
   }
 
