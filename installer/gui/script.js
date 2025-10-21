@@ -130,6 +130,24 @@ class NSISInstaller {
         return this.validateInstallPath(installPath);
     }
     
+    // ✅ FIX CRITICO: Forza sempre la sottocartella "InfernoConsole" (versione per installazione)
+    forceInfernoConsoleSubfolder(userPath) {
+        const path = require('path');
+        
+        console.log(`🔧 [FRONTEND-FORCE] Percorso utente: ${userPath}`);
+        
+        // Se l'utente ha già scelto una sottocartella corretta, usala
+        if (userPath.endsWith('InfernoConsole')) {
+            console.log(`🔧 [FRONTEND-FORCE] Già corretto: ${userPath}`);
+            return userPath;
+        }
+        
+        // Altrimenti, aggiungi sempre "InfernoConsole" alla fine
+        const forcedPath = path.join(userPath, 'InfernoConsole');
+        console.log(`🔧 [FRONTEND-FORCE] Forzato a: ${forcedPath}`);
+        return forcedPath;
+    }
+    
     // ✅ FIX CRITICO: Validazione percorso di installazione
     validateInstallPath(installPath) {
         const os = require('os');
@@ -593,7 +611,10 @@ class NSISInstaller {
                 throw new Error('Nessun percorso di installazione selezionato');
             }
             
-            this.installPath = selectedPath;
+            // ✅ FIX CRITICO: Forza sempre la sottocartella "InfernoConsole"
+            this.installPath = this.forceInfernoConsoleSubfolder(selectedPath);
+            console.log(`🔧 [FRONTEND] Percorso originale: ${selectedPath}`);
+            console.log(`🔧 [FRONTEND] Percorso forzato: ${this.installPath}`);
             this.addLog(`📁 Percorso di installazione: ${this.installPath}`);
             
             // Get checkbox state

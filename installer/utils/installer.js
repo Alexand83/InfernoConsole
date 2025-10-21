@@ -160,16 +160,89 @@ if %ERRORLEVEL% EQU 0 (
     echo [AVVISO] Impossibile rimuovere dal registro (normale se non si hanno privilegi di amministratore)
 )
 
-REM Rimuovi directory di installazione
+REM ✅ FIX CRITICO: Rimuovi SOLO i file specifici dell'app, NON l'intera cartella
 echo [INFO] Rimozione file dell'applicazione...
 if exist "${installPath}" (
-    rmdir /s /q "${installPath}"
-    if %ERRORLEVEL% EQU 0 (
-        echo [OK] Directory di installazione rimossa
-    ) else (
-        echo [ERRORE] Impossibile rimuovere la directory. Alcuni file potrebbero essere in uso.
-        echo [INFO] Prova a chiudere l'applicazione e riprova.
+    REM ✅ SICUREZZA: Verifica che non sia il desktop
+    if "${installPath}"=="%USERPROFILE%\\Desktop" (
+        echo [ERRORE] PERICOLO: Percorso non sicuro rilevato! Non posso cancellare il desktop.
+        echo [INFO] Disinstallazione interrotta per sicurezza.
+        pause
+        exit /b 1
     )
+    
+    REM ✅ FIX DEFINITIVO: Cancella SOLO i file specifici dell'app, NON l'intera cartella
+    echo [INFO] Rimozione file specifici dell'applicazione...
+    
+    REM Rimuovi solo i file .exe dell'app
+    if exist "${installPath}\\Inferno Console.exe" (
+        del /f /q "${installPath}\\Inferno Console.exe" 2>nul
+        echo [OK] Inferno Console.exe rimosso
+    )
+    if exist "${installPath}\\Inferno-Console-win.exe" (
+        del /f /q "${installPath}\\Inferno-Console-win.exe" 2>nul
+        echo [OK] Inferno-Console-win.exe rimosso
+    )
+    if exist "${installPath}\\Inferno-Console-temp.exe" (
+        del /f /q "${installPath}\\Inferno-Console-temp.exe" 2>nul
+        echo [OK] Inferno-Console-temp.exe rimosso
+    )
+    if exist "${installPath}\\InfernoConsole.exe" (
+        del /f /q "${installPath}\\InfernoConsole.exe" 2>nul
+        echo [OK] InfernoConsole.exe rimosso
+    )
+    
+    REM Rimuovi solo i file di supporto dell'app
+    if exist "${installPath}\\uninstall.exe" (
+        del /f /q "${installPath}\\uninstall.exe" 2>nul
+        echo [OK] uninstall.exe rimosso
+    )
+    if exist "${installPath}\\Inferno-Console-Uninstaller.exe" (
+        del /f /q "${installPath}\\Inferno-Console-Uninstaller.exe" 2>nul
+        echo [OK] Inferno-Console-Uninstaller.exe rimosso
+    )
+    if exist "${installPath}\\Uninstall-Inferno-Console.bat" (
+        del /f /q "${installPath}\\Uninstall-Inferno-Console.bat" 2>nul
+        echo [OK] Uninstall-Inferno-Console.bat rimosso
+    )
+    
+    REM Rimuovi solo i file di configurazione dell'app
+    if exist "${installPath}\\installer-info.json" (
+        del /f /q "${installPath}\\installer-info.json" 2>nul
+        echo [OK] installer-info.json rimosso
+    )
+    if exist "${installPath}\\latest.yml" (
+        del /f /q "${installPath}\\latest.yml" 2>nul
+        echo [OK] latest.yml rimosso
+    )
+    if exist "${installPath}\\package.json" (
+        del /f /q "${installPath}\\package.json" 2>nul
+        echo [OK] package.json rimosso
+    )
+    if exist "${installPath}\\README.md" (
+        del /f /q "${installPath}\\README.md" 2>nul
+        echo [OK] README.md rimosso
+    )
+    if exist "${installPath}\\release-info.json" (
+        del /f /q "${installPath}\\release-info.json" 2>nul
+        echo [OK] release-info.json rimosso
+    )
+    
+    REM Rimuovi solo le cartelle specifiche dell'app (se vuote)
+    if exist "${installPath}\\resources" (
+        rmdir /s /q "${installPath}\\resources" 2>nul
+        echo [OK] Cartella resources rimossa
+    )
+    if exist "${installPath}\\locales" (
+        rmdir /s /q "${installPath}\\locales" 2>nul
+        echo [OK] Cartella locales rimossa
+    )
+    
+    REM ✅ SICUREZZA: Prova a rimuovere la cartella solo se è vuota
+    echo [INFO] Verifica se la cartella è vuota...
+    powershell -Command "try { $items = Get-ChildItem '${installPath}' -Force; if ($items.Count -eq 0) { Remove-Item '${installPath}' -Force; Write-Host '[OK] Cartella installazione rimossa (era vuota)' } else { Write-Host '[AVVISO] Cartella non vuota, lasciata intatta per sicurezza' } } catch { Write-Host '[AVVISO] Impossibile verificare/rimuovere la cartella' }"
+    
+    echo [OK] File dell'applicazione rimossi in sicurezza
 ) else (
     echo [AVVISO] Directory di installazione non trovata
 )

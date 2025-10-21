@@ -154,22 +154,14 @@ class InfernoConsoleInstallerGUI {
     // Start installation
     ipcMain.handle('start-installation', async (event, data) => {
       // ✅ FIX DEFINITIVO: FORZA sempre la sottocartella "InfernoConsole"
+      const originalPath = data.installPath;
       this.installPath = this.forceInfernoConsoleSubfolder(data.installPath);
+      
+      console.log(`🔧 [INSTALLER] Percorso originale: ${originalPath}`);
+      console.log(`🔧 [INSTALLER] Percorso forzato: ${this.installPath}`);
+      
       return await this.performInstallation();
     });
-    
-    // ✅ FIX DEFINITIVO: Forza sempre la sottocartella "InfernoConsole"
-    forceInfernoConsoleSubfolder(userPath) {
-      const path = require('path');
-      
-      // Se l'utente ha già scelto una sottocartella corretta, usala
-      if (userPath.endsWith('InfernoConsole')) {
-        return userPath;
-      }
-      
-      // Altrimenti, aggiungi sempre "InfernoConsole" alla fine
-      return path.join(userPath, 'InfernoConsole');
-    }
 
     // Check admin privileges
     ipcMain.handle('check-admin', () => {
@@ -773,6 +765,24 @@ pause
     } catch (error) {
       // Marker creation failed, continue without it
     }
+  }
+
+  // ✅ FIX DEFINITIVO: Forza sempre la sottocartella "InfernoConsole"
+  forceInfernoConsoleSubfolder(userPath) {
+    const path = require('path');
+    
+    console.log(`🔧 [FORCE] Percorso utente: ${userPath}`);
+    
+    // Se l'utente ha già scelto una sottocartella corretta, usala
+    if (userPath.endsWith('InfernoConsole')) {
+      console.log(`🔧 [FORCE] Già corretto: ${userPath}`);
+      return userPath;
+    }
+    
+    // Altrimenti, aggiungi sempre "InfernoConsole" alla fine
+    const forcedPath = path.join(userPath, 'InfernoConsole');
+    console.log(`🔧 [FORCE] Forzato a: ${forcedPath}`);
+    return forcedPath;
   }
 }
 

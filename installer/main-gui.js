@@ -57,15 +57,21 @@ class InfernoConsoleInstallerGUI {
     // Get install paths
     ipcMain.handle('get-install-paths', () => {
       return {
-        desktop: path.join(os.homedir(), 'Desktop', 'Inferno Console'),
-        programs: 'C:\\Program Files\\Inferno Console',
-        documents: path.join(os.homedir(), 'Documents', 'Inferno Console')
+        desktop: path.join(os.homedir(), 'Desktop', 'InfernoConsole'),
+        programs: 'C:\\Program Files\\InfernoConsole',
+        documents: path.join(os.homedir(), 'Documents', 'InfernoConsole')
       };
     });
 
     // Start installation
     ipcMain.handle('start-installation', async (event, data) => {
-      this.installPath = data.installPath;
+      // ✅ FIX CRITICO: FORZA sempre la sottocartella "InfernoConsole"
+      const originalPath = data.installPath;
+      this.installPath = this.forceInfernoConsoleSubfolder(data.installPath);
+      
+      console.log(`🔧 [INSTALLER-PULITO] Percorso originale: ${originalPath}`);
+      console.log(`🔧 [INSTALLER-PULITO] Percorso forzato: ${this.installPath}`);
+      
       return await this.performInstallation();
     });
 
@@ -203,6 +209,24 @@ class InfernoConsoleInstallerGUI {
         error
       });
     }
+  }
+
+  // ✅ FIX CRITICO: Forza sempre la sottocartella "InfernoConsole"
+  forceInfernoConsoleSubfolder(userPath) {
+    const path = require('path');
+    
+    console.log(`🔧 [FORCE-PULITO] Percorso utente: ${userPath}`);
+    
+    // Se l'utente ha già scelto una sottocartella corretta, usala
+    if (userPath.endsWith('InfernoConsole')) {
+      console.log(`🔧 [FORCE-PULITO] Già corretto: ${userPath}`);
+      return userPath;
+    }
+    
+    // Altrimenti, aggiungi sempre "InfernoConsole" alla fine
+    const forcedPath = path.join(userPath, 'InfernoConsole');
+    console.log(`🔧 [FORCE-PULITO] Forzato a: ${forcedPath}`);
+    return forcedPath;
   }
 }
 
