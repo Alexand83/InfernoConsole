@@ -42,6 +42,7 @@ class AppUpdater {
     
     // Salva i path per uso futuro
     this.customInstallDir = customInstallDir
+    this.customUpdateDir = customUpdateDir
     
     // Crea la directory se non esiste
     const fs = require('fs')
@@ -611,53 +612,63 @@ updaterCacheDirName: inferno-console-updater`
   // ✅ NUOVO: Metodo per scaricare l'installer
   async downloadInstaller(installerInfo) {
     try {
-      const https = require('https')
+      const axios = require('axios')
       const fs = require('fs')
       const path = require('path')
       
       const downloadPath = path.join(this.customUpdateDir, installerInfo.name)
       
+      console.log(`📥 [DOWNLOAD] Scaricando: ${installerInfo.browser_download_url}`)
+      console.log(`📁 [DOWNLOAD] Salvataggio in: ${downloadPath}`)
+      
+      const response = await axios({
+        method: 'GET',
+        url: installerInfo.browser_download_url,
+        responseType: 'stream',
+        headers: {
+          'User-Agent': 'DJ-Console-Updater/1.0',
+          'Accept': '*/*',
+          'Connection': 'keep-alive'
+        },
+        timeout: 300000 // 5 minuti
+      })
+      
       return new Promise((resolve, reject) => {
         const file = fs.createWriteStream(downloadPath)
+        const total = installerInfo.size
+        let downloaded = 0
         
-        https.get(installerInfo.browser_download_url, {
-          headers: {
-            'User-Agent': 'DJ-Console-Updater'
+        response.data.on('data', (chunk) => {
+          downloaded += chunk.length
+          const percent = Math.round((downloaded / total) * 100)
+          
+          // Invia progresso al renderer
+          const mainWindow = require('./main').getMainWindow()
+          if (mainWindow) {
+            mainWindow.webContents.send('download-progress', {
+              percent: percent,
+              bytesPerSecond: 0,
+              transferred: downloaded,
+              total: total
+            })
           }
-        }, (res) => {
-          let downloaded = 0
-          const total = installerInfo.size
           
-          res.on('data', (chunk) => {
-            downloaded += chunk.length
-            const percent = Math.round((downloaded / total) * 100)
-            
-            // Invia progresso al renderer
-            const mainWindow = require('./main').getMainWindow()
-            if (mainWindow) {
-              mainWindow.webContents.send('download-progress', {
-                percent: percent,
-                bytesPerSecond: 0, // Non disponibile con https.get
-                transferred: downloaded,
-                total: total
-              })
-            }
-            
-            file.write(chunk)
-          })
-          
-          res.on('end', () => {
-            file.end()
-            console.log('✅ Download installer completato:', downloadPath)
-            resolve(downloadPath)
-          })
-          
-          res.on('error', (err) => {
-            file.close()
-            fs.unlink(downloadPath, () => {}) // Rimuovi file parziale
-            reject(err)
-          })
-        }).on('error', (err) => {
+          file.write(chunk)
+        })
+        
+        response.data.on('end', () => {
+          file.end()
+          console.log('✅ Download installer completato:', downloadPath)
+          resolve(downloadPath)
+        })
+        
+        response.data.on('error', (err) => {
+          file.close()
+          fs.unlink(downloadPath, () => {}) // Rimuovi file parziale
+          reject(err)
+        })
+        
+        file.on('error', (err) => {
           file.close()
           fs.unlink(downloadPath, () => {}) // Rimuovi file parziale
           reject(err)

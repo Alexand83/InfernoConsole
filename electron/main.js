@@ -997,17 +997,45 @@ ipcMain.handle('db-save', async (_evt, payload) => {
 // IPC handlers per aggiornamenti
 ipcMain.handle('download-update', async () => {
   try {
-    const { autoUpdater } = require('electron-updater')
+    // ✅ FIX: Usa il nostro sistema personalizzato invece di electron-updater
+    if (!global.appUpdater) {
+      const AppUpdater = require('./updater')
+      global.appUpdater = new AppUpdater()
+    }
+    const updater = global.appUpdater
     
-    // Prima controlla se ci sono aggiornamenti
-    const updateCheckResult = await autoUpdater.checkForUpdates()
-    if (!updateCheckResult || !updateCheckResult.updateInfo) {
+    // Controlla se ci sono aggiornamenti usando il nostro sistema
+    const release = await updater.checkGitHubFiles()
+    if (!release || !release.assets) {
       throw new Error('Nessun aggiornamento disponibile')
     }
     
-    // Poi scarica l'aggiornamento
-    await autoUpdater.downloadUpdate()
-    return { success: true }
+    // Trova l'installer
+    const installer = release.assets.find(asset => 
+      asset.name === 'Inferno-Console-Installer.exe'
+    )
+    
+    if (!installer) {
+      throw new Error('Installer non trovato')
+    }
+    
+    console.log('🔍 [DEBUG] Installer object:', JSON.stringify(installer, null, 2))
+    
+    // Scarica l'installer usando il nostro sistema
+    const downloadPath = await updater.downloadInstaller(installer)
+    
+    // ✅ FIX: Invia evento download-complete al renderer
+    const { BrowserWindow } = require('electron')
+    const mainWindow = BrowserWindow.getAllWindows()[0]
+    if (mainWindow) {
+      mainWindow.webContents.send('download-complete')
+    }
+    
+    return { 
+      success: true, 
+      path: downloadPath,
+      message: 'Installer scaricato con successo!'
+    }
   } catch (error) {
     console.error('Errore nel download aggiornamento:', error)
     throw error
@@ -1016,18 +1044,36 @@ ipcMain.handle('download-update', async () => {
 
 ipcMain.handle('install-update', async () => {
   try {
-    const { autoUpdater } = require('electron-updater')
+    const { spawn } = require('child_process')
+    const path = require('path')
+    const os = require('os')
     
-    // ✅ FIX: Parametri corretti per macOS e Windows
-    if (process.platform === 'darwin') {
-      // macOS: force=true, isSilent=false per mostrare il progresso
-      autoUpdater.quitAndInstall(true, false)
-    } else {
-      // Windows: force=true, isSilent=true per installazione silenziosa
-      autoUpdater.quitAndInstall(true, true)
+    // ✅ FIX: Usa il nostro sistema personalizzato invece di electron-updater
+    if (!global.appUpdater) {
+      const AppUpdater = require('./updater')
+      global.appUpdater = new AppUpdater()
     }
+    const updater = global.appUpdater
     
-    return { success: true }
+    // Trova l'installer scaricato
+    const installerPath = path.join(updater.customUpdateDir, 'Inferno-Console-Installer.exe')
+    
+    console.log(`🚀 [INSTALL] Esecuzione installer: ${installerPath}`)
+    
+    // Esegui l'installer
+    const installer = spawn(installerPath, [], {
+      detached: true,
+      stdio: 'ignore'
+    })
+    
+    installer.unref()
+    
+    // Chiudi l'app dopo 2 secondi per dare tempo all'installer di avviarsi
+    setTimeout(() => {
+      app.quit()
+    }, 2000)
+    
+    return { success: true, message: 'Installer avviato, l\'app si chiuderà tra 2 secondi' }
   } catch (error) {
     console.error('Errore nell\'installazione aggiornamento:', error)
     throw error
