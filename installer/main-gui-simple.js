@@ -108,10 +108,10 @@ class InfernoConsoleInstallerGUI {
     // Get install paths
     ipcMain.handle('get-install-paths', () => {
       return {
-        documents: path.join(os.homedir(), 'Documents', 'Inferno Console'),
-        desktop: path.join(os.homedir(), 'Desktop', 'Inferno Console'), // ✅ SICURO: Sottocartella specifica
-        localappdata: path.join(os.homedir(), 'AppData', 'Local', 'Inferno Console'),
-        programs: 'C:\\Program Files\\Inferno Console'
+        documents: path.join(os.homedir(), 'Documents', 'InfernoConsole'),
+        desktop: path.join(os.homedir(), 'Desktop', 'InfernoConsole'), // ✅ SICURO: Sottocartella specifica
+        localappdata: path.join(os.homedir(), 'AppData', 'Local', 'InfernoConsole'),
+        programs: 'C:\\Program Files\\InfernoConsole'
       };
     });
 
@@ -133,9 +133,9 @@ class InfernoConsoleInstallerGUI {
 
         // 2) Probe common user-writable locations used by our installer
         const probePaths = [
-          path.join(require('os').homedir(), 'Documents', 'Inferno Console'),
-          path.join(require('os').homedir(), 'Desktop', 'Inferno Console'),
-          path.join(require('os').homedir(), 'AppData', 'Local', 'Inferno Console')
+          path.join(require('os').homedir(), 'Documents', 'InfernoConsole'),
+          path.join(require('os').homedir(), 'Desktop', 'InfernoConsole'),
+          path.join(require('os').homedir(), 'AppData', 'Local', 'InfernoConsole')
         ];
         for (const p of probePaths) {
           try {
@@ -153,9 +153,23 @@ class InfernoConsoleInstallerGUI {
 
     // Start installation
     ipcMain.handle('start-installation', async (event, data) => {
-      this.installPath = data.installPath;
+      // ✅ FIX DEFINITIVO: FORZA sempre la sottocartella "InfernoConsole"
+      this.installPath = this.forceInfernoConsoleSubfolder(data.installPath);
       return await this.performInstallation();
     });
+    
+    // ✅ FIX DEFINITIVO: Forza sempre la sottocartella "InfernoConsole"
+    forceInfernoConsoleSubfolder(userPath) {
+      const path = require('path');
+      
+      // Se l'utente ha già scelto una sottocartella corretta, usala
+      if (userPath.endsWith('InfernoConsole')) {
+        return userPath;
+      }
+      
+      // Altrimenti, aggiungi sempre "InfernoConsole" alla fine
+      return path.join(userPath, 'InfernoConsole');
+    }
 
     // Check admin privileges
     ipcMain.handle('check-admin', () => {
@@ -231,9 +245,9 @@ class InfernoConsoleInstallerGUI {
         throw new Error('PERICOLO: Il percorso di installazione non può essere il desktop stesso! Usa una sottocartella come "Desktop\\Inferno Console"');
       }
       
-      // ✅ FIX CRITICO: Verifica che il percorso finisca con "Inferno Console"
-      if (!this.installPath.endsWith('Inferno Console')) {
-        throw new Error('PERICOLO: Il percorso di installazione deve finire con "Inferno Console" per sicurezza!');
+      // ✅ FIX CRITICO: Verifica che il percorso finisca con "InfernoConsole"
+      if (!this.installPath.endsWith('InfernoConsole')) {
+        throw new Error('PERICOLO: Il percorso di installazione deve finire con "InfernoConsole" per sicurezza!');
       }
       
       // ✅ FIX CRITICO: Verifica che non sia una cartella di sistema

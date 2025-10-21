@@ -91,7 +91,7 @@ class NSISInstaller {
             if (pathInput) {
                 pathInput.value = this.installPath;
                 // ✅ FIX: Aggiungi validazione in tempo reale
-                pathInput.addEventListener('input', (e) => this.validateInstallPath(e.target.value));
+                pathInput.addEventListener('input', (e) => this.validateAndForceInfernoConsole(e.target.value));
             }
             
             // Create dropdown for path selection
@@ -100,13 +100,34 @@ class NSISInstaller {
         } catch (error) {
             console.error('Error loading install options:', error);
             // Fallback to Documents
-            this.installPath = path.join(require('os').homedir(), 'Documents', 'Inferno Console');
+            this.installPath = path.join(require('os').homedir(), 'Documents', 'InfernoConsole');
             const pathInput = document.getElementById('installPath');
             if (pathInput) {
                 pathInput.value = this.installPath;
-                pathInput.addEventListener('input', (e) => this.validateInstallPath(e.target.value));
+                pathInput.addEventListener('input', (e) => this.validateAndForceInfernoConsole(e.target.value));
             }
         }
+    }
+    
+    // ✅ FIX DEFINITIVO: Forza sempre "InfernoConsole" e valida
+    validateAndForceInfernoConsole(installPath) {
+        const path = require('os');
+        const pathModule = require('path');
+        
+        // Se non finisce con "InfernoConsole", aggiungilo automaticamente
+        if (!installPath.endsWith('InfernoConsole')) {
+            const forcedPath = pathModule.join(installPath, 'InfernoConsole');
+            const pathInput = document.getElementById('installPath');
+            if (pathInput) {
+                pathInput.value = forcedPath;
+                this.installPath = forcedPath;
+            }
+            this.hidePathError();
+            return true;
+        }
+        
+        // Altrimenti valida normalmente
+        return this.validateInstallPath(installPath);
     }
     
     // ✅ FIX CRITICO: Validazione percorso di installazione
@@ -114,9 +135,9 @@ class NSISInstaller {
         const os = require('os');
         const path = require('path');
         
-        // Verifica che finisca con "Inferno Console"
-        if (!installPath.endsWith('Inferno Console')) {
-            this.showPathError('PERICOLO: Il percorso deve finire con "Inferno Console" per sicurezza!');
+        // Verifica che finisca con "InfernoConsole"
+        if (!installPath.endsWith('InfernoConsole')) {
+            this.showPathError('PERICOLO: Il percorso deve finire con "InfernoConsole" per sicurezza!');
             return false;
         }
         
@@ -216,8 +237,8 @@ class NSISInstaller {
                 const pathInput = document.getElementById('installPath');
                 if (pathInput) {
                     pathInput.value = this.installPath;
-                    // ✅ FIX: Valida il percorso selezionato
-                    this.validateInstallPath(this.installPath);
+                    // ✅ FIX: Forza "InfernoConsole" e valida il percorso selezionato
+                    this.validateAndForceInfernoConsole(this.installPath);
                 }
                 this.checkAdminRequired();
                 this.calculateFreeSpace();
