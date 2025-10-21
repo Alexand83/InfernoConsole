@@ -253,7 +253,11 @@ app.whenReady().then(() => {
   // ✅ OPTIMIZATION: Inizializza l'auto-updater in background per non bloccare l'avvio
   setTimeout(() => {
     try {
-      const updater = new AppUpdater()
+      // ✅ FIX CRITICO: Usa singleton per evitare loop infiniti
+      if (!global.appUpdater) {
+        global.appUpdater = new AppUpdater()
+      }
+      const updater = global.appUpdater
       
       // ✅ RIMOSSO: Creazione shortcut automatica all'avvio
       // Gli shortcut vengono ora gestiti solo dall'installer NSIS
@@ -1143,8 +1147,12 @@ ipcMain.handle('force-check-updates', async () => {
 // ✅ FIX: Handler per forzare controllo aggiornamenti con reset completo
 ipcMain.handle('force-update-check', async () => {
   try {
-    const AppUpdater = require('./updater')
-    const updater = new AppUpdater()
+    // ✅ FIX CRITICO: Usa singleton per evitare loop infiniti
+    if (!global.appUpdater) {
+      const AppUpdater = require('./updater')
+      global.appUpdater = new AppUpdater()
+    }
+    const updater = global.appUpdater
     
     // ✅ FIX: Usa il metodo sicuro per il controllo forzato
     updater.forceUpdateCheck()
@@ -1159,8 +1167,12 @@ ipcMain.handle('force-update-check', async () => {
 // ✅ NUOVO: Handler per verificare file GitHub direttamente
 ipcMain.handle('check-github-files', async () => {
   try {
-    const AppUpdater = require('./updater')
-    const updater = new AppUpdater()
+    // ✅ FIX CRITICO: Usa singleton per evitare loop infiniti
+    if (!global.appUpdater) {
+      const AppUpdater = require('./updater')
+      global.appUpdater = new AppUpdater()
+    }
+    const updater = global.appUpdater
     
     // Verifica i file disponibili su GitHub
     const release = await updater.checkGitHubFiles()
@@ -1176,8 +1188,12 @@ ipcMain.handle('check-github-files', async () => {
 ipcMain.handle('download-installer', async (event, installerInfo) => {
   try {
     console.log('📥 [MAIN] Download installer:', installerInfo.name)
-    const AppUpdater = require('./updater')
-    const updater = new AppUpdater()
+    // ✅ FIX CRITICO: Usa singleton per evitare loop infiniti
+    if (!global.appUpdater) {
+      const AppUpdater = require('./updater')
+      global.appUpdater = new AppUpdater()
+    }
+    const updater = global.appUpdater
     const downloadPath = await updater.downloadInstaller(installerInfo)
     return { success: true, path: downloadPath }
   } catch (error) {
