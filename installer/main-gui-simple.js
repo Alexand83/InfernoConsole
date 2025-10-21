@@ -109,7 +109,7 @@ class InfernoConsoleInstallerGUI {
     ipcMain.handle('get-install-paths', () => {
       return {
         documents: path.join(os.homedir(), 'Documents', 'Inferno Console'),
-        desktop: path.join(os.homedir(), 'Desktop', 'Inferno Console'),
+        desktop: path.join(os.homedir(), 'Desktop', 'Inferno Console'), // ✅ SICURO: Sottocartella specifica
         localappdata: path.join(os.homedir(), 'AppData', 'Local', 'Inferno Console'),
         programs: 'C:\\Program Files\\Inferno Console'
       };
@@ -226,9 +226,31 @@ class InfernoConsoleInstallerGUI {
       // 1. Create installation directory
       this.sendProgress('Creazione directory di installazione...', 10);
       
-      // ✅ FIX CRITICO: Verifica sicurezza del percorso
+      // ✅ FIX CRITICO: Verifica sicurezza del percorso - IMPEDISCE installazione sul desktop
       if (this.installPath === path.join(os.homedir(), 'Desktop')) {
         throw new Error('PERICOLO: Il percorso di installazione non può essere il desktop stesso! Usa una sottocartella come "Desktop\\Inferno Console"');
+      }
+      
+      // ✅ FIX CRITICO: Verifica che il percorso finisca con "Inferno Console"
+      if (!this.installPath.endsWith('Inferno Console')) {
+        throw new Error('PERICOLO: Il percorso di installazione deve finire con "Inferno Console" per sicurezza!');
+      }
+      
+      // ✅ FIX CRITICO: Verifica che non sia una cartella di sistema
+      const dangerousPaths = [
+        path.join(os.homedir(), 'Desktop'),
+        path.join(os.homedir(), 'Documents'),
+        path.join(os.homedir(), 'Downloads'),
+        'C:\\',
+        'C:\\Windows',
+        'C:\\Program Files',
+        'C:\\Program Files (x86)'
+      ];
+      
+      for (const dangerousPath of dangerousPaths) {
+        if (this.installPath === dangerousPath) {
+          throw new Error(`PERICOLO: Non puoi installare direttamente in "${dangerousPath}"! Usa una sottocartella specifica.`);
+        }
       }
       
       await this.ensureDir(this.installPath);

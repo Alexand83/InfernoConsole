@@ -90,6 +90,8 @@ class NSISInstaller {
             const pathInput = document.getElementById('installPath');
             if (pathInput) {
                 pathInput.value = this.installPath;
+                // ✅ FIX: Aggiungi validazione in tempo reale
+                pathInput.addEventListener('input', (e) => this.validateInstallPath(e.target.value));
             }
             
             // Create dropdown for path selection
@@ -102,7 +104,84 @@ class NSISInstaller {
             const pathInput = document.getElementById('installPath');
             if (pathInput) {
                 pathInput.value = this.installPath;
+                pathInput.addEventListener('input', (e) => this.validateInstallPath(e.target.value));
             }
+        }
+    }
+    
+    // ✅ FIX CRITICO: Validazione percorso di installazione
+    validateInstallPath(installPath) {
+        const os = require('os');
+        const path = require('path');
+        
+        // Verifica che finisca con "Inferno Console"
+        if (!installPath.endsWith('Inferno Console')) {
+            this.showPathError('PERICOLO: Il percorso deve finire con "Inferno Console" per sicurezza!');
+            return false;
+        }
+        
+        // Verifica percorsi pericolosi
+        const dangerousPaths = [
+            path.join(os.homedir(), 'Desktop'),
+            path.join(os.homedir(), 'Documents'),
+            path.join(os.homedir(), 'Downloads'),
+            'C:\\',
+            'C:\\Windows',
+            'C:\\Program Files',
+            'C:\\Program Files (x86)'
+        ];
+        
+        for (const dangerousPath of dangerousPaths) {
+            if (installPath === dangerousPath) {
+                this.showPathError(`PERICOLO: Non puoi installare direttamente in "${dangerousPath}"! Usa una sottocartella specifica.`);
+                return false;
+            }
+        }
+        
+        this.hidePathError();
+        return true;
+    }
+    
+    showPathError(message) {
+        let errorDiv = document.getElementById('pathError');
+        if (!errorDiv) {
+            errorDiv = document.createElement('div');
+            errorDiv.id = 'pathError';
+            errorDiv.style.color = 'red';
+            errorDiv.style.fontWeight = 'bold';
+            errorDiv.style.marginTop = '10px';
+            errorDiv.style.padding = '10px';
+            errorDiv.style.border = '1px solid red';
+            errorDiv.style.borderRadius = '5px';
+            errorDiv.style.backgroundColor = '#ffe6e6';
+            
+            const pathInput = document.getElementById('installPath');
+            if (pathInput && pathInput.parentNode) {
+                pathInput.parentNode.appendChild(errorDiv);
+            }
+        }
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+        
+        // Disabilita il pulsante di installazione
+        const installBtn = document.getElementById('installBtn');
+        if (installBtn) {
+            installBtn.disabled = true;
+            installBtn.textContent = 'Percorso non sicuro!';
+        }
+    }
+    
+    hidePathError() {
+        const errorDiv = document.getElementById('pathError');
+        if (errorDiv) {
+            errorDiv.style.display = 'none';
+        }
+        
+        // Riabilita il pulsante di installazione
+        const installBtn = document.getElementById('installBtn');
+        if (installBtn) {
+            installBtn.disabled = false;
+            installBtn.textContent = 'Installa';
         }
     }
 
@@ -137,6 +216,8 @@ class NSISInstaller {
                 const pathInput = document.getElementById('installPath');
                 if (pathInput) {
                     pathInput.value = this.installPath;
+                    // ✅ FIX: Valida il percorso selezionato
+                    this.validateInstallPath(this.installPath);
                 }
                 this.checkAdminRequired();
                 this.calculateFreeSpace();
