@@ -18,6 +18,9 @@
   
   ; Aspetta un momento per assicurarsi che il processo sia terminato
   Sleep 1000
+  
+  ; ✅ Crea shortcut per l'uninstaller nel menu Start
+  CreateShortcut "$SMPROGRAMS\Inferno Console\Uninstall Inferno Console.lnk" "$INSTDIR\Uninstall Inferno Console.exe"
 !macroend
 
 !macro customUnInstall
