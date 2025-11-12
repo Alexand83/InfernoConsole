@@ -824,7 +824,8 @@ updaterCacheDirName: inferno-console-updater`
   }
 
   // ✅ NUOVO: Metodo per verificare manualmente i file disponibili su GitHub
-  async checkGitHubFiles() {
+  async checkGitHubFiles(retryCount = 0) {
+    const maxRetries = 3
     try {
       const https = require('https')
       const http = require('http')
@@ -835,27 +836,50 @@ updaterCacheDirName: inferno-console-updater`
         ? 'http://localhost:3456/repos/Alexand83/InfernoConsole/releases/latest'
         : 'https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest'
       
+      const { app } = require('electron')
+      const isPackaged = app.isPackaged
+      const isDev = process.env.NODE_ENV === 'development'
+      
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
       console.log('🔍 [UPDATE] ========== CHECK GITHUB FILES ==========')
       console.log(`🔍 [UPDATE] Modalità: ${isTestMode ? 'TEST LOCALE' : 'PRODUZIONE'}`)
       console.log(`🔍 [UPDATE] URL: ${url}`)
       console.log(`🔍 [UPDATE] UPDATE_TEST_MODE env: ${process.env.UPDATE_TEST_MODE || 'non impostato'}`)
       console.log(`🔍 [UPDATE] Node env: ${process.env.NODE_ENV || 'non impostato'}`)
+      console.log(`🔍 [UPDATE] App packaged: ${isPackaged}`)
+      console.log(`🔍 [UPDATE] Is Dev Mode: ${isDev}`)
+      console.log(`🔍 [UPDATE] Exec Path: ${process.execPath}`)
+      console.log(`🔍 [UPDATE] App Path: ${app.getAppPath()}`)
+      console.log(`🔍 [UPDATE] User Data: ${app.getPath('userData')}`)
       console.log(`🔍 [UPDATE] Protocol: ${isTestMode ? 'http' : 'https'}`)
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
       
       const protocol = isTestMode ? http : https
       
+      // ✅ FIX: Verifica che i moduli siano disponibili
+      if (!protocol || typeof protocol.get !== 'function') {
+        const errorMsg = `Modulo ${isTestMode ? 'http' : 'https'} non disponibile o non valido`
+        console.error(`❌ [GitHub API] ${errorMsg}`)
+        this.sendNotification('error', 'Module Error', errorMsg)
+        throw new Error(errorMsg)
+      }
+      
       return new Promise((resolve, reject) => {
-        const request = protocol.get(url, {
-          headers: {
-            'User-Agent': 'DJ-Console-Updater/1.4.139',
-            'Accept': 'application/vnd.github.v3+json',
-            'Connection': 'keep-alive',
-            'Cache-Control': 'no-cache'
-          },
-          timeout: 30000 // 30 secondi timeout
-        }, (res) => {
+        try {
+          console.log('📡 [GitHub API] Creazione richiesta HTTP...')
+          console.log(`📡 [GitHub API] Protocol module: ${protocol === https ? 'https' : 'http'}`)
+          console.log(`📡 [GitHub API] Protocol.get type: ${typeof protocol.get}`)
+          console.log(`📡 [GitHub API] URL completo: ${url}`)
+          
+          const request = protocol.get(url, {
+            headers: {
+              'User-Agent': 'DJ-Console-Updater/1.4.139',
+              'Accept': 'application/vnd.github.v3+json',
+              'Connection': 'keep-alive',
+              'Cache-Control': 'no-cache'
+            },
+            timeout: 30000 // 30 secondi timeout
+          }, (res) => {
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
           console.log('📡 [GitHub API] ========== RISPOSTA RICEVUTA ==========')
           console.log('📡 [GitHub API] Status Code:', res.statusCode)
@@ -1051,9 +1075,32 @@ updaterCacheDirName: inferno-console-updater`
             reject(new Error(`Errore connessione: ${err.message}`))
           }
         })
+        } catch (requestError) {
+          console.error('❌ [GitHub API] Errore creazione richiesta:', requestError)
+          this.sendNotification('error', 'GitHub API Request Error', `Errore creazione richiesta: ${requestError.message}`)
+          reject(new Error(`Errore creazione richiesta: ${requestError.message}`))
+        }
       })
     } catch (error) {
       console.error('❌ [GitHub API] Errore generale:', error.message)
+      console.error('❌ [GitHub API] Stack:', error.stack)
+      
+      // ✅ FIX: Retry automatico in caso di errore (solo per errori recuperabili)
+      const isRetryableError = error.message.includes('timeout') || 
+                               error.message.includes('ECONNRESET') || 
+                               error.message.includes('socket hang up') ||
+                               error.message.includes('ENOTFOUND')
+      
+      if (isRetryableError && retryCount < maxRetries) {
+        const delay = (retryCount + 1) * 2000 // 2s, 4s, 6s
+        console.log(`🔄 [GitHub API] Retry ${retryCount + 1}/${maxRetries} dopo ${delay}ms...`)
+        this.sendNotification('warning', 'GitHub API Retry', `Tentativo ${retryCount + 1}/${maxRetries} dopo ${delay}ms`)
+        
+        await new Promise(resolve => setTimeout(resolve, delay))
+        return this.checkGitHubFiles(retryCount + 1)
+      }
+      
+      this.sendNotification('error', 'GitHub API General Error', `Errore generale: ${error.message}`)
       throw error
     }
   }

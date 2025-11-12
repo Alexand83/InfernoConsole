@@ -332,16 +332,41 @@ const Settings = () => {
       await handleCheckUpdates()
       await downloadUpdate()
       alert('Download completato! Clicca "Installa e Riavvia" per applicare l\'aggiornamento.')
-    } catch (error) {
+    } catch (error: any) {
       console.error('Errore nel download aggiornamento:', error)
-      const errorMessage = error.message || 'Errore sconosciuto'
       
-      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+      // ✅ FIX: Estrai messaggio errore completo (anche da errori annidati)
+      let errorMessage = 'Errore sconosciuto'
+      if (error?.message) {
+        errorMessage = error.message
+        // Se c'è un errore annidato, aggiungilo
+        if (error?.cause?.message) {
+          errorMessage += `\n\nDettaglio: ${error.cause.message}`
+        }
+        // Se c'è originalError, aggiungilo
+        if (error?.originalError) {
+          errorMessage += `\n\nErrore originale: ${error.originalError}`
+        }
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      }
+      
+      console.error('Messaggio errore completo:', errorMessage)
+      
+      if (errorMessage.includes('404') || errorMessage.includes('non trovata') || errorMessage.includes('not found')) {
         alert('⚠️ Release non ancora disponibile!\n\nLa nuova versione è stata rilevata ma i file non sono ancora pronti per il download.\n\nRiprova tra qualche minuto quando la build sarà completata.')
       } else if (errorMessage.includes('Please check update first')) {
         alert('⚠️ Controllo aggiornamenti richiesto!\n\nPrima di scaricare, devi controllare se ci sono aggiornamenti disponibili.\n\nClicca "Controlla aggiornamenti" e poi riprova.')
+      } else if (errorMessage.includes('403') || errorMessage.includes('Accesso negato')) {
+        alert('⚠️ Accesso negato a GitHub!\n\nPotrebbe essere un problema di rate limit o autenticazione.\n\nRiprova più tardi.')
+      } else if (errorMessage.includes('429') || errorMessage.includes('Troppe richieste')) {
+        alert('⚠️ Troppe richieste a GitHub!\n\nRate limit raggiunto. Riprova tra qualche minuto.')
+      } else if (errorMessage.includes('parsing') || errorMessage.includes('JSON')) {
+        alert('⚠️ Errore nella risposta di GitHub!\n\nLa release potrebbe non essere ancora pubblicata.\n\nRiprova tra qualche minuto.')
+      } else if (errorMessage.includes('Timeout') || errorMessage.includes('timeout')) {
+        alert('⚠️ Timeout connessione!\n\nVerifica la connessione internet e riprova.')
       } else {
-        alert(`Errore nel download dell'aggiornamento: ${errorMessage}\n\nRiprova più tardi.`)
+        alert(`❌ Errore nel download dell'aggiornamento:\n\n${errorMessage}\n\nControlla il pannello DEBUG (tab "app") per maggiori dettagli.`)
       }
     } finally {
       setIsDownloading(false)

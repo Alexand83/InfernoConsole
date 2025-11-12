@@ -1103,24 +1103,29 @@ ipcMain.handle('download-update', async () => {
     
     // ✅ FIX: Messaggi errore più chiari per l'utente
     let userMessage = 'Errore durante il download dell\'aggiornamento'
+    const originalMessage = error.message || String(error)
     
-    if (error.message.includes('404') || error.message.includes('non trovata')) {
+    if (originalMessage.includes('404') || originalMessage.includes('non trovata')) {
       userMessage = 'Aggiornamento non ancora disponibile. La build potrebbe essere ancora in corso. Riprova tra qualche minuto.'
-    } else if (error.message.includes('403') || error.message.includes('Accesso negato')) {
+    } else if (originalMessage.includes('403') || originalMessage.includes('Accesso negato')) {
       userMessage = 'Impossibile accedere a GitHub. Potrebbe essere un problema di rate limit. Riprova più tardi.'
-    } else if (error.message.includes('429') || error.message.includes('Troppe richieste')) {
+    } else if (originalMessage.includes('429') || originalMessage.includes('Troppe richieste')) {
       userMessage = 'Troppe richieste a GitHub. Riprova tra qualche minuto.'
-    } else if (error.message.includes('parsing') || error.message.includes('JSON')) {
+    } else if (originalMessage.includes('parsing') || originalMessage.includes('JSON')) {
       userMessage = 'Errore nella risposta di GitHub. La release potrebbe non essere ancora pubblicata. Riprova tra qualche minuto.'
-    } else if (error.message.includes('Timeout') || error.message.includes('timeout')) {
+    } else if (originalMessage.includes('Timeout') || originalMessage.includes('timeout')) {
       userMessage = 'Timeout durante la connessione a GitHub. Verifica la connessione internet e riprova.'
-    } else if (error.message.includes('ENOTFOUND') || error.message.includes('connessione')) {
+    } else if (originalMessage.includes('ENOTFOUND') || originalMessage.includes('connessione')) {
       userMessage = 'Impossibile raggiungere GitHub. Verifica la connessione internet.'
+    } else {
+      // Se non è un errore conosciuto, includi il messaggio originale
+      userMessage = `${userMessage}: ${originalMessage}`
     }
     
-    // Crea un errore con messaggio user-friendly
+    // Crea un errore con messaggio user-friendly + originale
     const friendlyError = new Error(userMessage)
-    friendlyError.originalError = error.message
+    friendlyError.originalError = originalMessage
+    friendlyError.cause = error
     throw friendlyError
   }
 })
