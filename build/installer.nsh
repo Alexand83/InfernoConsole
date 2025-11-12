@@ -50,46 +50,44 @@
   ; ✅ LOG: Mostra cosa stiamo per cancellare
   DetailPrint "Rimozione directory: $INSTDIR"
   
-  ; ✅ SOLUZIONE DEFINITIVA: Usa PowerShell per rimozione forzata
-  ; NSIS RMDir ha troppi bug, usiamo PowerShell che è più affidabile
+  ; ✅ BEST PRACTICE NSIS: Cambia working directory prima di rimuovere $INSTDIR
+  ; Questo evita problemi di lock e permette la rimozione corretta
+  SetOutPath "$TEMP"
+  DetailPrint "Working directory cambiata in TEMP"
+  Sleep 500
   
-  DetailPrint "Usando PowerShell per rimozione forzata..."
-  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path \"$INSTDIR\") { Remove-Item -Path \"$INSTDIR\" -Recurse -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500 }"'
-  Pop $0
+  ; ✅ Rimuovi sottocartelle specifiche (solo se vuote)
+  DetailPrint "Rimozione sottocartelle..."
+  RMDir "$INSTDIR\locales"
+  RMDir "$INSTDIR\resources"
+  RMDir "$INSTDIR\swiftshader"
+  Sleep 200
   
-  ; Secondo tentativo se ancora presente
-  ${If} ${FileExists} "$INSTDIR"
-    DetailPrint "Directory ancora presente, secondo tentativo PowerShell..."
-    Sleep 1000
-    nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path \"$INSTDIR\") { Get-ChildItem -Path \"$INSTDIR\" -Recurse -Force | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue; Remove-Item -Path \"$INSTDIR\" -Force -ErrorAction SilentlyContinue }"'
-    Pop $0
-    Sleep 500
-  ${EndIf}
+  ; ✅ Rimuovi la directory principale (solo se vuota)
+  DetailPrint "Rimozione directory principale..."
+  RMDir "$INSTDIR"
+  Sleep 500
   
   ; Verifica finale
   ${If} ${FileExists} "$INSTDIR"
-    DetailPrint "ERRORE: Directory $INSTDIR non rimossa completamente"
+    DetailPrint "AVVISO: Directory $INSTDIR non completamente vuota (potrebbero esserci file utente)"
+    StrCpy $1 "AVVISO: Alcuni file potrebbero rimanere (file utente o in uso)"
   ${Else}
     DetailPrint "OK: Directory $INSTDIR rimossa con successo"
-  ${EndIf}
-  
-  ; ✅ Rimuovi la cartella parent se è vuota (con PowerShell)
-  ${un.GetParent} "$INSTDIR" $0
-  DetailPrint "Tentativo rimozione parent: $0"
-  
-  ; Usa PowerShell per rimuovere parent solo se vuota
-  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path \"$0\") { if ((Get-ChildItem -Path \"$0\" -Force | Measure-Object).Count -eq 0) { Remove-Item -Path \"$0\" -Force -ErrorAction SilentlyContinue } }"'
-  Pop $0
-  Sleep 500
-  
-  ; Verifica finale parent
-  ${un.GetParent} "$INSTDIR" $0
-  ${If} ${FileExists} "$0"
-    DetailPrint "AVVISO: Parent $0 non rimossa (potrebbe contenere altri file)"
-    StrCpy $1 "AVVISO: Cartella parent non rimossa (contiene altri file)"
-  ${Else}
-    DetailPrint "OK: Parent $0 rimossa con successo"
-    StrCpy $1 "OK: Tutte le cartelle rimosse"
+    
+    ; ✅ Rimuovi la cartella parent se è vuota
+    ${un.GetParent} "$INSTDIR" $0
+    DetailPrint "Tentativo rimozione parent: $0"
+    RMDir "$0"
+    Sleep 200
+    
+    ${If} ${FileExists} "$0"
+      DetailPrint "AVVISO: Parent $0 non rimossa (contiene altri file)"
+      StrCpy $1 "OK: App rimossa. Parent contiene altri file"
+    ${Else}
+      DetailPrint "OK: Parent $0 rimossa con successo"
+      StrCpy $1 "OK: Tutte le cartelle rimosse completamente"
+    ${EndIf}
   ${EndIf}
   
   ; ✅ Mostra riepilogo finale con pausa
