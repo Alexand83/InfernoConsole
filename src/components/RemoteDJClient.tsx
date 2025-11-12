@@ -781,26 +781,32 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize, on
       const text = await navigator.clipboard.readText()
       console.log('📋 [RemoteDJClient] Testo incollato:', text)
       
-      // Verifica se è un codice di connessione valido
-      if (text.startsWith('DJCONNECT:')) {
-        const parts = text.replace('DJCONNECT:', '').split('|')
-        if (parts.length === 2) {
-          const [serverUrl, sessionCode] = parts
-          
-          console.log('🔗 [RemoteDJClient] Codice connessione rilevato:', { serverUrl, sessionCode })
-          
-          // Determina la modalità di connessione
-          const isInternet = serverUrl.includes('ngrok') || serverUrl.includes('http')
-          setConnectionMode(isInternet ? 'internet' : 'locale')
-          
-          // Aggiorna i campi
-          updateHostIP(serverUrl)
-          updateSessionCode(sessionCode)
-          
-          console.log('✅ [RemoteDJClient] Campi compilati automaticamente')
-          return true
+        // Verifica se è un codice di connessione valido
+        if (text.startsWith('DJCONNECT:')) {
+          const parts = text.replace('DJCONNECT:', '').split('|')
+          if (parts.length === 2) {
+            const [serverUrl, sessionCode] = parts
+            
+            console.log('🔗 [RemoteDJClient] Codice connessione rilevato:', { serverUrl, sessionCode })
+            
+            // Determina la modalità di connessione
+            const isInternet = serverUrl.includes('ngrok') || serverUrl.includes('http')
+            setConnectionMode(isInternet ? 'internet' : 'locale')
+            
+            // ✅ FIX: Per ngrok non includere porta personalizzata, per locale sì
+            if (isInternet) {
+              // Modalità internet - usa URL ngrok senza porta personalizzata
+              updateHostIP(serverUrl)
+            } else {
+              // Modalità locale - mantieni porta se presente
+              updateHostIP(serverUrl)
+            }
+            updateSessionCode(sessionCode)
+            
+            console.log('✅ [RemoteDJClient] Campi compilati automaticamente')
+            return true
+          }
         }
-      }
       
       console.log('⚠️ [RemoteDJClient] Testo non riconosciuto come codice di connessione')
       return false
@@ -856,10 +862,27 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize, on
       // Connetti WebSocket - Supporto TUNNEL NGROK
       let wsUrl: string
       
-      if (hostIP.includes('ngrok')) {
-        // URL tunnel pubblico ngrok (già completo)
-        wsUrl = hostIP.startsWith('ws') ? hostIP : `wss://${hostIP.replace('https://', '')}`
-        console.log(`🌐 [RemoteDJClient] 🔗 Connessione TUNNEL PUBBLICO: ${wsUrl}`)
+    if (hostIP.includes('ngrok') || hostIP.includes('http')) {
+      // URL tunnel pubblico ngrok - RIMUOVI la porta personalizzata per ngrok
+      let cleanHostIP = hostIP
+      
+      // ✅ FIX: Rimuovi porta personalizzata da URL ngrok (es: 0946a0dfe5ef.ngrok-free.app:8081 -> 0946a0dfe5ef.ngrok-free.app)
+      if (hostIP.includes(':') && hostIP.includes('ngrok')) {
+        cleanHostIP = hostIP.split(':')[0]
+        console.log(`🔧 [RemoteDJClient] Porta rimossa da URL ngrok: ${hostIP} -> ${cleanHostIP}`)
+      }
+      
+      if (cleanHostIP.startsWith('ws://') || cleanHostIP.startsWith('wss://')) {
+        wsUrl = cleanHostIP
+      } else if (cleanHostIP.startsWith('http://')) {
+        wsUrl = cleanHostIP.replace('http://', 'ws://')
+      } else if (cleanHostIP.startsWith('https://')) {
+        wsUrl = cleanHostIP.replace('https://', 'wss://')
+      } else {
+        // ✅ FIX: Usa porta di default ngrok (80) per WebSocket
+        wsUrl = `wss://${cleanHostIP}`
+      }
+      console.log(`🌐 [RemoteDJClient] 🔗 Connessione TUNNEL PUBBLICO: ${wsUrl}`)
       } else {
         // IP locale tradizionale - estrai porta dall'IP se presente
         let webrtcPort = 8080 // Porta di default
@@ -994,21 +1017,35 @@ const RemoteDJClient: React.FC<RemoteDJClientProps> = ({ onClose, onMinimize, on
 
   const startWebRTCConnection = async () => {
     try {
-      // ✅ QUALITÀ PTT: Configurazione WebRTC ottimizzata per qualità audio massima
+      // ✅ QUALITÀ PTT: Configurazione WebRTC ottimizzata per qualità audio massima e connessioni remote
       const optimizedRtcConfig = {
         iceServers: [
+          // ✅ REMOTE CONNECTION FIX: Server STUN multipli per connessioni remote
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
           { urls: 'stun:stun2.l.google.com:19302' },
           { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' }
+          { urls: 'stun:stun4.l.google.com:19302' },
+          { urls: 'stun:stun.ekiga.net' },
+          { urls: 'stun:stun.ideasip.com' },
+          { urls: 'stun:stun.schlund.de' },
+          { urls: 'stun:stun.stunprotocol.org:3478' },
+          { urls: 'stun:stun.voiparound.com' },
+          { urls: 'stun:stun.voipbuster.com' },
+          { urls: 'stun:stun.voipstunt.com' },
+          { urls: 'stun:stun.counterpath.com' },
+          { urls: 'stun:stun.1und1.de' },
+          { urls: 'stun:stun.gmx.net' },
+          { urls: 'stun:stun.callwithus.com' },
+          { urls: 'stun:stun.counterpath.net' },
+          { urls: 'stun:stun.internetcalls.com' }
         ],
-        iceCandidatePoolSize: 10, // ✅ OTTIMIZZATO: Più candidati ICE per connessione migliore
+        iceCandidatePoolSize: 20, // ✅ REMOTE FIX: Più candidati ICE per connessioni remote
         bundlePolicy: 'max-bundle' as RTCBundlePolicy, // ✅ OTTIMIZZATO: Bundle per efficienza
         rtcpMuxPolicy: 'require' as RTCRtcpMuxPolicy, // ✅ OTTIMIZZATO: RTCP multiplexing obbligatorio
         iceTransportPolicy: 'all' as RTCIceTransportPolicy, // ✅ OTTIMIZZATO: Usa tutti i trasporti ICE
-        iceConnectionTimeout: 30000, // ✅ OTTIMIZZATO: Timeout più lungo per connessione
-        iceGatheringTimeout: 10000, // ✅ OTTIMIZZATO: Timeout raccolta ICE
+        iceConnectionTimeout: 60000, // ✅ REMOTE FIX: Timeout più lungo per connessioni remote
+        iceGatheringTimeout: 15000, // ✅ REMOTE FIX: Timeout raccolta ICE più lungo
         // ✅ QUALITÀ AUDIO: Configurazione codec audio per qualità massima
         sdpSemantics: 'unified-plan', // ✅ OTTIMIZZATO: Piano unificato per migliore compatibilità
       }

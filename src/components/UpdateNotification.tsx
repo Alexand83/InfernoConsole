@@ -98,7 +98,11 @@ const UpdateNotification: React.FC = () => {
   const handleInstall = async () => {
     if (window.autoUpdater) {
       try {
-        await window.autoUpdater.installUpdate()
+        const result = await window.autoUpdater.installUpdate()
+        // Se è un installer NSIS, mostra messaggio specifico
+        if (result && result.isNSIS) {
+          console.log('✅ Installer NSIS avviato in modalità silenziosa')
+        }
       } catch (error) {
         console.error('Errore nell\'installazione:', error)
       }

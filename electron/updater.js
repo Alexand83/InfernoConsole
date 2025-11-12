@@ -107,15 +107,27 @@ class AppUpdater {
         console.log('📁 File disponibili:', info.files.map(f => ({ url: f.url, size: f.size })))
         
         if (process.platform === 'win32') {
-          // Windows: cerca file .exe, .msi, o qualsiasi file Windows
+          // Windows: cerca PRIMA l'installer NSIS, poi fallback su .exe
           selectedFile = info.files.find(file => 
             file.url && (
-              file.url.includes('.exe') || 
-              file.url.includes('.msi') ||
-              file.url.includes('win') ||
-              file.url.includes('windows')
+              file.url.includes('Setup.exe') ||
+              file.url.includes('Installer.exe') ||
+              file.url.includes('setup') ||
+              file.url.includes('installer')
             )
           )
+          
+          // Fallback: cerca file .exe, .msi, o qualsiasi file Windows
+          if (!selectedFile) {
+            selectedFile = info.files.find(file => 
+              file.url && (
+                file.url.includes('.exe') || 
+                file.url.includes('.msi') ||
+                file.url.includes('win') ||
+                file.url.includes('windows')
+              )
+            )
+          }
           
           // Se non trova file specifici Windows, usa il primo file disponibile
           if (!selectedFile) {

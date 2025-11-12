@@ -13,8 +13,10 @@ const ConnectionCode: React.FC<ConnectionCodeProps> = ({ serverUrl, sessionCode,
 
   const generateConnectionCode = () => {
     if (serverMode === 'internet') {
-      // Modalità internet - URL completo + codice
-      return `DJCONNECT:${serverUrl}|${sessionCode}`
+      // Modalità internet - URL ngrok SENZA porta personalizzata + codice
+      const cleanUrl = serverUrl.replace('ws://', '').replace('wss://', '').replace('http://', '').replace('https://', '')
+      // ✅ FIX: Non includere porta personalizzata per ngrok (usa porta di default 80)
+      return `DJCONNECT:${cleanUrl}|${sessionCode}`
     } else {
       // Modalità locale - IP + porta WebRTC + codice
       const ip = serverUrl.replace('ws://', '').replace('wss://', '')

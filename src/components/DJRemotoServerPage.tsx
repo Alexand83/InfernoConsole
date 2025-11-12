@@ -102,9 +102,26 @@ const DJRemotoServerPage: React.FC = () => {
   // ✅ NEW: Navigation state to prevent PTT disconnection during page changes
   const [isNavigating, setIsNavigating] = useState(false)
 
+  // ✅ REMOTE CONNECTION FIX: Server STUN multipli per connessioni remote
   const iceServers = [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.ekiga.net' },
+    { urls: 'stun:stun.ideasip.com' },
+    { urls: 'stun:stun.schlund.de' },
+    { urls: 'stun:stun.stunprotocol.org:3478' },
+    { urls: 'stun:stun.voiparound.com' },
+    { urls: 'stun:stun.voipbuster.com' },
+    { urls: 'stun:stun.voipstunt.com' },
+    { urls: 'stun:stun.counterpath.com' },
+    { urls: 'stun:stun.1und1.de' },
+    { urls: 'stun:stun.gmx.net' },
+    { urls: 'stun:stun.callwithus.com' },
+    { urls: 'stun:stun.counterpath.net' },
+    { urls: 'stun:stun.internetcalls.com' }
   ]
 
   // ✅ CRITICAL FIX: Funzioni per aggiornare e salvare lo stato in sessionStorage
@@ -1462,12 +1479,12 @@ const DJRemotoServerPage: React.FC = () => {
   }
 
   // 🌐 TUNNEL NGROK FUNCTIONS
-  const startNgrokTunnel = async (): Promise<string | null> => {
+  const startNgrokTunnel = async (port: number = 8080): Promise<string | null> => {
     try {
-      console.log('🚀 [NGROK] Avvio tunnel per porta 8081...')
+      console.log(`🚀 [NGROK] Avvio tunnel per porta ${port}...`)
       
       // Avvia tunnel tramite API Electron
-      const result = await (window as any).electronAPI.webrtcServerAPI.startTunnel(8081)
+      const result = await (window as any).electronAPI.webrtcServerAPI.startTunnel(port)
       
       if (result.success && result.url) {
         console.log(`✅ [NGROK] Tunnel attivo: ${result.url}`)
@@ -1622,20 +1639,28 @@ const DJRemotoServerPage: React.FC = () => {
     setIsStarting(true)
 
         try {
-          // 🌐 AVVIA TUNNEL NGROK (sempre Internet)
-          console.log('🌐 [RemoteDJHost] Avvio tunnel ngrok...')
-          const url = await startNgrokTunnel()
+        // ✅ FIX SEQUENZA: PRIMA avvia server WebRTC, POI ngrok
+        console.log('🚀 [RemoteDJHost] STEP 1: Avvio server WebRTC...')
+        const result = await (window as any).electronAPI.webrtcServerAPI.startServer({
+          port: 8080, // ✅ FIX: Usa sempre porta 8080 per ngrok
+          maxConnections: 5
+        })
+          
+          if (!result.success) {
+            throw new Error(result.error || 'Errore avvio server WebRTC')
+          }
+          
+          console.log(`✅ [RemoteDJHost] STEP 1 COMPLETATO: Server WebRTC avviato sulla porta ${result.port}`)
+          
+          // ✅ FIX SEQUENZA: STEP 2 - Avvia tunnel ngrok DOPO che il server è attivo
+          console.log(`🌐 [RemoteDJHost] STEP 2: Avvio tunnel ngrok per porta ${result.port}...`)
+          const url = await startNgrokTunnel(result.port)
           if (url) {
             setTunnelUrl(url)
-            console.log(`✅ [RemoteDJHost] Tunnel pubblico attivo: ${url}`)
+            console.log(`✅ [RemoteDJHost] STEP 2 COMPLETATO: Tunnel pubblico attivo: ${url}`)
           } else {
-            throw new Error('Impossibile avviare tunnel ngrok')
+            console.warn('⚠️ [RemoteDJHost] Impossibile avviare tunnel ngrok, ma server WebRTC è attivo')
           }
-
-      const result = await (window as any).electronAPI.webrtcServerAPI.startServer({
-        port: 8080,
-        maxConnections: 5
-      })
 
       if (result.success) {
         updateServerRunning(true)

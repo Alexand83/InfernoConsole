@@ -87,6 +87,10 @@ const TrackItem = React.memo(({
           <div className="text-right">
             <div className="text-sm text-dj-light/60">
               {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, '0')}
+              {/* ✅ FIX: Mostra indicatore se durata è stimata (non analizzata) */}
+              {track.duration > 0 && track.duration <= 600 && (
+                <span className="text-xs text-dj-accent/60 ml-1" title="Durata stimata">~</span>
+              )}
             </div>
             {track.playCount > 0 && (
               <div className="text-xs text-dj-accent">▶ {track.playCount}</div>

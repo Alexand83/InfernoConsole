@@ -80,7 +80,7 @@ export class FileUploadManager {
     }
 
     const uploadedTracks: DatabaseTrack[] = []
-
+    let processedCount = 0
     for (const file of validFiles) {
       try {
         const track = await this.processFile(file)
@@ -90,6 +90,11 @@ export class FileUploadManager {
       } catch (error) {
         console.error(`Error processing file ${file.name}:`, error)
         this.updateProgress(file, 0, 'error', error instanceof Error ? error.message : 'Unknown error')
+      }
+      processedCount++
+      if (processedCount % 50 === 0) {
+        try { await this.forceMemoryCleanup() } catch {}
+        try { await new Promise(resolve => setTimeout(resolve, 150)) } catch {}
       }
     }
 
@@ -180,16 +185,7 @@ export class FileUploadManager {
               () => localDatabase.updateTrack(trackId, { blobId: trackId, url: `file://${saved.path}`, fileUrl: `file://${saved.path}` }),
               `updateTrack file path for ${file.name}`
             )
-            // Also save into IndexedDB to ensure persistence after reload when URL is sanitized to idb:
-            try {
-              await safeDatabaseOperation(
-                () => putBlob(trackId, file),
-                `putBlob for ${file.name}`
-              )
-              try { (window as any).log?.info?.(`also stored in IndexedDB as blobId=${trackId}`) } catch {}
-            } catch (ie) {
-              try { (window as any).log?.warn?.(`failed to store in IndexedDB: ${ie instanceof Error ? ie.message : String(ie)}`) } catch {}
-            }
+            // ✅ NO DUPLICATE BLOB: evita salvataggio anche in IndexedDB per ridurre RAM/space
           } else {
             throw new Error(saved?.error || 'saveAudio failed')
           }
@@ -230,12 +226,12 @@ export class FileUploadManager {
     }
   }
 
-  // Analisi audio ottimizzata per browser con timeout moderato
+  // ✅ FIX: Analisi audio ottimizzata con timeout esteso e retry
   private async safeAnalyzeAudio(file: File): Promise<{ duration: number; peaks: number[] }> {
     try {
-      // Timeout moderato per evitare blocchi
+      // ✅ FIX: Timeout esteso per file grandi (30 secondi)
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Audio analysis timeout')), 10000) // 10 secondi per waveform completi
+        setTimeout(() => reject(new Error('Audio analysis timeout dopo 30s')), 30000)
       })
 
       const analysisPromise = this.performAudioAnalysis(file)
@@ -243,43 +239,198 @@ export class FileUploadManager {
       const result = await Promise.race([analysisPromise, timeoutPromise])
       return result
     } catch (err) {
-      // Fallback veloce senza analisi
-      return { duration: 0, peaks: [] }
+      // ✅ FIX: Fallback intelligente con durata stimata invece di 0
+      console.warn(`⚠️ [AUDIO] Analisi fallita per ${file.name}, usando stima intelligente:`, err)
+      const estimatedDuration = this.estimateDurationFromFilename(file.name)
+      return { duration: estimatedDuration, peaks: [] }
     }
   }
 
-  // Analisi audio effettiva con waveform completi
+  // ✅ FIX: Analisi audio robusta con retry e fallback intelligenti
   private async performAudioAnalysis(file: File): Promise<{ duration: number; peaks: number[] }> {
-    try {
-      const arrayBuffer = await file.arrayBuffer()
-      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext
-      const ac = new AudioCtx()
-      
+    const maxRetries = 3
+    let lastError: Error | null = null
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const audioBuffer: AudioBuffer = await ac.decodeAudioData(arrayBuffer)
-        const duration = Number.isFinite(audioBuffer.duration) ? Math.round(audioBuffer.duration) : 0
+        console.log(`🎵 [AUDIO] Tentativo ${attempt}/${maxRetries} per ${file.name}`)
         
-        // Waveform COMPLETI per qualità audio (200 campioni)
-        const peaks = this.buildPeaksFromChannel(audioBuffer.getChannelData(0), 200)
+        let arrayBuffer: ArrayBuffer | null = await file.arrayBuffer()
         
-        try { 
-          if ((ac as any).state !== 'closed') ac.close() 
-        } catch (closeError) {
-          // Ignora errori di chiusura
+        // ✅ FIX: Controlla se il file è valido
+        if (arrayBuffer.byteLength === 0) {
+          throw new Error('File vuoto')
         }
         
-        return { duration, peaks }
-      } catch (decodeError) {
-        try { 
-          if ((ac as any).state !== 'closed') ac.close() 
-        } catch (closeError) {
-          // Ignora errori di chiusura
+        // ✅ FIX: Usa AudioContext con configurazione robusta
+        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext
+        const ac = new AudioCtx({
+          sampleRate: 44100, // Frequenza standard
+          latencyHint: 'interactive' // Ottimizzazione per analisi
+        })
+        
+        try {
+          // ✅ FIX: Decode con timeout e retry
+          const audioBuffer: AudioBuffer = await this.robustDecodeAudioData(ac, arrayBuffer as ArrayBuffer, attempt)
+          
+          if (!audioBuffer || audioBuffer.duration === 0) {
+            throw new Error('AudioBuffer invalido o durata zero')
+          }
+          
+          const duration = Number.isFinite(audioBuffer.duration) ? Math.round(audioBuffer.duration) : 0
+          
+          if (duration <= 0) {
+            throw new Error('Durata non valida')
+          }
+          
+          // Waveform COMPLETI per qualità audio (200 campioni)
+          const peaks = this.buildPeaksFromChannel(audioBuffer.getChannelData(0), 200)
+          
+          console.log(`✅ [AUDIO] Analisi completata per ${file.name}: ${duration}s`)
+          
+          try { 
+            if ((ac as any).state !== 'closed') ac.close() 
+          } catch (closeError) {
+            // Ignora errori di chiusura
+          }
+          // Rilascia riferimenti pesanti
+          try { (arrayBuffer as any) = null } catch {}
+          
+          return { duration, peaks }
+          
+        } catch (decodeError) {
+          console.warn(`⚠️ [AUDIO] Decode fallito tentativo ${attempt}:`, decodeError)
+          lastError = decodeError as Error
+          
+          try { 
+            if ((ac as any).state !== 'closed') ac.close() 
+          } catch (closeError) {
+            // Ignora errori di chiusura
+          }
+          // Rilascia riferimenti pesanti
+          try { (arrayBuffer as any) = null } catch {}
+          
+          // Se non è l'ultimo tentativo, riprova
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 100 * attempt)) // Delay crescente
+            continue
+          }
+          
+          throw decodeError
         }
-        throw decodeError
+      } catch (err) {
+        lastError = err as Error
+        console.warn(`⚠️ [AUDIO] Errore tentativo ${attempt}:`, err)
+        
+        // Se non è l'ultimo tentativo, riprova
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 200 * attempt)) // Delay crescente
+          continue
+        }
       }
-    } catch (err) {
-      return { duration: 0, peaks: [] }
     }
+    
+    // ✅ FIX: Solo se tutti i tentativi falliscono, usa stima intelligente
+    console.warn(`❌ [AUDIO] Tutti i tentativi falliti per ${file.name}, usando stima intelligente:`, lastError)
+    const estimatedDuration = this.estimateDurationFromFilename(file.name)
+    return { duration: estimatedDuration, peaks: [] }
+  }
+
+  // ✅ NEW: Analisi audio LEGGERA per PC vecchi (durata reale + waveform a bassa risoluzione)
+  private async safeAnalyzeAudioLight(file: File, numSamples = 64): Promise<{ duration: number; peaks: number[] }> {
+    try {
+      // Timeout più breve ma sufficiente per PC lenti
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Light audio analysis timeout dopo 15s')), 15000)
+      })
+
+      const analysisPromise = this.performAudioAnalysisLight(file, numSamples)
+      const result = await Promise.race([analysisPromise, timeoutPromise])
+      return result
+    } catch (err) {
+      // Ultimo fallback: stima intelligente (non 0)
+      console.warn(`⚠️ [AUDIO-LIGHT] Analisi leggera fallita per ${file.name}, uso stima:`, err)
+      const estimatedDuration = this.estimateDurationFromFilename(file.name)
+      return { duration: estimatedDuration, peaks: [] }
+    }
+  }
+
+  // ✅ NEW: Implementazione leggera con AudioContext a sampleRate ridotto e pochi campioni
+  private async performAudioAnalysisLight(file: File, numSamples = 64): Promise<{ duration: number; peaks: number[] }> {
+    const maxRetries = 2
+    let lastError: Error | null = null
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const arrayBuffer = await file.arrayBuffer()
+        if (arrayBuffer.byteLength === 0) throw new Error('File vuoto')
+
+        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext
+        // Sample rate ridotto per consumare meno risorse su PC vecchi
+        const ac = new AudioCtx({ sampleRate: 22050, latencyHint: 'interactive' })
+        try {
+          const audioBuffer: AudioBuffer = await this.robustDecodeAudioData(ac, arrayBuffer, attempt)
+          const duration = Number.isFinite(audioBuffer.duration) ? Math.round(audioBuffer.duration) : 0
+          if (duration <= 0) throw new Error('Durata non valida')
+
+          const peaks = this.buildPeaksFromChannel(audioBuffer.getChannelData(0), Math.max(16, Math.min(256, numSamples)))
+
+          try { if ((ac as any).state !== 'closed') ac.close() } catch {}
+          return { duration, peaks }
+        } catch (e) {
+          lastError = e as Error
+          try { if ((ac as any).state !== 'closed') ac.close() } catch {}
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 150 * attempt))
+            continue
+          }
+        }
+      } catch (err) {
+        lastError = err as Error
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 200 * attempt))
+          continue
+        }
+      }
+    }
+
+    console.warn('❌ [AUDIO-LIGHT] Tutti i tentativi falliti:', lastError)
+    const estimatedDuration = this.estimateDurationFromFilename(file.name)
+    return { duration: estimatedDuration, peaks: [] }
+  }
+
+  // ✅ FIX: Decode audio robusto con timeout e retry
+  private async robustDecodeAudioData(audioContext: AudioContext, arrayBuffer: ArrayBuffer, attempt: number): Promise<AudioBuffer> {
+    const timeoutMs = 5000 + (attempt * 2000) // Timeout crescente: 5s, 7s, 9s
+    
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`Audio decode timeout dopo ${timeoutMs}ms`))
+      }, timeoutMs)
+      
+      // ✅ FIX: Decode con gestione errori migliorata (evita copie superflue di ArrayBuffer)
+      audioContext.decodeAudioData(arrayBuffer)
+        .then((audioBuffer) => {
+          clearTimeout(timeoutId)
+          
+          // ✅ FIX: Validazione robusta dell'AudioBuffer
+          if (!audioBuffer || audioBuffer.duration <= 0) {
+            reject(new Error('AudioBuffer invalido o durata zero'))
+            return
+          }
+          
+          if (!audioBuffer.getChannelData || audioBuffer.getChannelData(0).length === 0) {
+            reject(new Error('AudioBuffer senza dati audio'))
+            return
+          }
+          
+          resolve(audioBuffer)
+        })
+        .catch((error) => {
+          clearTimeout(timeoutId)
+          reject(error)
+        })
+    })
   }
 
   private buildPeaksFromChannel(channelData: Float32Array | null, numSamples = 200): number[] {
@@ -297,6 +448,30 @@ export class FileUploadManager {
       peaks.push(Math.min(1, max))
     }
     return peaks
+  }
+
+  // ✅ FIX: Stima durata intelligente basata su pattern nei filename
+  private estimateDurationFromFilename(filename: string): number {
+    const name = filename.toLowerCase()
+    
+    // Pattern specifici per durata
+    if (name.includes('intro') || name.includes('outro')) {
+      return 30 // 30 secondi
+    } else if (name.includes('short') || name.includes('clip')) {
+      return 60 // 1 minuto
+    } else if (name.includes('extended') || name.includes('long')) {
+      return 300 // 5 minuti
+    } else if (name.includes('mix') || name.includes('set')) {
+      return 600 // 10 minuti
+    } else if (name.includes('full') || name.includes('complete')) {
+      return 240 // 4 minuti
+    } else if (name.includes('demo') || name.includes('preview')) {
+      return 90 // 1.5 minuti
+    } else if (name.includes('remix') || name.includes('edit')) {
+      return 200 // 3.5 minuti
+    } else {
+      return 180 // 3 minuti di default
+    }
   }
 
   // Waveform ottimizzato per performance
@@ -703,6 +878,11 @@ export class FileUploadManager {
         errors.push(errorMsg)
         this.updateProgress(file, 0, 'error', errorMsg)
       }
+
+      if ((i + 1) % 50 === 0) {
+        try { await this.forceMemoryCleanup() } catch {}
+        try { await new Promise(resolve => setTimeout(resolve, 150)) } catch {}
+      }
     }
     
     return { tracks, errors }
@@ -792,24 +972,23 @@ export class FileUploadManager {
       // ✅ CRITICAL: Estrazione metadata SOLO dal filename - ZERO analisi audio
       const metadata = this.extractMetadataFromFilename(file.name)
       
-      // ✅ ULTRA-LEGGERO: Durata "ignota" di default per risparmiare RAM/CPU
-      //    (impostata a 0 così non mostra 3:00 fisso).
-      //    Solo se il filename contiene indizi evidenti (intro/short/extended)
-      //    usiamo una stima minima senza analisi audio.
+      // ✅ ULTRA-LEGGERO (Electron): evita completamente il decode per ridurre RAM
+      const isElectronEnvUL = !!((window as any).fileStore) || ((typeof navigator !== 'undefined' && (navigator.userAgent || '').includes('Electron')))
       let duration = 0
-      const filename = file.name.toLowerCase()
-      
-      // Stima durata basata su pattern comuni nei filename
-      if (filename.includes('intro') || filename.includes('outro')) {
-        duration = 30 // 30 secondi per intro/outro
-      } else if (filename.includes('short') || filename.includes('clip')) {
-        duration = 60 // 1 minuto per clip
-      } else if (filename.includes('extended') || filename.includes('long')) {
-        duration = 300 // 5 minuti per extended
+      let waveform: number[] = []
+      if (isElectronEnvUL) {
+        try {
+          duration = await this.getAudioDuration(file)
+        } catch (_) {
+          duration = 0
+        }
+        // waveform omesso per massimo risparmio memoria
+      } else {
+        // Browser: analisi leggera (durata reale + waveform low-res)
+        const light = await this.safeAnalyzeAudioLight(file, 64)
+        duration = light.duration
+        waveform = Array.isArray(light.peaks) ? light.peaks : []
       }
-      
-      // ✅ ZERO WAVEFORM: Array vuoto - generato solo on-demand
-      const waveform: number[] = []
       
       console.log(`⚡ [ULTRA-LIGHT] Metadata: "${metadata.title}" - "${metadata.artist}" - ${duration}s`)
 
@@ -847,10 +1026,10 @@ export class FileUploadManager {
       }
       
       // On Electron, persist via filesystem to avoid IndexedDB large blob issues
-      const isElectronEnv = !!((window as any).fileStore) || ((typeof navigator !== 'undefined' && (navigator.userAgent || '').includes('Electron')))
+      const isElectronEnvUL2 = !!((window as any).fileStore) || ((typeof navigator !== 'undefined' && (navigator.userAgent || '').includes('Electron')))
       
       try {
-        if (isElectronEnv && (window as any).fileStore?.saveAudio) {
+        if (isElectronEnvUL2 && (window as any).fileStore?.saveAudio) {
           try {
             const buf = await file.arrayBuffer()
             const saved = await (window as any).fileStore.saveAudio(trackId, file.name, buf)

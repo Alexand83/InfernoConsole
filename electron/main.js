@@ -246,6 +246,23 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
   
   createWindow()
+
+  // ✅ DEVTOOLS TOGGLE: Abilita scorciatoie globali anche senza menu
+  const { globalShortcut } = require('electron')
+  try {
+    // F12
+    globalShortcut.register('F12', () => {
+      const win = BrowserWindow.getFocusedWindow() || mainWindow
+      if (win) win.webContents.toggleDevTools()
+    })
+    // Ctrl+Shift+I / Cmd+Alt+I
+    globalShortcut.register(process.platform === 'darwin' ? 'CommandOrControl+Alt+I' : 'Control+Shift+I', () => {
+      const win = BrowserWindow.getFocusedWindow() || mainWindow
+      if (win) win.webContents.toggleDevTools()
+    })
+  } catch (e) {
+    console.warn('⚠️ Impossibile registrare scorciatoie DevTools:', e?.message)
+  }
   
   // 🧹 CLEANUP: Rimuovi file temporaneo dell'installer se presente
   cleanupTempInstallerFile()
@@ -1047,6 +1064,7 @@ ipcMain.handle('install-update', async () => {
     const { spawn } = require('child_process')
     const path = require('path')
     const os = require('os')
+    const fs = require('fs')
     
     // ✅ FIX: Usa il nostro sistema personalizzato invece di electron-updater
     if (!global.appUpdater) {
@@ -1055,13 +1073,45 @@ ipcMain.handle('install-update', async () => {
     }
     const updater = global.appUpdater
     
-    // Trova l'installer scaricato
-    const installerPath = path.join(updater.customUpdateDir, 'Inferno-Console-Installer.exe')
+    // Cerca l'installer scaricato (NSIS Setup o vecchio installer)
+    const updateDir = updater.customUpdateDir
+    let installerPath = null
+    let isNSISInstaller = false
+    
+    // Cerca prima l'installer NSIS
+    const nsisFiles = ['Inferno-Console-Setup.exe', 'Inferno-Console-Installer.exe']
+    for (const filename of nsisFiles) {
+      const testPath = path.join(updateDir, filename)
+      if (fs.existsSync(testPath)) {
+        installerPath = testPath
+        isNSISInstaller = true
+        console.log(`✅ [INSTALL] Trovato installer NSIS: ${filename}`)
+        break
+      }
+    }
+    
+    // Fallback: cerca qualsiasi .exe
+    if (!installerPath) {
+      const files = fs.readdirSync(updateDir)
+      const exeFile = files.find(f => f.endsWith('.exe'))
+      if (exeFile) {
+        installerPath = path.join(updateDir, exeFile)
+        console.log(`⚠️ [INSTALL] Usando installer generico: ${exeFile}`)
+      }
+    }
+    
+    if (!installerPath || !fs.existsSync(installerPath)) {
+      throw new Error('Installer non trovato nella directory di download')
+    }
     
     console.log(`🚀 [INSTALL] Esecuzione installer: ${installerPath}`)
+    console.log(`📦 [INSTALL] Tipo: ${isNSISInstaller ? 'NSIS (modalità silenziosa)' : 'Standard'}`)
+    
+    // ✅ NUOVO: Se è NSIS, esegui in modalità silenziosa con /S
+    const args = isNSISInstaller ? ['/S'] : []
     
     // Esegui l'installer
-    const installer = spawn(installerPath, [], {
+    const installer = spawn(installerPath, args, {
       detached: true,
       stdio: 'ignore'
     })
@@ -1070,10 +1120,17 @@ ipcMain.handle('install-update', async () => {
     
     // Chiudi l'app dopo 2 secondi per dare tempo all'installer di avviarsi
     setTimeout(() => {
+      console.log('👋 [INSTALL] Chiusura app per permettere l\'aggiornamento...')
       app.quit()
     }, 2000)
     
-    return { success: true, message: 'Installer avviato, l\'app si chiuderà tra 2 secondi' }
+    return { 
+      success: true, 
+      message: isNSISInstaller 
+        ? 'Installer NSIS avviato in modalità silenziosa. L\'app si aggiornerà automaticamente.' 
+        : 'Installer avviato, l\'app si chiuderà tra 2 secondi',
+      isNSIS: isNSISInstaller
+    }
   } catch (error) {
     console.error('Errore nell\'installazione aggiornamento:', error)
     throw error
@@ -1634,7 +1691,7 @@ ipcMain.handle('get-webrtc-clients', async () => {
         let ngrokProcess = null
         let tunnelUrl = null
 
-        ipcMain.handle('start-ngrok-tunnel', async (event, port = 8081) => {
+        ipcMain.handle('start-ngrok-tunnel', async (event, port = 8080) => {
           try {
             console.log(`🚀 [NGROK] Avvio tunnel per porta ${port}...`)
             

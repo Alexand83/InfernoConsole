@@ -81,7 +81,12 @@ class WebRTCServer extends EventEmitter {
         this.wss = new WebSocket.Server({ 
           port: this.port,
           host: '0.0.0.0', // ✅ ACCEPT CONNECTIONS FROM ANY IP
-          perMessageDeflate: false
+          perMessageDeflate: false,
+          // ✅ REMOTE CONNECTION FIX: Configurazione per connessioni remote
+          verifyClient: (info) => {
+            console.log(`🔍 [WebRTC Server] Connessione da: ${info.origin} (${info.remoteAddress})`)
+            return true // Accetta tutte le connessioni per supporto remoto
+          }
         })
         
         // ✅ CRITICAL FIX: Aumenta il limite di listener per evitare memory leak
