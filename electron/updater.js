@@ -623,68 +623,132 @@ updaterCacheDirName: inferno-console-updater`
     return false // Stessa versione
   }
 
-  // ✅ NUOVO: Metodo per scaricare l'installer
+  // ✅ NUOVO: Metodo per scaricare l'installer (usa https nativo)
   async downloadInstaller(installerInfo) {
     try {
-      const axios = require('axios')
+      const https = require('https')
       const fs = require('fs')
       const path = require('path')
+      const url = require('url')
       
       const downloadPath = path.join(this.customUpdateDir, installerInfo.name)
       
       console.log(`📥 [DOWNLOAD] Scaricando: ${installerInfo.browser_download_url}`)
       console.log(`📁 [DOWNLOAD] Salvataggio in: ${downloadPath}`)
       
-      const response = await axios({
-        method: 'GET',
-        url: installerInfo.browser_download_url,
-        responseType: 'stream',
-        headers: {
-          'User-Agent': 'DJ-Console-Updater/1.0',
-          'Accept': '*/*',
-          'Connection': 'keep-alive'
-        },
-        timeout: 300000 // 5 minuti
-      })
-      
       return new Promise((resolve, reject) => {
+        const parsedUrl = url.parse(installerInfo.browser_download_url)
+        
+        const options = {
+          hostname: parsedUrl.hostname,
+          path: parsedUrl.path,
+          method: 'GET',
+          headers: {
+            'User-Agent': 'DJ-Console-Updater/1.0',
+            'Accept': '*/*',
+            'Connection': 'keep-alive'
+          },
+          timeout: 300000 // 5 minuti
+        }
+        
         const file = fs.createWriteStream(downloadPath)
         const total = installerInfo.size
         let downloaded = 0
         
-        response.data.on('data', (chunk) => {
-          downloaded += chunk.length
-          const percent = Math.round((downloaded / total) * 100)
-          
-          // Invia progresso al renderer
-          const mainWindow = require('./main').getMainWindow()
-          if (mainWindow) {
-            mainWindow.webContents.send('download-progress', {
-              percent: percent,
-              bytesPerSecond: 0,
-              transferred: downloaded,
-              total: total
-            })
+        const request = https.get(options, (response) => {
+          // Gestisci redirect
+          if (response.statusCode === 302 || response.statusCode === 301) {
+            console.log('🔄 Redirect rilevato:', response.headers.location)
+            file.close()
+            fs.unlinkSync(downloadPath)
+            
+            // Segui il redirect
+            const redirectUrl = response.headers.location
+            const redirectParsed = url.parse(redirectUrl)
+            const redirectOptions = {
+              hostname: redirectParsed.hostname,
+              path: redirectParsed.path,
+              method: 'GET',
+              headers: options.headers
+            }
+            
+            https.get(redirectOptions, (redirectResponse) => {
+              const redirectFile = fs.createWriteStream(downloadPath)
+              
+              redirectResponse.on('data', (chunk) => {
+                downloaded += chunk.length
+                const percent = Math.round((downloaded / total) * 100)
+                
+                // Invia progresso al renderer
+                const mainWindow = require('./main').getMainWindow()
+                if (mainWindow) {
+                  mainWindow.webContents.send('download-progress', {
+                    percent: percent,
+                    bytesPerSecond: 0,
+                    transferred: downloaded,
+                    total: total
+                  })
+                }
+                
+                redirectFile.write(chunk)
+              })
+              
+              redirectResponse.on('end', () => {
+                redirectFile.end()
+                console.log('✅ Download installer completato:', downloadPath)
+                resolve(downloadPath)
+              })
+              
+              redirectResponse.on('error', (err) => {
+                redirectFile.close()
+                fs.unlink(downloadPath, () => {})
+                reject(err)
+              })
+            }).on('error', reject)
+            
+            return
           }
           
-          file.write(chunk)
+          response.on('data', (chunk) => {
+            downloaded += chunk.length
+            const percent = Math.round((downloaded / total) * 100)
+            
+            // Invia progresso al renderer
+            const mainWindow = require('./main').getMainWindow()
+            if (mainWindow) {
+              mainWindow.webContents.send('download-progress', {
+                percent: percent,
+                bytesPerSecond: 0,
+                transferred: downloaded,
+                total: total
+              })
+            }
+            
+            file.write(chunk)
+          })
+          
+          response.on('end', () => {
+            file.end()
+            console.log('✅ Download installer completato:', downloadPath)
+            resolve(downloadPath)
+          })
+          
+          response.on('error', (err) => {
+            file.close()
+            fs.unlink(downloadPath, () => {})
+            reject(err)
+          })
         })
         
-        response.data.on('end', () => {
-          file.end()
-          console.log('✅ Download installer completato:', downloadPath)
-          resolve(downloadPath)
-        })
-        
-        response.data.on('error', (err) => {
+        request.on('error', (err) => {
           file.close()
-          fs.unlink(downloadPath, () => {}) // Rimuovi file parziale
+          fs.unlink(downloadPath, () => {})
           reject(err)
         })
         
         file.on('error', (err) => {
           file.close()
-          fs.unlink(downloadPath, () => {}) // Rimuovi file parziale
+          fs.unlink(downloadPath, () => {})
           reject(err)
         })
       })
