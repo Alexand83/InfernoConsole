@@ -50,28 +50,20 @@
   ; ✅ LOG: Mostra cosa stiamo per cancellare
   DetailPrint "Rimozione directory: $INSTDIR"
   
-  ; ✅ NUOVO APPROCCIO: Rimuovi contenuto e poi la directory stessa
-  ; RMDir /r ha un bug: rimuove il contenuto ma non la directory
+  ; ✅ SOLUZIONE DEFINITIVA: Usa PowerShell per rimozione forzata
+  ; NSIS RMDir ha troppi bug, usiamo PowerShell che è più affidabile
   
-  ; Rimuovi tutto il contenuto ricorsivamente
-  RMDir /r "$INSTDIR\*.*"
-  Sleep 200
-  
-  ; Rimuovi sottocartelle specifiche se ancora presenti
-  RMDir /r "$INSTDIR\locales"
-  RMDir /r "$INSTDIR\resources"
-  Sleep 200
-  
-  ; Ora rimuovi la directory principale (dovrebbe essere vuota)
-  RMDir "$INSTDIR"
-  Sleep 200
+  DetailPrint "Usando PowerShell per rimozione forzata..."
+  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path \"$INSTDIR\") { Remove-Item -Path \"$INSTDIR\" -Recurse -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500 }"'
+  Pop $0
   
   ; Secondo tentativo se ancora presente
   ${If} ${FileExists} "$INSTDIR"
-    DetailPrint "Directory ancora presente, secondo tentativo..."
-    RMDir /r "$INSTDIR"
+    DetailPrint "Directory ancora presente, secondo tentativo PowerShell..."
+    Sleep 1000
+    nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path \"$INSTDIR\") { Get-ChildItem -Path \"$INSTDIR\" -Recurse -Force | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue; Remove-Item -Path \"$INSTDIR\" -Force -ErrorAction SilentlyContinue }"'
+    Pop $0
     Sleep 500
-    RMDir "$INSTDIR"
   ${EndIf}
   
   ; Verifica finale
@@ -81,28 +73,22 @@
     DetailPrint "OK: Directory $INSTDIR rimossa con successo"
   ${EndIf}
   
-  ; ✅ Rimuovi la cartella parent se è vuota (con retry)
+  ; ✅ Rimuovi la cartella parent se è vuota (con PowerShell)
   ${un.GetParent} "$INSTDIR" $0
   DetailPrint "Tentativo rimozione parent: $0"
   
-  ; Primo tentativo
-  RMDir "$0"
+  ; Usa PowerShell per rimuovere parent solo se vuota
+  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path \"$0\") { if ((Get-ChildItem -Path \"$0\" -Force | Measure-Object).Count -eq 0) { Remove-Item -Path \"$0\" -Force -ErrorAction SilentlyContinue } }"'
+  Pop $0
+  Sleep 500
   
-  ; Verifica se esiste ancora
+  ; Verifica finale parent
+  ${un.GetParent} "$INSTDIR" $0
   ${If} ${FileExists} "$0"
-    DetailPrint "Parent ancora esistente, secondo tentativo..."
-    Sleep 500
-    RMDir "$0"
-    
-    ${If} ${FileExists} "$0"
-      DetailPrint "AVVISO: Parent $0 non rimossa (potrebbe contenere altri file)"
-      StrCpy $1 "AVVISO: Cartella parent non rimossa (contiene altri file)"
-    ${Else}
-      DetailPrint "OK: Parent $0 rimossa al secondo tentativo"
-      StrCpy $1 "OK: Tutte le cartelle rimosse"
-    ${EndIf}
+    DetailPrint "AVVISO: Parent $0 non rimossa (potrebbe contenere altri file)"
+    StrCpy $1 "AVVISO: Cartella parent non rimossa (contiene altri file)"
   ${Else}
-    DetailPrint "OK: Parent $0 rimossa al primo tentativo"
+    DetailPrint "OK: Parent $0 rimossa con successo"
     StrCpy $1 "OK: Tutte le cartelle rimosse"
   ${EndIf}
   
