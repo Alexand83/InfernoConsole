@@ -28,6 +28,8 @@ nsis:
   warningsAsErrors: false
   # ✅ Abilita aggiornamenti differenziali (genera .blockmap)
   differentialPackage: true
+  # ✅ Pagina di licenza
+  license: build/license.rtf
   # ✅ Chiude automaticamente l'app prima dell'installazione (solo Inferno Console.exe, non node.exe generico)
   include: build/installer.nsh
 
