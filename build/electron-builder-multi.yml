@@ -18,8 +18,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   allowElevation: true
   createDesktopShortcut: always
-  createStartMenuShortcut: true
-  shortcutName: Inferno Console
+  createStartMenuShortcut: false  # ✅ Disabilitato - lo creiamo manualmente in installer.nsh
   perMachine: false
   runAfterFinish: true
   artifactName: Inferno-Console-Setup.${ext}

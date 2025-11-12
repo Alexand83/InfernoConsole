@@ -46,7 +46,13 @@
   ; ✅ Rimuovi TUTTA la directory di installazione con /r (ricorsivo)
   RMDir /r "$INSTDIR"
   
-  ; ✅ Rimuovi la cartella parent se è vuota
+  ; ✅ Rimuovi la cartella parent se è vuota (con retry)
   ${un.GetParent} "$INSTDIR" $0
+  
+  ; Primo tentativo
+  RMDir "$0"
+  
+  ; Se fallisce, aspetta e riprova (a volte Windows tiene lock temporanei)
+  Sleep 500
   RMDir "$0"
 !macroend
