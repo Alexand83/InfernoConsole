@@ -18,8 +18,13 @@
   Pop $0
   Sleep 1000
   
-  ; ✅ Crea shortcut per l'uninstaller nel menu Start
+  ; ✅ Crea cartella nel menu Start
   CreateDirectory "$SMPROGRAMS\Inferno Console"
+  
+  ; ✅ Crea shortcut per l'APP nel menu Start (nella stessa cartella dell'uninstaller)
+  CreateShortcut "$SMPROGRAMS\Inferno Console\Inferno Console.lnk" "$INSTDIR\Inferno Console.exe"
+  
+  ; ✅ Crea shortcut per l'UNINSTALLER nel menu Start
   CreateShortcut "$SMPROGRAMS\Inferno Console\Uninstall Inferno Console.lnk" "$INSTDIR\Uninstall Inferno Console.exe"
 !macroend
 
@@ -29,23 +34,19 @@
   Pop $0
   Sleep 500
   
+  ; ✅ Rimuovi shortcut app dal menu Start
+  Delete "$SMPROGRAMS\Inferno Console\Inferno Console.lnk"
+  
   ; ✅ Rimuovi shortcut uninstaller dal menu Start
   Delete "$SMPROGRAMS\Inferno Console\Uninstall Inferno Console.lnk"
   
-  ; ✅ Rimuovi TUTTE le sottocartelle
-  RMDir /r "$INSTDIR\locales"
-  RMDir /r "$INSTDIR\resources"
+  ; ✅ Rimuovi cartella menu Start (solo se vuota)
+  RMDir "$SMPROGRAMS\Inferno Console"
   
-  ; ✅ Rimuovi la directory principale
-  RMDir "$INSTDIR"
+  ; ✅ Rimuovi TUTTA la directory di installazione con /r (ricorsivo)
+  RMDir /r "$INSTDIR"
   
-  ; ✅ Rimuovi la cartella parent se è vuota (metodo semplice)
-  ; Ottieni il path parent rimuovendo l'ultimo componente
-  StrCpy $0 "$INSTDIR"
-  
-  ; Trova l'ultimo backslash
-  ${un.GetParent} "$0" $1
-  
-  ; Prova a rimuovere la directory parent (solo se vuota)
-  RMDir "$1"
+  ; ✅ Rimuovi la cartella parent se è vuota
+  ${un.GetParent} "$INSTDIR" $0
+  RMDir "$0"
 !macroend
