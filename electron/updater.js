@@ -330,9 +330,11 @@ class AppUpdater {
         if (this.isNewerVersion(latestVersion, currentVersion)) {
           console.log('✅ Nuova versione disponibile!')
           
-          // Trova l'installer nell'elenco degli asset
+          // Trova l'installer NSIS nell'elenco degli asset
           const installer = release.assets.find(asset => 
-            asset.name === 'Inferno-Console-Installer.exe'
+            asset.name === 'Inferno-Console-Setup.exe' ||
+            asset.name === 'Inferno-Console-Installer.exe' ||
+            asset.name.includes('Setup.exe')
           )
           
           if (installer) {

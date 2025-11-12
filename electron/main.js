@@ -1027,9 +1027,11 @@ ipcMain.handle('download-update', async () => {
       throw new Error('Nessun aggiornamento disponibile')
     }
     
-    // Trova l'installer
+    // Trova l'installer NSIS
     const installer = release.assets.find(asset => 
-      asset.name === 'Inferno-Console-Installer.exe'
+      asset.name === 'Inferno-Console-Setup.exe' ||
+      asset.name === 'Inferno-Console-Installer.exe' ||
+      asset.name.includes('Setup.exe')
     )
     
     if (!installer) {
