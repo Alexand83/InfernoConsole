@@ -706,6 +706,18 @@ updaterCacheDirName: inferno-console-updater`
               
               redirectResponse.on('end', () => {
                 redirectFile.end()
+                
+                // ✅ FIX: Invia progresso finale al 100%
+                const mainWindow = require('./main').getMainWindow()
+                if (mainWindow) {
+                  mainWindow.webContents.send('download-progress', {
+                    percent: 100,
+                    bytesPerSecond: 0,
+                    transferred: total,
+                    total: total
+                  })
+                }
+                
                 console.log('✅ Download installer completato:', downloadPath)
                 resolve(downloadPath)
               })
@@ -740,6 +752,18 @@ updaterCacheDirName: inferno-console-updater`
           
           response.on('end', () => {
             file.end()
+            
+            // ✅ FIX: Invia progresso finale al 100%
+            const mainWindow = require('./main').getMainWindow()
+            if (mainWindow) {
+              mainWindow.webContents.send('download-progress', {
+                percent: 100,
+                bytesPerSecond: 0,
+                transferred: total,
+                total: total
+              })
+            }
+            
             console.log('✅ Download installer completato:', downloadPath)
             resolve(downloadPath)
           })

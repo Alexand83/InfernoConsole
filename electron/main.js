@@ -1134,10 +1134,10 @@ ipcMain.handle('install-update', async () => {
     }
     
     console.log(`🚀 [INSTALL] Esecuzione installer: ${installerPath}`)
-    console.log(`📦 [INSTALL] Tipo: ${isNSISInstaller ? 'NSIS (modalità silenziosa)' : 'Standard'}`)
+    console.log(`📦 [INSTALL] Tipo: ${isNSISInstaller ? 'NSIS (con interfaccia)' : 'Standard'}`)
     
-    // ✅ NUOVO: Se è NSIS, esegui in modalità silenziosa con /S
-    const args = isNSISInstaller ? ['/S'] : []
+    // ✅ FIX: NON usare modalità silenziosa - mostra sempre l'interfaccia
+    const args = [] // Rimuovo /S per mostrare l'interfaccia NSIS
     
     // Esegui l'installer
     const installer = spawn(installerPath, args, {
@@ -1161,7 +1161,7 @@ ipcMain.handle('install-update', async () => {
     return { 
       success: true, 
       message: isNSISInstaller 
-        ? 'Installer NSIS avviato in modalità silenziosa. L\'app si aggiornerà automaticamente.' 
+        ? 'Installer NSIS avviato. Segui le istruzioni a schermo per completare l\'aggiornamento.' 
         : 'Installer avviato, l\'app si chiuderà tra 2 secondi',
       isNSIS: isNSISInstaller
     }
