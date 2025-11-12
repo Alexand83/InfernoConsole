@@ -26,6 +26,8 @@ nsis:
   displayLanguageSelector: false
   # ✅ Mostra sempre i dettagli durante disinstallazione
   warningsAsErrors: false
+  # ✅ Usa NSIS 3.11 (versione più recente con bug fix)
+  nsisVersion: "3.11"
   # ✅ Chiude automaticamente l'app prima dell'installazione (solo Inferno Console.exe, non node.exe generico)
   include: build/installer.nsh
 
