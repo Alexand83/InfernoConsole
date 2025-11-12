@@ -1041,16 +1041,37 @@ ipcMain.handle('db-save', async (_evt, payload) => {
 // IPC handlers per aggiornamenti
 ipcMain.handle('download-update', async () => {
   try {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('📥 [DOWNLOAD UPDATE] ========== INIZIO ==========')
+    console.log('📥 [DOWNLOAD UPDATE] Timestamp:', new Date().toISOString())
+    
     // ✅ FIX: Usa il nostro sistema personalizzato invece di electron-updater
     if (!global.appUpdater) {
+      console.log('📥 [DOWNLOAD UPDATE] Creazione AppUpdater...')
       const AppUpdater = require('./updater')
       global.appUpdater = new AppUpdater()
+      console.log('✅ [DOWNLOAD UPDATE] AppUpdater creato')
+    } else {
+      console.log('✅ [DOWNLOAD UPDATE] AppUpdater già esistente')
     }
     const updater = global.appUpdater
     
     // Controlla se ci sono aggiornamenti usando il nostro sistema
-    const release = await updater.checkGitHubFiles()
+    console.log('📥 [DOWNLOAD UPDATE] Chiamata checkGitHubFiles()...')
+    let release
+    try {
+      release = await updater.checkGitHubFiles()
+      console.log('✅ [DOWNLOAD UPDATE] checkGitHubFiles completato')
+      console.log('📥 [DOWNLOAD UPDATE] Release:', release ? `tag: ${release.tag_name}, assets: ${release.assets?.length || 0}` : 'null')
+    } catch (checkError) {
+      console.error('❌ [DOWNLOAD UPDATE] Errore in checkGitHubFiles:', checkError)
+      console.error('❌ [DOWNLOAD UPDATE] Stack:', checkError.stack)
+      console.error('❌ [DOWNLOAD UPDATE] Message:', checkError.message)
+      throw checkError
+    }
+    
     if (!release || !release.assets) {
+      console.error('❌ [DOWNLOAD UPDATE] Release o assets non validi')
       throw new Error('Nessun aggiornamento disponibile')
     }
     
@@ -1068,7 +1089,18 @@ ipcMain.handle('download-update', async () => {
     console.log('🔍 [DEBUG] Installer object:', JSON.stringify(installer, null, 2))
     
     // Scarica l'installer usando il nostro sistema
-    const downloadPath = await updater.downloadInstaller(installer)
+    console.log('📥 [DOWNLOAD UPDATE] Chiamata downloadInstaller()...')
+    let downloadPath
+    try {
+      downloadPath = await updater.downloadInstaller(installer)
+      console.log('✅ [DOWNLOAD UPDATE] downloadInstaller completato')
+      console.log('📥 [DOWNLOAD UPDATE] Path:', downloadPath)
+    } catch (downloadError) {
+      console.error('❌ [DOWNLOAD UPDATE] Errore in downloadInstaller:', downloadError)
+      console.error('❌ [DOWNLOAD UPDATE] Stack:', downloadError.stack)
+      console.error('❌ [DOWNLOAD UPDATE] Message:', downloadError.message)
+      throw downloadError
+    }
     
     // ✅ FIX: Invia evento download-complete al renderer
     const { BrowserWindow } = require('electron')
@@ -1083,7 +1115,16 @@ ipcMain.handle('download-update', async () => {
       message: 'Installer scaricato con successo!'
     }
   } catch (error) {
-    console.error('Errore nel download aggiornamento:', error)
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.error('❌ [DOWNLOAD UPDATE] ========== ERRORE FINALE ==========')
+    console.error('❌ [DOWNLOAD UPDATE] Errore:', error)
+    console.error('❌ [DOWNLOAD UPDATE] Type:', typeof error)
+    console.error('❌ [DOWNLOAD UPDATE] Constructor:', error?.constructor?.name)
+    console.error('❌ [DOWNLOAD UPDATE] Message:', error?.message)
+    console.error('❌ [DOWNLOAD UPDATE] Stack:', error?.stack)
+    console.error('❌ [DOWNLOAD UPDATE] Cause:', error?.cause)
+    console.error('❌ [DOWNLOAD UPDATE] Stringified:', JSON.stringify(error, Object.getOwnPropertyNames(error)))
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     
     // ✅ NUOVO: Invia notifica al pannello debug
     try {
@@ -1092,7 +1133,7 @@ ipcMain.handle('download-update', async () => {
         mainWindow.webContents.send('app-notification', {
           type: 'error',
           title: 'Download Update Error',
-          message: error.message || 'Errore durante il download dell\'aggiornamento',
+          message: error?.message || String(error) || 'Errore durante il download dell\'aggiornamento',
           category: 'app',
           timestamp: new Date().toISOString()
         })
@@ -1123,9 +1164,26 @@ ipcMain.handle('download-update', async () => {
     }
     
     // Crea un errore con messaggio user-friendly + originale
+    // ✅ FIX: Assicurati che l'errore sia serializzabile per IPC
     const friendlyError = new Error(userMessage)
     friendlyError.originalError = originalMessage
-    friendlyError.cause = error
+    friendlyError.cause = error?.message || String(error)
+    friendlyError.stack = error?.stack || friendlyError.stack
+    
+    // ✅ FIX: Aggiungi tutte le proprietà dell'errore originale
+    if (error) {
+      Object.getOwnPropertyNames(error).forEach(key => {
+        try {
+          if (key !== 'stack' && key !== 'message') {
+            friendlyError[key] = error[key]
+          }
+        } catch (e) {
+          // Ignora proprietà non serializzabili
+        }
+      })
+    }
+    
+    console.error('❌ [DOWNLOAD UPDATE] Lanciando errore friendly:', friendlyError.message)
     throw friendlyError
   }
 })
