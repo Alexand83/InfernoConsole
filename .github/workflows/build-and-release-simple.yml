@@ -26,72 +26,23 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
-    - name: Build Electron app (Windows)
+    - name: Build NSIS Installer (Windows)
       if: matrix.os == 'windows-latest'
-      run: npm run dist:win:portable
+      run: npm run dist:win
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
-    - name: Verify Portable Build (Windows)
+    - name: Verify NSIS Build (Windows)
       if: matrix.os == 'windows-latest'
       run: |
-        echo "Checking for portable executable..."
-        if (Test-Path "dist-electron\Inferno-Console-win.exe") {
-          echo "✅ Portable executable found"
-          Get-Item "dist-electron\Inferno-Console-win.exe" | Select-Object Name, Length
-        } else {
-          echo "❌ Portable executable not found"
-          Get-ChildItem "dist-electron" | Select-Object Name, Length
-        }
-
-    - name: Build Custom Installer (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        echo "Building custom installer and uninstaller..."
-        cd installer
-        echo "Current directory: $(Get-Location)"
-        npm install
-        echo "Building installer..."
-        # Pass tag version to build script (strip leading 'v')
-        $VER = "${{ github.ref_name }}"
-        if ($VER -like 'v*') { $VER = $VER.Substring(1) }
-        echo "Resolved VERSION=$VER from tag ${{ github.ref_name }}"
-        $env:VERSION = $VER
-        node build-installer.js
-        echo "Installer build exit code: $LASTEXITCODE"
-        if ($LASTEXITCODE -ne 0) {
-          echo "❌ Installer build failed with exit code $LASTEXITCODE"
-          exit 1
-        }
-        echo "Installer build completed, checking installer output..."
-        Get-ChildItem ../dist-electron/ | Select-Object Name, Length
-        echo "Building uninstaller..."
-        node build-uninstaller.js
-        echo "Uninstaller build exit code: $LASTEXITCODE"
-        if ($LASTEXITCODE -ne 0) {
-          echo "❌ Uninstaller build failed with exit code $LASTEXITCODE"
-          exit 1
-        }
-        echo "Uninstaller build completed, checking uninstaller output..."
-        Get-ChildItem ../dist-electron/ | Select-Object Name, Length
-        echo "All builds completed, final check..."
-        Get-ChildItem ../dist-electron/ | Select-Object Name, Length
-      env:
-        GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
-    - name: Verify All Files Created (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        echo "Checking all release files from root directory..."
+        echo "Checking NSIS installer files..."
         echo "Current directory: $(Get-Location)"
         echo "Contents of dist-electron:"
         Get-ChildItem dist-electron/ | Select-Object Name, Length
         echo ""
         echo "Checking required files..."
         $requiredFiles = @(
-          "dist-electron\Inferno-Console-Installer.exe",
-          "dist-electron\Inferno-Console-Uninstaller.exe", 
-          "dist-electron\Inferno-Console-win.exe",
+          "dist-electron\Inferno-Console-Setup.exe",
           "dist-electron\latest.yml"
         )
         
@@ -104,17 +55,19 @@ jobs:
           }
         }
 
-        # Hard fail if the installer is suspiciously small (< 10MB)
-        if (Test-Path "dist-electron\Inferno-Console-Installer.exe") {
-          $installerSize = (Get-Item "dist-electron\Inferno-Console-Installer.exe").Length
-          if ($installerSize -lt 10485760) {
-            echo "❌ Installer too small: $([math]::Round($installerSize/1MB, 2)) MB"
-            exit 1
-          }
-        } else {
-          echo "❌ Installer missing"
+        # Verify NSIS installer exists
+        if (!(Test-Path "dist-electron\Inferno-Console-Setup.exe")) {
+          echo "❌ NSIS installer missing"
           exit 1
         }
+        
+        # Verify latest.yml exists
+        if (!(Test-Path "dist-electron\latest.yml")) {
+          echo "❌ latest.yml missing"
+          exit 1
+        }
+        
+        echo "✅ All NSIS files verified"
 
 
     - name: Create Release (Windows)
@@ -126,55 +79,36 @@ jobs:
         body: |
           ## 🎵 Inferno Console ${{ github.ref_name }}
           
-          ### ✨ Nuove Funzionalità
-          - **Installer GUI professionale** con tema scuro NSIS-style
-          - **Navigazione sequenziale** - solo bottoni Avanti/Indietro
-          - **Finestra ottimizzata** (1300x1000) per log di installazione
-          - **Log puliti** senza bottoni debug inutili
-          - **Blocco navigazione** durante installazione
+          ### ✨ Caratteristiche
+          - **Installer NSIS professionale** con interfaccia moderna
+          - **Auto-update integrato** - aggiornamenti automatici nella stessa directory
           - **Selezione directory** personalizzabile
           - **Shortcut automatici** Desktop e Start Menu
-          - **Uninstaller dedicato** per rimozione completa
-          - **Integrazione electron-updater** per percorsi custom
-          - **Risoluzione dinamica URL** per download da GitHub Releases
-          
-          ### 🐛 Bug Fix
-          - Fix navigazione sidebar che permetteva salti non autorizzati
-          - Fix bottone "Avanti" che appariva nella pagina installazione
-          - Fix log che coprivano la finestra durante installazione
-          - Fix errori PowerShell per creazione shortcut
-          - Fix processi in uso durante avvio applicazione
+          - **Uninstaller integrato** per rimozione completa
+          - **Chiusura automatica** dell'app prima dell'installazione
           
           ### 📦 Download
-          **Windows**: Scarica `Inferno-Console-Installer.exe` - Installer GUI professionale
+          **Windows**: Scarica `Inferno-Console-Setup.exe` (~135 MB)
           
           ### 🚀 Installazione
-          1. Scarica `Inferno-Console-Installer.exe`
-          2. Esegui l'installer (interfaccia moderna)
-          3. Accetta la licenza
-          4. Scegli la directory di installazione
-          5. Clicca "Inizia Installazione"
-          6. L'app si avvia automaticamente!
+          1. Scarica `Inferno-Console-Setup.exe`
+          2. Esegui l'installer
+          3. Scegli la directory di installazione
+          4. Clicca "Install"
+          5. L'app si avvia automaticamente!
           
-          ### ✨ Caratteristiche Installer
-          - **Singolo file .exe** - tutto incluso (~77MB)
-          - **Interfaccia moderna** - tema scuro professionale
-          - **Navigazione intuitiva** - flusso guidato step-by-step
-          - **Selezione directory** - installa dove vuoi
-          - **Shortcut automatici** - Desktop e Start Menu
-          - **Uninstaller dedicato** - rimozione completa
-          - **Compatibile con electron-updater** - aggiornamenti automatici
-          - **Log dettagliati** - monitoraggio installazione
+          ### 🔄 Aggiornamenti Automatici
+          - L'app controlla automaticamente gli aggiornamenti all'avvio
+          - Download e installazione silenziosa in background
+          - Aggiornamenti sempre nella stessa directory
           
           ### 📝 Note
-          - Versione sviluppata da Alessandro(NeverAgain)
+          - Versione sviluppata da Alessandro (NeverAgain)
           - Licenza MIT
           - Supporto completo per streaming Icecast
-          - Aggiornamenti automatici rispettano directory personalizzata
+          - Compatibilità: Windows 7+
         files: |
-          dist-electron/Inferno-Console-Installer.exe
-          dist-electron/Inferno-Console-Uninstaller.exe
-          dist-electron/Inferno-Console-win.exe
+          dist-electron/Inferno-Console-Setup.exe
           dist-electron/latest.yml
         draft: false
         prerelease: false
