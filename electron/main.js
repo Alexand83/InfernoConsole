@@ -270,6 +270,22 @@ app.whenReady().then(() => {
   // ✅ OPTIMIZATION: Inizializza l'auto-updater in background per non bloccare l'avvio
   setTimeout(() => {
     try {
+      // ✅ FIX: Controlla se c'è un update in corso per evitare loop infiniti
+      const flagPath = path.join(app.getPath('userData'), 'update-in-progress.flag')
+      if (fs.existsSync(flagPath)) {
+        const flagTime = parseInt(fs.readFileSync(flagPath, 'utf8'))
+        const now = Date.now()
+        // Se il flag ha meno di 2 minuti, salta il controllo aggiornamenti
+        if (now - flagTime < 120000) {
+          console.log('🚩 [UPDATE] Flag update-in-progress rilevato, salto controllo aggiornamenti')
+          fs.unlinkSync(flagPath)
+          return
+        } else {
+          // Flag troppo vecchio, rimuovilo
+          fs.unlinkSync(flagPath)
+        }
+      }
+      
       // ✅ FIX CRITICO: Usa singleton per evitare loop infiniti
       if (!global.appUpdater) {
         global.appUpdater = new AppUpdater()
@@ -1119,6 +1135,11 @@ ipcMain.handle('install-update', async () => {
     })
     
     installer.unref()
+    
+    // ✅ FIX: Imposta flag per evitare loop infiniti dopo update
+    const flagPath = path.join(app.getPath('userData'), 'update-in-progress.flag')
+    fs.writeFileSync(flagPath, Date.now().toString())
+    console.log('🚩 [INSTALL] Flag update-in-progress creato')
     
     // Chiudi l'app dopo 2 secondi per dare tempo all'installer di avviarsi
     setTimeout(() => {

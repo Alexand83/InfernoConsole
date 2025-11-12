@@ -300,10 +300,9 @@ class AppUpdater {
       console.log('✅ Download completato, pronto per installazione tramite UI')
     })
 
-    // ✅ FIX: Controlla aggiornamenti solo una volta all'avvio, non in loop
-    setTimeout(() => {
-      this.checkForUpdates()
-    }, 5000) // Aspetta 5 secondi dopo l'avvio
+    // ✅ FIX: NON controllare automaticamente all'avvio per evitare loop infiniti
+    // Il controllo deve essere fatto manualmente dall'utente o tramite IPC
+    console.log('✅ AppUpdater inizializzato - controllo manuale disponibile')
   }
 
   async checkForUpdates() {
@@ -629,7 +628,6 @@ updaterCacheDirName: inferno-console-updater`
       const https = require('https')
       const fs = require('fs')
       const path = require('path')
-      const url = require('url')
       
       const downloadPath = path.join(this.customUpdateDir, installerInfo.name)
       
@@ -637,11 +635,11 @@ updaterCacheDirName: inferno-console-updater`
       console.log(`📁 [DOWNLOAD] Salvataggio in: ${downloadPath}`)
       
       return new Promise((resolve, reject) => {
-        const parsedUrl = url.parse(installerInfo.browser_download_url)
+        const parsedUrl = new URL(installerInfo.browser_download_url)
         
         const options = {
           hostname: parsedUrl.hostname,
-          path: parsedUrl.path,
+          path: parsedUrl.pathname + parsedUrl.search,
           method: 'GET',
           headers: {
             'User-Agent': 'DJ-Console-Updater/1.0',
