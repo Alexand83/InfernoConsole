@@ -19,7 +19,7 @@
 ; Versione (sarà sostituita dinamicamente)
 !define VERSIONMAJOR 1
 !define VERSIONMINOR 4
-!define VERSIONBUILD 150
+!define VERSIONBUILD 151
 
 ; Identificatore univoco per il registro
 !define APPGUID "{8B5F7C3A-9D2E-4F1B-A8C6-3E7D9F2A1B4C}"

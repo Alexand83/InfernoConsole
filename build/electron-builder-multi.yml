@@ -2,18 +2,29 @@ appId: com.infernoconsole.app
 productName: Inferno Console
 copyright: Copyright © 2024 Inferno Console Team
 
-# Configurazione per Windows - solo portable con auto-updater file completo
+# Configurazione per Windows - Solo NSIS Installer
 win:
   target:
-    - target: portable
+    - target: nsis
       arch:
         - x64
-  artifactName: Inferno-Console-win.${ext}
   requestedExecutionLevel: asInvoker
   verifyUpdateCodeSignature: false
   signAndEditExecutable: false
-  # ✅ FIX: compression spostata a livello globale
-  # ✅ Collegamenti gestiti via GitHub Actions
+
+# Configurazione NSIS
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Inferno Console
+  perMachine: false
+  runAfterFinish: true
+  artifactName: Inferno-Console-Setup.${ext}
+  deleteAppDataOnUninstall: false
+  include: build/installer.nsh
 
 # Configurazione per macOS
 mac:
@@ -38,8 +49,6 @@ mac:
   electronUpdaterCompatibility: ">=2.16"
 
 # Linux rimosso - non necessario
-
-# NSIS rimosso - usiamo solo portable
 
 # File da includere
 files:
@@ -78,8 +87,7 @@ npmRebuild: false
 generateUpdatesFilesForAllChannels: true
 compression: maximum
 
-# ✅ FIX: Configurazione esplicita per generare latest.yml
-# NSIS rimosso - usiamo solo portable con collegamento via GitHub Actions
+# ✅ Configurazione esplicita per generare latest.yml con NSIS
 
 # Configurazione auto-updater
 publish:
