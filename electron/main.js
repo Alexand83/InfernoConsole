@@ -270,26 +270,37 @@ app.whenReady().then(() => {
   // ✅ OPTIMIZATION: Inizializza l'auto-updater in background per non bloccare l'avvio
   setTimeout(() => {
     try {
+      // ✅ FIX CRITICO: Previeni inizializzazioni multiple dell'updater
+      if (global.appUpdater) {
+        console.log('⚠️ [UPDATE] AppUpdater già inizializzato, salto...')
+        return
+      }
+      
       // ✅ FIX: Controlla se c'è un update in corso per evitare loop infiniti
       const flagPath = path.join(app.getPath('userData'), 'update-in-progress.flag')
       if (fs.existsSync(flagPath)) {
-        const flagTime = parseInt(fs.readFileSync(flagPath, 'utf8'))
-        const now = Date.now()
-        // Se il flag ha meno di 2 minuti, salta il controllo aggiornamenti
-        if (now - flagTime < 120000) {
-          console.log('🚩 [UPDATE] Flag update-in-progress rilevato, salto controllo aggiornamenti')
-          fs.unlinkSync(flagPath)
-          return
-        } else {
-          // Flag troppo vecchio, rimuovilo
+        try {
+          const flagTime = parseInt(fs.readFileSync(flagPath, 'utf8'))
+          const now = Date.now()
+          // Se il flag ha meno di 5 minuti, salta il controllo aggiornamenti
+          if (now - flagTime < 300000) {
+            console.log('🚩 [UPDATE] Flag update-in-progress rilevato (< 5 min), salto controllo')
+            return
+          } else {
+            // Flag troppo vecchio, rimuovilo
+            console.log('🧹 [UPDATE] Rimuovo flag vecchio')
+            fs.unlinkSync(flagPath)
+          }
+        } catch (err) {
+          console.error('❌ [UPDATE] Errore lettura flag:', err.message)
+          // Rimuovi il flag corrotto
           fs.unlinkSync(flagPath)
         }
       }
       
-      // ✅ FIX CRITICO: Usa singleton per evitare loop infiniti
-      if (!global.appUpdater) {
-        global.appUpdater = new AppUpdater()
-      }
+      // ✅ FIX CRITICO: Crea singleton AppUpdater
+      console.log('🚀 [UPDATE] Inizializzo AppUpdater...')
+      global.appUpdater = new AppUpdater()
       const updater = global.appUpdater
       
       // ✅ RIMOSSO: Creazione shortcut automatica all'avvio

@@ -64,18 +64,18 @@ class AppUpdater {
     // ✅ NUOVO: Configurazione per delta updates
     autoUpdater.allowDowngrade = false
     autoUpdater.allowPrerelease = false
-    autoUpdater.autoDownload = false // Controllo manuale del download
+    autoUpdater.autoDownload = true // ✅ FIX: Auto-download attivo per evitare blocchi
     autoUpdater.autoInstallOnAppQuit = false // Disabilitato per gestione manuale
     
-    // ✅ NUOVO: Configurazione per auto-updater con delta updates
+    // ✅ FIX: Disabilita delta updates per evitare problemi di download
     if (process.platform === 'win32') {
-      // Windows: usa delta updates + NSIS installer
-      autoUpdater.disableDifferentialDownload = false // ✅ ABILITA delta updates (usa .blockmap)
+      // Windows: download completo senza delta per affidabilità
+      autoUpdater.disableDifferentialDownload = true // ✅ FIX: Disabilita delta - usa download completo
       autoUpdater.disableWebInstaller = true // Usa file completo, non web installer
     } else {
-      // macOS: usa delta updates
-      autoUpdater.disableDifferentialDownload = false // Abilita delta updates
-      autoUpdater.disableWebInstaller = true // Usa solo delta, non web installer
+      // macOS: download completo senza delta
+      autoUpdater.disableDifferentialDownload = true // ✅ FIX: Disabilita delta
+      autoUpdater.disableWebInstaller = true // Usa solo file completo
     }
     
     // ✅ NUOVO: Stato del download
@@ -300,16 +300,10 @@ class AppUpdater {
       console.log('✅ Download completato, pronto per installazione tramite UI')
     })
 
-    // ✅ FIX: Controlla aggiornamenti automaticamente dopo 30 secondi
-    // Ma SOLO se non c'è un update in corso (controllato nel main.js)
-    this.autoCheckTimeout = setTimeout(() => {
-      console.log('🔍 Controllo automatico aggiornamenti...')
-      this.checkForUpdates().catch(err => {
-        console.error('❌ Errore controllo automatico:', err.message)
-      })
-    }, 30000) // 30 secondi dopo l'avvio
-    
-    console.log('✅ AppUpdater inizializzato - controllo automatico tra 30 secondi')
+    // ✅ FIX: Controllo automatico DISABILITATO per evitare loop infiniti
+    // L'utente può controllare manualmente dal menu Impostazioni
+    console.log('✅ AppUpdater inizializzato - controllo automatico DISABILITATO')
+    console.log('💡 Per controllare aggiornamenti, usa il pulsante nelle Impostazioni')
   }
 
   async checkForUpdates() {
