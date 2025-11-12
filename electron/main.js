@@ -1134,10 +1134,14 @@ ipcMain.handle('install-update', async () => {
     }
     
     console.log(`🚀 [INSTALL] Esecuzione installer: ${installerPath}`)
-    console.log(`📦 [INSTALL] Tipo: ${isNSISInstaller ? 'NSIS (con interfaccia)' : 'Standard'}`)
+    console.log(`📦 [INSTALL] Tipo: ${isNSISInstaller ? 'NSIS (modalità UPDATE)' : 'Standard'}`)
     
-    // ✅ FIX: NON usare modalità silenziosa - mostra sempre l'interfaccia
-    const args = [] // Rimuovo /S per mostrare l'interfaccia NSIS
+    // ✅ FIX: Usa modalità UPDATE per aggiornamenti (solo progress bar, no scelte)
+    //  /UPDATE = Mostra solo progress bar, no wizard
+    //  /S = Silent mode (no UI) - NON usato per vedere la progress bar
+    const args = isNSISInstaller ? ['/UPDATE', '/ALLUSERS'] : []
+    
+    console.log(`📋 [INSTALL] Parametri: ${args.join(' ')}`)
     
     // Esegui l'installer
     const installer = spawn(installerPath, args, {
