@@ -33,7 +33,7 @@ const StreamingDebugPanel: React.FC<StreamingDebugPanelProps> = ({
 
   useEffect(() => {
     // Esponi la funzione globalmente per aggiungere notifiche
-    ;(window as any).addStreamingNotification = (
+    const addNotification = (
       type: 'success' | 'error' | 'info' | 'warning',
       title: string,
       message: string,
@@ -54,8 +54,33 @@ const StreamingDebugPanel: React.FC<StreamingDebugPanelProps> = ({
       })
     }
 
+    ;(window as any).addStreamingNotification = addNotification
+
+    // ✅ NUOVO: Listener per notifiche dall'IPC (main process)
+    const handleAppNotification = (event: any, data: { type: string, title: string, message: string, category: string }) => {
+      addNotification(
+        data.type as 'success' | 'error' | 'info' | 'warning',
+        data.title,
+        data.message,
+        (data.category || 'app') as 'streaming' | 'audio' | 'app'
+      )
+    }
+
+    // Aggiungi listener IPC se disponibile
+    if ((window as any).electronAPI?.onAppNotification) {
+      (window as any).electronAPI.onAppNotification(handleAppNotification)
+    } else if ((window as any).electron?.ipcRenderer) {
+      (window as any).electron.ipcRenderer.on('app-notification', handleAppNotification)
+    }
+
     return () => {
       delete (window as any).addStreamingNotification
+      // Rimuovi listener IPC se esiste
+      if ((window as any).electronAPI?.removeAppNotification) {
+        (window as any).electronAPI.removeAppNotification(handleAppNotification)
+      } else if ((window as any).electron?.ipcRenderer) {
+        (window as any).electron.ipcRenderer.removeAllListeners('app-notification')
+      }
     }
   }, [maxNotifications])
 

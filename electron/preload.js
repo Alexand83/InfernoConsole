@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ✅ NUOVO: Listener per progresso download aggiornamenti
   on: (event, callback) => ipcRenderer.on(event, callback),
   removeListener: (event, callback) => ipcRenderer.removeListener(event, callback),
+  // ✅ NUOVO: Listener per notifiche app (errori updater, ecc.)
+  onAppNotification: (callback) => ipcRenderer.on('app-notification', (event, data) => callback(event, data)),
+  removeAppNotification: (callback) => ipcRenderer.removeListener('app-notification', callback),
   // ===== YOUTUBE DOWNLOADER API =====
   getYouTubeInfo: (url) => ipcRenderer.invoke('get-youtube-info', url),
   downloadYouTubeAudio: (options) => ipcRenderer.invoke('download-youtube-audio', options),

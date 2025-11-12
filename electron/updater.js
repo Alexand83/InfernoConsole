@@ -801,6 +801,28 @@ updaterCacheDirName: inferno-console-updater`
     }
   }
 
+  /**
+   * Helper per inviare notifiche al pannello debug
+   */
+  sendNotification(type, title, message) {
+    try {
+      const { BrowserWindow } = require('electron')
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app-notification', {
+          type,
+          title,
+          message,
+          category: 'app',
+          timestamp: new Date().toISOString()
+        })
+      }
+    } catch (err) {
+      // Ignora errori se la funzione non esiste
+      console.log('⚠️ [NOTIFICATION] Impossibile inviare notifica:', err.message)
+    }
+  }
+
   // ✅ NUOVO: Metodo per verificare manualmente i file disponibili su GitHub
   async checkGitHubFiles() {
     try {
@@ -813,8 +835,14 @@ updaterCacheDirName: inferno-console-updater`
         ? 'http://localhost:3456/repos/Alexand83/InfernoConsole/releases/latest'
         : 'https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest'
       
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.log('🔍 [UPDATE] ========== CHECK GITHUB FILES ==========')
       console.log(`🔍 [UPDATE] Modalità: ${isTestMode ? 'TEST LOCALE' : 'PRODUZIONE'}`)
       console.log(`🔍 [UPDATE] URL: ${url}`)
+      console.log(`🔍 [UPDATE] UPDATE_TEST_MODE env: ${process.env.UPDATE_TEST_MODE || 'non impostato'}`)
+      console.log(`🔍 [UPDATE] Node env: ${process.env.NODE_ENV || 'non impostato'}`)
+      console.log(`🔍 [UPDATE] Protocol: ${isTestMode ? 'http' : 'https'}`)
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
       
       const protocol = isTestMode ? http : https
       
@@ -828,12 +856,21 @@ updaterCacheDirName: inferno-console-updater`
           },
           timeout: 30000 // 30 secondi timeout
         }, (res) => {
-          console.log('📡 [GitHub API] Status:', res.statusCode)
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+          console.log('📡 [GitHub API] ========== RISPOSTA RICEVUTA ==========')
+          console.log('📡 [GitHub API] Status Code:', res.statusCode)
+          console.log('📡 [GitHub API] Status Message:', res.statusMessage)
+          console.log('📡 [GitHub API] Headers:', JSON.stringify(res.headers, null, 2))
+          console.log('📡 [GitHub API] Content-Type:', res.headers['content-type'])
+          console.log('📡 [GitHub API] Content-Length:', res.headers['content-length'])
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
           
           // ✅ FIX: Gestisci redirect (301, 302, 307, 308)
           if (res.statusCode >= 300 && res.statusCode < 400) {
             const location = res.headers.location
-            console.log('🔄 [GitHub API] Redirect rilevato:', location)
+            console.log('🔄 [GitHub API] ========== REDIRECT RILEVATO ==========')
+            console.log('🔄 [GitHub API] Redirect Location:', location)
+            console.log('🔄 [GitHub API] Status Code:', res.statusCode)
             if (location) {
               // Segui il redirect con una nuova richiesta
               const redirectProtocol = location.startsWith('https:') ? https : http
@@ -884,12 +921,16 @@ updaterCacheDirName: inferno-console-updater`
               console.error('❌ [GitHub API] Response body:', errorData.substring(0, 500))
               
               if (res.statusCode === 403) {
+                this.sendNotification('error', 'GitHub API 403', 'Accesso negato. Potrebbe essere rate limit o problema di autenticazione.')
                 reject(new Error('GitHub API: Accesso negato (403). Potrebbe essere un rate limit o problema di autenticazione.'))
               } else if (res.statusCode === 404) {
+                this.sendNotification('warning', 'GitHub API 404', 'Release non trovata. Verifica che la release esista su GitHub.')
                 reject(new Error('GitHub API: Release non trovata (404). Verifica che la release esista su GitHub.'))
               } else if (res.statusCode === 429) {
+                this.sendNotification('error', 'GitHub API 429', 'Troppe richieste. Rate limit raggiunto. Riprova più tardi.')
                 reject(new Error('GitHub API: Troppe richieste (429). Rate limit raggiunto. Riprova più tardi.'))
               } else {
+                this.sendNotification('error', `GitHub API ${res.statusCode}`, res.statusMessage || 'Errore HTTP')
                 reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`))
               }
             })
@@ -897,45 +938,88 @@ updaterCacheDirName: inferno-console-updater`
           }
           
           let data = ''
-          res.on('data', (chunk) => data += chunk)
+          let chunkCount = 0
+          res.on('data', (chunk) => {
+            data += chunk
+            chunkCount++
+            if (chunkCount <= 3) {
+              console.log(`📥 [GitHub API] Chunk ${chunkCount} ricevuto (${chunk.length} bytes)`)
+            }
+          })
           res.on('end', () => {
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+            console.log('📄 [GitHub API] ========== PARSING RISPOSTA ==========')
+            console.log(`📄 [GitHub API] Totale chunks ricevuti: ${chunkCount}`)
+            console.log(`📄 [GitHub API] Dimensione totale data: ${data.length} bytes`)
+            console.log(`📄 [GitHub API] Data vuota: ${!data || data.trim().length === 0}`)
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+            
             try {
               // ✅ FIX: Controlla se la risposta è vuota
               if (!data || data.trim().length === 0) {
-                console.error('❌ [GitHub API] Risposta vuota da GitHub')
+                console.error('❌ [GitHub API] ========== ERRORE: RISPOSTA VUOTA ==========')
+                console.error('❌ [GitHub API] Data length:', data ? data.length : 0)
+                this.sendNotification('error', 'GitHub API Error', 'Risposta vuota da GitHub API')
                 return reject(new Error('Risposta vuota da GitHub API'))
               }
               
               // ✅ FIX: Controlla se la risposta è HTML (errore GitHub)
-              if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
-                console.error('❌ [GitHub API] GitHub ha restituito HTML invece di JSON')
-                console.error('❌ [GitHub API] Risposta:', data.substring(0, 500))
+              const dataTrimmed = data.trim()
+              const isHTML = dataTrimmed.startsWith('<!DOCTYPE') || dataTrimmed.startsWith('<html')
+              console.log(`📄 [GitHub API] È HTML: ${isHTML}`)
+              console.log(`📄 [GitHub API] Primi 100 caratteri: ${dataTrimmed.substring(0, 100)}`)
+              
+              if (isHTML) {
+                console.error('❌ [GitHub API] ========== ERRORE: HTML INVECE DI JSON ==========')
+                console.error('❌ [GitHub API] Risposta completa (primi 1000 char):', data.substring(0, 1000))
+                this.sendNotification('error', 'GitHub API Error', 'GitHub ha restituito HTML invece di JSON. Potrebbe essere rate limit o errore di autenticazione.')
                 return reject(new Error('GitHub ha restituito una pagina HTML invece di JSON. Potrebbe essere un errore di autenticazione o rate limit.'))
               }
               
-              // ✅ FIX: Log della risposta per debug (primi 200 caratteri)
-              console.log('📄 [GitHub API] Risposta ricevuta (primi 200 char):', data.substring(0, 200))
+              // ✅ FIX: Log della risposta per debug (primi 500 caratteri)
+              console.log('📄 [GitHub API] Risposta JSON (primi 500 char):', data.substring(0, 500))
+              console.log('📄 [GitHub API] Tentativo parsing JSON...')
               
               const release = JSON.parse(data)
+              console.log('✅ [GitHub API] JSON parsato con successo!')
               
               // ✅ FIX: Valida che la risposta abbia i campi necessari
+              console.log('📄 [GitHub API] Validazione struttura release...')
+              console.log(`📄 [GitHub API] Release object esiste: ${!!release}`)
+              console.log(`📄 [GitHub API] tag_name esiste: ${!!release?.tag_name}`)
+              console.log(`📄 [GitHub API] assets esiste: ${!!release?.assets}`)
+              
               if (!release || !release.tag_name) {
-                console.error('❌ [GitHub API] Risposta JSON non valida - manca tag_name')
-                console.error('❌ [GitHub API] Release object:', JSON.stringify(release, null, 2))
+                console.error('❌ [GitHub API] ========== ERRORE: STRUTTURA NON VALIDA ==========')
+                console.error('❌ [GitHub API] Release object completo:', JSON.stringify(release, null, 2))
+                this.sendNotification('error', 'GitHub API Error', 'Risposta GitHub API non valida - struttura dati errata')
                 return reject(new Error('Risposta GitHub API non valida - struttura dati errata'))
               }
               
-              console.log('🔍 [GitHub API] Release trovata:', release.tag_name)
-              console.log('📁 [GitHub API] Assets disponibili:', release.assets ? release.assets.map(a => ({
+              console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+              console.log('✅ [GitHub API] ========== RELEASE VALIDA ==========')
+              console.log('✅ [GitHub API] Release trovata:', release.tag_name)
+              console.log('✅ [GitHub API] Release ID:', release.id)
+              console.log('✅ [GitHub API] Release name:', release.name)
+              console.log('✅ [GitHub API] Release published_at:', release.published_at)
+              console.log('✅ [GitHub API] Numero assets:', release.assets ? release.assets.length : 0)
+              console.log('✅ [GitHub API] Assets disponibili:', release.assets ? release.assets.map(a => ({
                 name: a.name,
                 size: a.size,
                 download_url: a.browser_download_url
               })) : 'Nessun asset')
+              console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
               resolve(release)
             } catch (err) {
-              console.error('❌ [GitHub API] Errore parsing JSON:', err.message)
+              console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+              console.error('❌ [GitHub API] ========== ERRORE PARSING JSON ==========')
+              console.error('❌ [GitHub API] Errore:', err.message)
               console.error('❌ [GitHub API] Stack:', err.stack)
-              console.error('❌ [GitHub API] Data ricevuta (primi 500 char):', data.substring(0, 500))
+              console.error('❌ [GitHub API] Data length:', data.length)
+              console.error('❌ [GitHub API] Data ricevuta (primi 1000 char):', data.substring(0, 1000))
+              console.error('❌ [GitHub API] Data ricevuta (ultimi 200 char):', data.substring(Math.max(0, data.length - 200)))
+              console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+              this.sendNotification('error', 'GitHub API Parse Error', `Errore parsing JSON: ${err.message}`)
               reject(new Error(`Errore parsing risposta GitHub API: ${err.message}`))
             }
           })
@@ -944,6 +1028,7 @@ updaterCacheDirName: inferno-console-updater`
         // Gestione timeout
         request.setTimeout(30000, () => {
           console.error('❌ [GitHub API] Timeout dopo 30 secondi')
+          this.sendNotification('error', 'GitHub API Timeout', 'Timeout connessione dopo 30 secondi. Verifica la connessione internet.')
           request.destroy()
           reject(new Error('Timeout connessione GitHub API'))
         })
@@ -953,13 +1038,16 @@ updaterCacheDirName: inferno-console-updater`
           console.error('❌ [GitHub API] Errore connessione:', err.message)
           if (err.code === 'ECONNRESET' || err.code === 'EPIPE' || err.message.includes('socket hang up')) {
             console.log('🔄 [GitHub API] Socket hang up rilevato - tentativo di riconnessione...')
+            this.sendNotification('warning', 'GitHub API Connection', 'Socket hang up rilevato. Tentativo di riconnessione...')
             // Ritenta dopo 3 secondi
             setTimeout(() => {
               this.checkGitHubFiles().then(resolve).catch(reject)
             }, 3000)
           } else if (err.code === 'ENOTFOUND' || err.code === 'EAI_AGAIN') {
+            this.sendNotification('error', 'GitHub API Connection', 'Impossibile raggiungere GitHub. Verifica la connessione internet.')
             reject(new Error('Impossibile raggiungere GitHub - controlla la connessione internet'))
           } else {
+            this.sendNotification('error', 'GitHub API Connection', `Errore connessione: ${err.message}`)
             reject(new Error(`Errore connessione: ${err.message}`))
           }
         })

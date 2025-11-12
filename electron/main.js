@@ -1085,6 +1085,22 @@ ipcMain.handle('download-update', async () => {
   } catch (error) {
     console.error('Errore nel download aggiornamento:', error)
     
+    // ✅ NUOVO: Invia notifica al pannello debug
+    try {
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app-notification', {
+          type: 'error',
+          title: 'Download Update Error',
+          message: error.message || 'Errore durante il download dell\'aggiornamento',
+          category: 'app',
+          timestamp: new Date().toISOString()
+        })
+      }
+    } catch (notifErr) {
+      console.log('⚠️ [NOTIFICATION] Impossibile inviare notifica:', notifErr.message)
+    }
+    
     // ✅ FIX: Messaggi errore più chiari per l'utente
     let userMessage = 'Errore durante il download dell\'aggiornamento'
     

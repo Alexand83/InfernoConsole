@@ -73,7 +73,29 @@ class CustomUpdater {
     } catch (error) {
       console.error('❌ [UPDATER] Errore:', error)
       this.showError(error.message)
+      this.sendNotification('error', 'Update Error', error.message)
       throw error
+    }
+  }
+
+  /**
+   * Helper per inviare notifiche al pannello debug
+   */
+  sendNotification(type, title, message) {
+    try {
+      const { BrowserWindow } = require('electron')
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app-notification', {
+          type,
+          title,
+          message,
+          category: 'app',
+          timestamp: new Date().toISOString()
+        })
+      }
+    } catch (err) {
+      console.log('⚠️ [NOTIFICATION] Impossibile inviare notifica:', err.message)
     }
   }
 
