@@ -51,9 +51,20 @@
   DetailPrint "Rimozione directory: $INSTDIR"
   
   ; ✅ Rimuovi TUTTA la directory di installazione con /r (ricorsivo)
-  RMDir /r "$INSTDIR"
+  ; Usa /REBOOTOK per forzare la rimozione anche se ci sono lock
+  RMDir /r /REBOOTOK "$INSTDIR"
   
-  ; Verifica se la directory esiste ancora
+  ; Aspetta un momento per permettere a Windows di completare
+  Sleep 500
+  
+  ; Secondo tentativo se la directory esiste ancora
+  ${If} ${FileExists} "$INSTDIR"
+    DetailPrint "Directory ancora presente, secondo tentativo..."
+    RMDir /r "$INSTDIR"
+    Sleep 500
+  ${EndIf}
+  
+  ; Verifica finale
   ${If} ${FileExists} "$INSTDIR"
     DetailPrint "ERRORE: Directory $INSTDIR non rimossa completamente"
   ${Else}
