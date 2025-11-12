@@ -2,34 +2,27 @@
 ; Gestisce la chiusura automatica dell'app durante l'installazione
 
 !macro preInit
-  ; Termina automaticamente tutti i processi Inferno Console/Electron
-  nsExec::ExecToLog 'taskkill /f /im "Inferno Console.exe"'
-  Pop $0
-  nsExec::ExecToLog 'taskkill /f /im "electron.exe"'
-  Pop $0
-  nsExec::ExecToLog 'taskkill /f /im "node.exe"'
+  ; ✅ FIX: Termina SOLO "Inferno Console.exe" (non node.exe o electron.exe generici)
+  ; Usa /T per terminare anche i processi figli
+  nsExec::ExecToLog 'taskkill /IM "Inferno Console.exe" /T /F 2>nul'
   Pop $0
   
-  ; Aspetta un momento per assicurarsi che i processi siano terminati
-  Sleep 2000
+  ; Aspetta un momento per assicurarsi che il processo sia terminato
+  Sleep 1000
 !macroend
 
 !macro customInstall
-  ; Termina tutti i processi Inferno Console/Electron se sono in esecuzione
-  nsExec::ExecToLog 'taskkill /f /im "Inferno Console.exe"'
-  Pop $0
-  nsExec::ExecToLog 'taskkill /f /im "electron.exe"'
-  Pop $0
-  nsExec::ExecToLog 'taskkill /f /im "node.exe"'
+  ; ✅ FIX: Termina SOLO "Inferno Console.exe" durante l'installazione
+  nsExec::ExecToLog 'taskkill /IM "Inferno Console.exe" /T /F 2>nul'
   Pop $0
   
-  ; Aspetta un momento per assicurarsi che i processi siano terminati
-  Sleep 2000
+  ; Aspetta un momento per assicurarsi che il processo sia terminato
+  Sleep 1000
 !macroend
 
 !macro customUnInstall
   ; Termina il processo Inferno Console durante la disinstallazione
-  nsExec::ExecToLog 'taskkill /f /im "Inferno Console.exe"'
+  nsExec::ExecToLog 'taskkill /IM "Inferno Console.exe" /T /F 2>nul'
   Pop $0
-  Sleep 1000
+  Sleep 500
 !macroend
