@@ -26,7 +26,10 @@
     "update-version": "node scripts/update-version.js",
     "version:patch": "npm version patch && npm run update-version",
     "version:minor": "npm version minor && npm run update-version",
-    "version:major": "npm version major && npm run update-version"
+    "version:major": "npm version major && npm run update-version",
+    "test:update": "node test-update-local.js",
+    "test:update:quick": "node test-update-quick.js",
+    "test:update:app": "cross-env UPDATE_TEST_MODE=local npm run electron"
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",

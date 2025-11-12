@@ -627,6 +627,7 @@ updaterCacheDirName: inferno-console-updater`
   async downloadInstaller(installerInfo) {
     try {
       const https = require('https')
+      const http = require('http')
       const fs = require('fs')
       const path = require('path')
       
@@ -638,8 +639,15 @@ updaterCacheDirName: inferno-console-updater`
       return new Promise((resolve, reject) => {
         const parsedUrl = new URL(installerInfo.browser_download_url)
         
+        // ✅ TEST: Usa il protocollo corretto (http o https)
+        const isLocalTest = parsedUrl.protocol === 'http:'
+        const protocol = isLocalTest ? http : https
+        
+        console.log(`🔍 [DOWNLOAD] Protocollo: ${parsedUrl.protocol} - Test locale: ${isLocalTest}`)
+        
         const options = {
           hostname: parsedUrl.hostname,
+          port: parsedUrl.port || (isLocalTest ? 80 : 443),
           path: parsedUrl.pathname + parsedUrl.search,
           method: 'GET',
           headers: {
@@ -654,7 +662,7 @@ updaterCacheDirName: inferno-console-updater`
         const total = installerInfo.size
         let downloaded = 0
         
-        const request = https.get(options, (response) => {
+        const request = protocol.get(options, (response) => {
           // Gestisci redirect
           if (response.statusCode === 302 || response.statusCode === 301) {
             console.log('🔄 Redirect rilevato:', response.headers.location)
@@ -663,15 +671,19 @@ updaterCacheDirName: inferno-console-updater`
             
             // Segui il redirect
             const redirectUrl = response.headers.location
-            const redirectParsed = url.parse(redirectUrl)
+            const redirectParsedUrl = new URL(redirectUrl)
+            const redirectIsLocal = redirectParsedUrl.protocol === 'http:'
+            const redirectProtocol = redirectIsLocal ? http : https
+            
             const redirectOptions = {
-              hostname: redirectParsed.hostname,
-              path: redirectParsed.path,
+              hostname: redirectParsedUrl.hostname,
+              port: redirectParsedUrl.port || (redirectIsLocal ? 80 : 443),
+              path: redirectParsedUrl.pathname + redirectParsedUrl.search,
               method: 'GET',
               headers: options.headers
             }
             
-            https.get(redirectOptions, (redirectResponse) => {
+            redirectProtocol.get(redirectOptions, (redirectResponse) => {
               const redirectFile = fs.createWriteStream(downloadPath)
               
               redirectResponse.on('data', (chunk) => {
@@ -761,10 +773,21 @@ updaterCacheDirName: inferno-console-updater`
   async checkGitHubFiles() {
     try {
       const https = require('https')
-      const url = 'https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest'
+      const http = require('http')
+      
+      // ✅ TEST: Usa server locale se la variabile d'ambiente è impostata
+      const isTestMode = process.env.UPDATE_TEST_MODE === 'local'
+      const url = isTestMode 
+        ? 'http://localhost:3456/repos/Alexand83/InfernoConsole/releases/latest'
+        : 'https://api.github.com/repos/Alexand83/InfernoConsole/releases/latest'
+      
+      console.log(`🔍 [UPDATE] Modalità: ${isTestMode ? 'TEST LOCALE' : 'PRODUZIONE'}`)
+      console.log(`🔍 [UPDATE] URL: ${url}`)
+      
+      const protocol = isTestMode ? http : https
       
       return new Promise((resolve, reject) => {
-        const request = https.get(url, {
+        const request = protocol.get(url, {
           headers: {
             'User-Agent': 'DJ-Console-Updater/1.4.139',
             'Accept': 'application/vnd.github.v3+json',
