@@ -300,9 +300,16 @@ class AppUpdater {
       console.log('✅ Download completato, pronto per installazione tramite UI')
     })
 
-    // ✅ FIX: NON controllare automaticamente all'avvio per evitare loop infiniti
-    // Il controllo deve essere fatto manualmente dall'utente o tramite IPC
-    console.log('✅ AppUpdater inizializzato - controllo manuale disponibile')
+    // ✅ FIX: Controlla aggiornamenti automaticamente dopo 30 secondi
+    // Ma SOLO se non c'è un update in corso (controllato nel main.js)
+    this.autoCheckTimeout = setTimeout(() => {
+      console.log('🔍 Controllo automatico aggiornamenti...')
+      this.checkForUpdates().catch(err => {
+        console.error('❌ Errore controllo automatico:', err.message)
+      })
+    }, 30000) // 30 secondi dopo l'avvio
+    
+    console.log('✅ AppUpdater inizializzato - controllo automatico tra 30 secondi')
   }
 
   async checkForUpdates() {
