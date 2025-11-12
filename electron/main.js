@@ -1133,40 +1133,26 @@ ipcMain.handle('install-update', async () => {
       throw new Error('Installer non trovato nella directory di download')
     }
     
-    console.log(`🚀 [INSTALL] Esecuzione installer: ${installerPath}`)
-    console.log(`📦 [INSTALL] Tipo: ${isNSISInstaller ? 'NSIS (modalità UPDATE)' : 'Standard'}`)
+    console.log(`🚀 [INSTALL] Avvio Custom Updater con UI`)
+    console.log(`📁 [INSTALL] Installer: ${installerPath}`)
     
-    // ✅ FIX: Usa modalità UPDATE per aggiornamenti (solo progress bar, no scelte)
-    //  /UPDATE = Mostra solo progress bar, no wizard
-    //  /S = Silent mode (no UI) - NON usato per vedere la progress bar
-    const args = isNSISInstaller ? ['/UPDATE', '/ALLUSERS'] : []
-    
-    console.log(`📋 [INSTALL] Parametri: ${args.join(' ')}`)
-    
-    // Esegui l'installer
-    const installer = spawn(installerPath, args, {
-      detached: true,
-      stdio: 'ignore'
-    })
-    
-    installer.unref()
+    // ✅ Usa Custom Updater con finestra di progresso
+    const CustomUpdater = require('./custom-updater')
+    const customUpdater = new CustomUpdater()
     
     // ✅ FIX: Imposta flag per evitare loop infiniti dopo update
     const flagPath = path.join(app.getPath('userData'), 'update-in-progress.flag')
     fs.writeFileSync(flagPath, Date.now().toString())
     console.log('🚩 [INSTALL] Flag update-in-progress creato')
     
-    // Chiudi l'app dopo 2 secondi per dare tempo all'installer di avviarsi
-    setTimeout(() => {
-      console.log('👋 [INSTALL] Chiusura app per permettere l\'aggiornamento...')
-      app.quit()
-    }, 2000)
+    // Esegui update (mostrerà finestra con progress bar)
+    customUpdater.performUpdate(installerPath).catch(error => {
+      console.error('❌ [INSTALL] Errore update:', error)
+    })
     
     return { 
       success: true, 
-      message: isNSISInstaller 
-        ? 'Installer NSIS avviato. Segui le istruzioni a schermo per completare l\'aggiornamento.' 
-        : 'Installer avviato, l\'app si chiuderà tra 2 secondi',
+      message: 'Aggiornamento avviato! Vedrai una finestra con la barra di progressione.',
       isNSIS: isNSISInstaller
     }
   } catch (error) {

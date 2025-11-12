@@ -1,35 +1,9 @@
 ; Script NSIS personalizzato per Inferno Console
-; Supporta modalità UPDATE (solo progress bar, no scelte)
+; Gestisce la chiusura automatica dell'app durante l'installazione
 
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
-!include "WordFunc.nsh"
 !insertmacro GetParent
-!insertmacro GetParameters
-!insertmacro GetOptions
-
-; Variabile per rilevare modalità UPDATE
-Var UpdateMode
-
-; ✅ Inizializzazione: rileva modalità UPDATE
-!macro customInit
-  ; Controlla se è stato passato /UPDATE come parametro
-  ${GetParameters} $R0
-  StrCpy $UpdateMode "0"
-  
-  ; Usa GetOptions per cercare /UPDATE
-  ${GetOptions} $R0 "/UPDATE" $R1
-  ${IfNot} ${Errors}
-    ; Parametro /UPDATE trovato
-    StrCpy $UpdateMode "1"
-    
-    ; In modalità UPDATE, leggi il path precedente dal registro
-    ReadRegStr $INSTDIR HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$INSTDIR" "InstallLocation"
-    ${If} $INSTDIR == ""
-      ReadRegStr $INSTDIR HKCU "Software\Inferno Console" "InstallPath"
-    ${EndIf}
-  ${EndIf}
-!macroend
 
 !macro preInit
   ; ✅ FIX: Termina SOLO "Inferno Console.exe" (non node.exe o electron.exe generici)
@@ -44,36 +18,14 @@ Var UpdateMode
   Pop $0
   Sleep 1000
   
-  ; ✅ Mostra dettagli installazione
-  ${If} $UpdateMode == "1"
-    DetailPrint "Aggiornamento Inferno Console in corso..."
-  ${Else}
-    DetailPrint "Installazione Inferno Console in corso..."
-  ${EndIf}
-  Sleep 500
-  
-  DetailPrint "Estrazione file..."
-  Sleep 300
-  
-  DetailPrint "Configurazione collegamenti..."
   ; ✅ Crea cartella nel menu Start
   CreateDirectory "$SMPROGRAMS\Inferno Console"
   
-  ; ✅ Crea shortcut per l'APP nel menu Start
+  ; ✅ Crea shortcut per l'APP nel menu Start (nella stessa cartella dell'uninstaller)
   CreateShortcut "$SMPROGRAMS\Inferno Console\Inferno Console.lnk" "$INSTDIR\Inferno Console.exe"
   
   ; ✅ Crea shortcut per l'UNINSTALLER nel menu Start
   CreateShortcut "$SMPROGRAMS\Inferno Console\Uninstall Inferno Console.lnk" "$INSTDIR\Uninstall Inferno Console.exe"
-  Sleep 300
-  
-  DetailPrint "Registrazione applicazione..."
-  Sleep 300
-  
-  ${If} $UpdateMode == "1"
-    DetailPrint "Aggiornamento completato con successo!"
-  ${Else}
-    DetailPrint "Installazione completata con successo!"
-  ${EndIf}
 !macroend
 
 !macro customUnInstall
@@ -123,29 +75,4 @@ Var UpdateMode
   
   ; Disinstallazione completata
 !macroend
-
-; ✅ Funzioni per saltare pagine in modalità UPDATE
-Function .onInit
-  ; Questa funzione viene chiamata all'avvio dell'installer
-  ${GetParameters} $R0
-  StrCpy $UpdateMode "0"
-  
-  ; Usa GetOptions per cercare /UPDATE
-  ${GetOptions} $R0 "/UPDATE" $R1
-  ${IfNot} ${Errors}
-    StrCpy $UpdateMode "1"
-  ${EndIf}
-FunctionEnd
-
-Function PageDirectoryPre
-  ${If} $UpdateMode == "1"
-    Abort  ; Salta la pagina di scelta directory
-  ${EndIf}
-FunctionEnd
-
-Function PageComponentsPre
-  ${If} $UpdateMode == "1"
-    Abort  ; Salta la pagina di scelta componenti
-  ${EndIf}
-FunctionEnd
 

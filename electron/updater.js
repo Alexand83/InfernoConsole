@@ -707,19 +707,23 @@ updaterCacheDirName: inferno-console-updater`
               redirectResponse.on('end', () => {
                 redirectFile.end()
                 
-                // ✅ FIX: Invia progresso finale al 100%
-                const mainWindow = require('./main').getMainWindow()
-                if (mainWindow) {
-                  mainWindow.webContents.send('download-progress', {
-                    percent: 100,
-                    bytesPerSecond: 0,
-                    transferred: total,
-                    total: total
-                  })
-                }
-                
-                console.log('✅ Download installer completato:', downloadPath)
-                resolve(downloadPath)
+                // ✅ FIX: Aspetta che il file sia scritto completamente
+                setTimeout(() => {
+                  // Invia progresso finale al 100%
+                  const mainWindow = require('./main').getMainWindow()
+                  if (mainWindow) {
+                    console.log('📊 [DOWNLOAD] Invio progresso finale: 100%')
+                    mainWindow.webContents.send('download-progress', {
+                      percent: 100,
+                      bytesPerSecond: 0,
+                      transferred: total,
+                      total: total
+                    })
+                  }
+                  
+                  console.log('✅ Download installer completato:', downloadPath)
+                  resolve(downloadPath)
+                }, 100)
               })
               
               redirectResponse.on('error', (err) => {
@@ -753,19 +757,23 @@ updaterCacheDirName: inferno-console-updater`
           response.on('end', () => {
             file.end()
             
-            // ✅ FIX: Invia progresso finale al 100%
-            const mainWindow = require('./main').getMainWindow()
-            if (mainWindow) {
-              mainWindow.webContents.send('download-progress', {
-                percent: 100,
-                bytesPerSecond: 0,
-                transferred: total,
-                total: total
-              })
-            }
-            
-            console.log('✅ Download installer completato:', downloadPath)
-            resolve(downloadPath)
+            // ✅ FIX: Aspetta che il file sia scritto completamente
+            setTimeout(() => {
+              // Invia progresso finale al 100%
+              const mainWindow = require('./main').getMainWindow()
+              if (mainWindow) {
+                console.log('📊 [DOWNLOAD] Invio progresso finale: 100%')
+                mainWindow.webContents.send('download-progress', {
+                  percent: 100,
+                  bytesPerSecond: 0,
+                  transferred: total,
+                  total: total
+                })
+              }
+              
+              console.log('✅ Download installer completato:', downloadPath)
+              resolve(downloadPath)
+            }, 100)
           })
           
           response.on('error', (err) => {
