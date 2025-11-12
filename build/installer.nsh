@@ -1,16 +1,10 @@
 ; Script NSIS personalizzato per Inferno Console
 ; Gestisce la chiusura automatica dell'app durante l'installazione
 
-; Include funzioni per manipolazione path
-!include "FileFunc.nsh"
-
 !macro preInit
   ; ✅ FIX: Termina SOLO "Inferno Console.exe" (non node.exe o electron.exe generici)
-  ; Usa /T per terminare anche i processi figli
   nsExec::ExecToLog 'taskkill /IM "Inferno Console.exe" /T /F 2>nul'
   Pop $0
-  
-  ; Aspetta un momento per assicurarsi che il processo sia terminato
   Sleep 1000
 !macroend
 
@@ -18,13 +12,10 @@
   ; ✅ FIX: Termina SOLO "Inferno Console.exe" durante l'installazione
   nsExec::ExecToLog 'taskkill /IM "Inferno Console.exe" /T /F 2>nul'
   Pop $0
-  
-  ; Aspetta un momento per assicurarsi che il processo sia terminato
   Sleep 1000
-!macroend
-
-!macro customFinish
-  ; ✅ Crea shortcut per l'uninstaller nel menu Start (dopo che NSIS ha creato la cartella)
+  
+  ; ✅ Crea shortcut per l'uninstaller nel menu Start
+  CreateDirectory "$SMPROGRAMS\Inferno Console"
   CreateShortcut "$SMPROGRAMS\Inferno Console\Uninstall Inferno Console.lnk" "$INSTDIR\Uninstall Inferno Console.exe"
 !macroend
 
@@ -33,18 +24,49 @@
   nsExec::ExecToLog 'taskkill /IM "Inferno Console.exe" /T /F 2>nul'
   Pop $0
   Sleep 500
-!macroend
-
-!macro customRemoveFiles
-  ; ✅ Questa macro viene eseguita DOPO la rimozione dei file da parte di NSIS
-  ; Rimuovi TUTTE le sottocartelle rimaste
+  
+  ; ✅ Rimuovi shortcut uninstaller dal menu Start
+  Delete "$SMPROGRAMS\Inferno Console\Uninstall Inferno Console.lnk"
+  
+  ; ✅ Rimuovi TUTTE le sottocartelle
   RMDir /r "$INSTDIR\locales"
   RMDir /r "$INSTDIR\resources"
   
-  ; Rimuovi la directory principale
+  ; ✅ Rimuovi la directory principale (dopo che NSIS ha rimosso i file)
   RMDir "$INSTDIR"
   
-  ; ✅ Rimuovi anche la cartella parent se è vuota (es: "InfernoNuovo")
-  ${GetParent} "$INSTDIR" $0
+  ; ✅ Rimuovi la cartella parent se è vuota
+  Push "$INSTDIR"
+  Call un.GetParent
+  Pop $0
   RMDir "$0"
 !macroend
+
+; Funzione per ottenere la directory parent
+Function un.GetParent
+  Exch $0
+  Push $1
+  Push $2
+  
+  StrCpy $1 $0 1 -1
+  StrCmp $1 "\" 0 +3
+    StrCpy $0 $0 -1
+    Goto -3
+  
+  StrCpy $2 $0 1 -1
+  StrCmp $2 "\" 0 +3
+    StrCpy $0 $0 -1
+    Goto -3
+  
+  StrCpy $1 0
+  IntOp $1 $1 - 1
+  StrCpy $2 $0 1 $1
+  StrCmp $2 "" end
+  StrCmp $2 "\" 0 -3
+  StrCpy $0 $0 $1
+  
+  end:
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
