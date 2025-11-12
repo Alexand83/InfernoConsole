@@ -48,6 +48,45 @@ const Settings = () => {
     checkIfPortable()
   }, [])
 
+  // ✅ NUOVO: Listener per log dalla console di Electron (F12)
+  useEffect(() => {
+    const handleConsoleLog = (event: any, data: { level: string, message: string, data: string | null, timestamp: string }) => {
+      const { level, message, data: dataStr } = data
+      
+      // Stampa nella console del browser (F12)
+      const logMethod = level === 'error' ? console.error : 
+                       level === 'warn' ? console.warn : 
+                       level === 'info' ? console.info : 
+                       console.log
+      
+      if (dataStr) {
+        try {
+          const parsedData = JSON.parse(dataStr)
+          logMethod(`[ELECTRON] ${message}`, parsedData)
+        } catch (e) {
+          logMethod(`[ELECTRON] ${message}`, dataStr)
+        }
+      } else {
+        logMethod(`[ELECTRON] ${message}`)
+      }
+    }
+
+    // Aggiungi listener se disponibile
+    if ((window as any).autoUpdater?.onConsoleLog) {
+      (window as any).autoUpdater.onConsoleLog(handleConsoleLog)
+      console.log('✅ [SETTINGS] Listener console-log attivato')
+    } else {
+      console.warn('⚠️ [SETTINGS] autoUpdater.onConsoleLog non disponibile')
+    }
+
+    return () => {
+      // Rimuovi listener
+      if ((window as any).autoUpdater?.removeConsoleLogListener) {
+        (window as any).autoUpdater.removeConsoleLogListener(handleConsoleLog)
+      }
+    }
+  }, [])
+
   // ✅ NUOVO: Listener per notifiche shortcut portabile
   useEffect(() => {
     const handlePortableShortcutInfo = (event: any, data: any) => {

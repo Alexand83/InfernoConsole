@@ -105,7 +105,10 @@ contextBridge.exposeInMainWorld('autoUpdater', {
   onDownloadComplete: (callback) => ipcRenderer.on('download-complete', callback),
   removeDownloadCompleteListener: (callback) => ipcRenderer.removeListener('download-complete', callback),
   onInstallingUpdate: (callback) => ipcRenderer.on('installing-update', callback),
-  removeInstallingUpdateListener: (callback) => ipcRenderer.removeListener('installing-update', callback)
+  removeInstallingUpdateListener: (callback) => ipcRenderer.removeListener('installing-update', callback),
+  // ✅ NUOVO: Listener per log dalla console di Electron
+  onConsoleLog: (callback) => ipcRenderer.on('console-log', (event, data) => callback(event, data)),
+  removeConsoleLogListener: (callback) => ipcRenderer.removeListener('console-log', callback)
 })
 
 // Simple logger bridge

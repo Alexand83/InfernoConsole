@@ -1038,44 +1038,114 @@ ipcMain.handle('db-save', async (_evt, payload) => {
   }
 })
 
+// ✅ Helper per logging che invia anche alla console del browser (F12)
+function logToBrowser(level, message, data = null) {
+  try {
+    const { BrowserWindow } = require('electron')
+    const mainWindow = BrowserWindow.getAllWindows()[0]
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('console-log', {
+        level, // 'log', 'error', 'warn', 'info'
+        message,
+        data: data ? JSON.stringify(data, null, 2) : null,
+        timestamp: new Date().toISOString()
+      })
+    }
+  } catch (e) {
+    // Ignora errori di invio log
+  }
+}
+
+// ✅ Helper per rendere errori serializzabili per IPC
+// CRITICAL: Questa funzione NON può mai fallire o lanciare errori
+function makeErrorSerializable(error) {
+  try {
+    // Estrai il messaggio in modo sicuro
+    let message = 'Errore sconosciuto'
+    try {
+      if (error && typeof error === 'object') {
+        if (error.message) {
+          message = String(error.message)
+        } else if (error.toString && typeof error.toString === 'function') {
+          message = String(error.toString())
+        } else {
+          message = JSON.stringify(error)
+        }
+      } else if (error) {
+        message = String(error)
+      }
+    } catch (e) {
+      message = 'Errore durante la serializzazione del messaggio'
+    }
+    
+    // Crea un errore pulito e serializzabile
+    const serializableError = new Error(message)
+    
+    // Prova a copiare stack in modo sicuro
+    try {
+      if (error && error.stack && typeof error.stack === 'string') {
+        serializableError.stack = error.stack
+      }
+    } catch (e) {
+      // Ignora errori di copia stack
+    }
+    
+    // Verifica che sia serializzabile
+    try {
+      JSON.stringify(serializableError)
+    } catch (e) {
+      // Se non è serializzabile, crea un errore minimale
+      return new Error(message)
+    }
+    
+    return serializableError
+  } catch (e) {
+    // Se TUTTO fallisce, ritorna un errore minimale
+    return new Error('Errore durante la gestione dell\'errore')
+  }
+}
+
 // IPC handlers per aggiornamenti
 ipcMain.handle('download-update', async () => {
+  // ✅ CRITICAL: Wrapper per catturare qualsiasi errore e renderlo serializzabile
   try {
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('📥 [DOWNLOAD UPDATE] ========== INIZIO ==========')
-    console.log('📥 [DOWNLOAD UPDATE] Timestamp:', new Date().toISOString())
-    
-    // ✅ FIX: Usa il nostro sistema personalizzato invece di electron-updater
     if (!global.appUpdater) {
-      console.log('📥 [DOWNLOAD UPDATE] Creazione AppUpdater...')
       const AppUpdater = require('./updater')
       global.appUpdater = new AppUpdater()
-      console.log('✅ [DOWNLOAD UPDATE] AppUpdater creato')
-    } else {
-      console.log('✅ [DOWNLOAD UPDATE] AppUpdater già esistente')
     }
     const updater = global.appUpdater
     
-    // Controlla se ci sono aggiornamenti usando il nostro sistema
-    console.log('📥 [DOWNLOAD UPDATE] Chiamata checkGitHubFiles()...')
+    // ✅ WRAP: Avvolgi ogni chiamata in try-catch per catturare errori non serializzabili
     let release
     try {
       release = await updater.checkGitHubFiles()
-      console.log('✅ [DOWNLOAD UPDATE] checkGitHubFiles completato')
-      console.log('📥 [DOWNLOAD UPDATE] Release:', release ? `tag: ${release.tag_name}, assets: ${release.assets?.length || 0}` : 'null')
     } catch (checkError) {
-      console.error('❌ [DOWNLOAD UPDATE] Errore in checkGitHubFiles:', checkError)
-      console.error('❌ [DOWNLOAD UPDATE] Stack:', checkError.stack)
-      console.error('❌ [DOWNLOAD UPDATE] Message:', checkError.message)
-      throw checkError
+      const safeError = makeErrorSerializable(checkError)
+      throw safeError
     }
     
     if (!release || !release.assets) {
-      console.error('❌ [DOWNLOAD UPDATE] Release o assets non validi')
-      throw new Error('Nessun aggiornamento disponibile')
+      throw makeErrorSerializable(new Error('Nessun aggiornamento disponibile'))
     }
     
-    // Trova l'installer NSIS
+    // ✅ DEBUG: Log dettagliato degli assets disponibili
+    const assetsInfo = `Assets disponibili: ${release.assets.length}\n` + 
+      release.assets.map((asset, index) => 
+        `  [${index}] ${asset.name} (${asset.size} bytes)\n` +
+        `      browser_download_url: ${asset.browser_download_url || 'NON PRESENTE'}\n` +
+        `      download_url: ${asset.download_url || 'NON PRESENTE'}`
+      ).join('\n')
+    
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('🔍 [DOWNLOAD UPDATE] Assets disponibili:', release.assets.length)
+    logToBrowser('info', '🔍 [DOWNLOAD UPDATE] Assets disponibili', { count: release.assets.length, assets: release.assets })
+    release.assets.forEach((asset, index) => {
+      const assetLog = `[${index}] ${asset.name} (${asset.size} bytes) - browser_download_url: ${asset.browser_download_url || 'NON PRESENTE'}`
+      console.log(`  ${assetLog}`)
+      logToBrowser('info', `Asset [${index}]: ${asset.name}`, asset)
+    })
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    
     const installer = release.assets.find(asset => 
       asset.name === 'Inferno-Console-Setup.exe' ||
       asset.name === 'Inferno-Console-Installer.exe' ||
@@ -1083,26 +1153,49 @@ ipcMain.handle('download-update', async () => {
     )
     
     if (!installer) {
-      throw new Error('Installer non trovato')
+      const errorMsg = '❌ [DOWNLOAD UPDATE] Installer non trovato negli assets'
+      console.error(errorMsg)
+      logToBrowser('error', errorMsg, { assets: release.assets.map(a => a.name) })
+      throw makeErrorSerializable(new Error('Installer non trovato'))
     }
     
-    console.log('🔍 [DEBUG] Installer object:', JSON.stringify(installer, null, 2))
+    // ✅ DEBUG: Log dettagliato dell'installer trovato
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('✅ [DOWNLOAD UPDATE] Installer trovato:')
+    console.log(`  Nome: ${installer.name}`)
+    console.log(`  Dimensione: ${installer.size} bytes`)
+    console.log(`  browser_download_url: ${installer.browser_download_url || 'NON PRESENTE'}`)
+    console.log(`  download_url: ${installer.download_url || 'NON PRESENTE'}`)
+    console.log(`  URL completo: ${JSON.stringify(installer, null, 2)}`)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     
-    // Scarica l'installer usando il nostro sistema
-    console.log('📥 [DOWNLOAD UPDATE] Chiamata downloadInstaller()...')
+    logToBrowser('info', '✅ [DOWNLOAD UPDATE] Installer trovato', installer)
+    
+    // ✅ FIX: Verifica che browser_download_url esista
+    if (!installer.browser_download_url) {
+      const errorMsg = '❌ [DOWNLOAD UPDATE] browser_download_url mancante nell\'installer'
+      console.error(errorMsg)
+      logToBrowser('error', errorMsg, installer)
+      throw makeErrorSerializable(new Error('URL di download non disponibile nell\'installer'))
+    }
+    
     let downloadPath
     try {
+      const startMsg = `📥 [DOWNLOAD UPDATE] Avvio download da: ${installer.browser_download_url}`
+      console.log(startMsg)
+      logToBrowser('info', startMsg, { url: installer.browser_download_url })
       downloadPath = await updater.downloadInstaller(installer)
-      console.log('✅ [DOWNLOAD UPDATE] downloadInstaller completato')
-      console.log('📥 [DOWNLOAD UPDATE] Path:', downloadPath)
+      const completeMsg = `✅ [DOWNLOAD UPDATE] Download completato: ${downloadPath}`
+      console.log(completeMsg)
+      logToBrowser('info', completeMsg, { path: downloadPath })
     } catch (downloadError) {
-      console.error('❌ [DOWNLOAD UPDATE] Errore in downloadInstaller:', downloadError)
-      console.error('❌ [DOWNLOAD UPDATE] Stack:', downloadError.stack)
-      console.error('❌ [DOWNLOAD UPDATE] Message:', downloadError.message)
-      throw downloadError
+      const errorMsg = `❌ [DOWNLOAD UPDATE] Errore durante download: ${downloadError?.message || String(downloadError)}`
+      console.error(errorMsg)
+      logToBrowser('error', errorMsg, { error: downloadError?.message, stack: downloadError?.stack })
+      const safeError = makeErrorSerializable(downloadError)
+      throw safeError
     }
     
-    // ✅ FIX: Invia evento download-complete al renderer
     const { BrowserWindow } = require('electron')
     const mainWindow = BrowserWindow.getAllWindows()[0]
     if (mainWindow) {
@@ -1115,76 +1208,50 @@ ipcMain.handle('download-update', async () => {
       message: 'Installer scaricato con successo!'
     }
   } catch (error) {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.error('❌ [DOWNLOAD UPDATE] ========== ERRORE FINALE ==========')
-    console.error('❌ [DOWNLOAD UPDATE] Errore:', error)
-    console.error('❌ [DOWNLOAD UPDATE] Type:', typeof error)
-    console.error('❌ [DOWNLOAD UPDATE] Constructor:', error?.constructor?.name)
-    console.error('❌ [DOWNLOAD UPDATE] Message:', error?.message)
-    console.error('❌ [DOWNLOAD UPDATE] Stack:', error?.stack)
-    console.error('❌ [DOWNLOAD UPDATE] Cause:', error?.cause)
-    console.error('❌ [DOWNLOAD UPDATE] Stringified:', JSON.stringify(error, Object.getOwnPropertyNames(error)))
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    // ✅ CRITICAL: Cattura qualsiasi errore, anche non serializzabile
+    const safeError = makeErrorSerializable(error)
+    const errorMessage = safeError.message || String(safeError) || 'Errore sconosciuto'
     
-    // ✅ NUOVO: Invia notifica al pannello debug
+    console.error('❌ [DOWNLOAD UPDATE] Errore:', errorMessage)
+    
+    // Invia notifica
     try {
+      const { BrowserWindow } = require('electron')
       const mainWindow = BrowserWindow.getAllWindows()[0]
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('app-notification', {
           type: 'error',
           title: 'Download Update Error',
-          message: error?.message || String(error) || 'Errore durante il download dell\'aggiornamento',
+          message: errorMessage,
           category: 'app',
           timestamp: new Date().toISOString()
         })
       }
     } catch (notifErr) {
-      console.log('⚠️ [NOTIFICATION] Impossibile inviare notifica:', notifErr.message)
+      // Ignora errori di notifica
     }
     
-    // ✅ FIX: Messaggi errore più chiari per l'utente
+    // Crea messaggio user-friendly
     let userMessage = 'Errore durante il download dell\'aggiornamento'
-    const originalMessage = error.message || String(error)
     
-    if (originalMessage.includes('404') || originalMessage.includes('non trovata')) {
-      userMessage = 'Aggiornamento non ancora disponibile. La build potrebbe essere ancora in corso. Riprova tra qualche minuto.'
-    } else if (originalMessage.includes('403') || originalMessage.includes('Accesso negato')) {
-      userMessage = 'Impossibile accedere a GitHub. Potrebbe essere un problema di rate limit. Riprova più tardi.'
-    } else if (originalMessage.includes('429') || originalMessage.includes('Troppe richieste')) {
+    if (errorMessage.includes('404') || errorMessage.includes('non trovata')) {
+      userMessage = 'Aggiornamento non ancora disponibile. Riprova tra qualche minuto.'
+    } else if (errorMessage.includes('403') || errorMessage.includes('Accesso negato')) {
+      userMessage = 'Impossibile accedere a GitHub. Potrebbe essere un problema di rate limit.'
+    } else if (errorMessage.includes('429')) {
       userMessage = 'Troppe richieste a GitHub. Riprova tra qualche minuto.'
-    } else if (originalMessage.includes('parsing') || originalMessage.includes('JSON')) {
-      userMessage = 'Errore nella risposta di GitHub. La release potrebbe non essere ancora pubblicata. Riprova tra qualche minuto.'
-    } else if (originalMessage.includes('Timeout') || originalMessage.includes('timeout')) {
-      userMessage = 'Timeout durante la connessione a GitHub. Verifica la connessione internet e riprova.'
-    } else if (originalMessage.includes('ENOTFOUND') || originalMessage.includes('connessione')) {
+    } else if (errorMessage.includes('parsing') || errorMessage.includes('JSON')) {
+      userMessage = 'Errore nella risposta di GitHub. Riprova tra qualche minuto.'
+    } else if (errorMessage.includes('Timeout') || errorMessage.includes('timeout')) {
+      userMessage = 'Timeout durante la connessione. Verifica la connessione internet.'
+    } else if (errorMessage.includes('ENOTFOUND') || errorMessage.includes('connessione')) {
       userMessage = 'Impossibile raggiungere GitHub. Verifica la connessione internet.'
-    } else {
-      // Se non è un errore conosciuto, includi il messaggio originale
-      userMessage = `${userMessage}: ${originalMessage}`
+    } else if (errorMessage && errorMessage !== 'Errore sconosciuto') {
+      userMessage = `${userMessage}: ${errorMessage}`
     }
     
-    // Crea un errore con messaggio user-friendly + originale
-    // ✅ FIX: Assicurati che l'errore sia serializzabile per IPC
-    const friendlyError = new Error(userMessage)
-    friendlyError.originalError = originalMessage
-    friendlyError.cause = error?.message || String(error)
-    friendlyError.stack = error?.stack || friendlyError.stack
-    
-    // ✅ FIX: Aggiungi tutte le proprietà dell'errore originale
-    if (error) {
-      Object.getOwnPropertyNames(error).forEach(key => {
-        try {
-          if (key !== 'stack' && key !== 'message') {
-            friendlyError[key] = error[key]
-          }
-        } catch (e) {
-          // Ignora proprietà non serializzabili
-        }
-      })
-    }
-    
-    console.error('❌ [DOWNLOAD UPDATE] Lanciando errore friendly:', friendlyError.message)
-    throw friendlyError
+    // ✅ CRITICAL: Lancia SEMPRE un errore serializzabile
+    throw makeErrorSerializable(new Error(userMessage))
   }
 })
 
