@@ -50,18 +50,28 @@
   ; ✅ LOG: Mostra cosa stiamo per cancellare
   DetailPrint "Rimozione directory: $INSTDIR"
   
-  ; ✅ Rimuovi TUTTA la directory di installazione con /r (ricorsivo)
-  ; Usa /REBOOTOK per forzare la rimozione anche se ci sono lock
-  RMDir /r /REBOOTOK "$INSTDIR"
+  ; ✅ NUOVO APPROCCIO: Rimuovi contenuto e poi la directory stessa
+  ; RMDir /r ha un bug: rimuove il contenuto ma non la directory
   
-  ; Aspetta un momento per permettere a Windows di completare
-  Sleep 500
+  ; Rimuovi tutto il contenuto ricorsivamente
+  RMDir /r "$INSTDIR\*.*"
+  Sleep 200
   
-  ; Secondo tentativo se la directory esiste ancora
+  ; Rimuovi sottocartelle specifiche se ancora presenti
+  RMDir /r "$INSTDIR\locales"
+  RMDir /r "$INSTDIR\resources"
+  Sleep 200
+  
+  ; Ora rimuovi la directory principale (dovrebbe essere vuota)
+  RMDir "$INSTDIR"
+  Sleep 200
+  
+  ; Secondo tentativo se ancora presente
   ${If} ${FileExists} "$INSTDIR"
     DetailPrint "Directory ancora presente, secondo tentativo..."
     RMDir /r "$INSTDIR"
     Sleep 500
+    RMDir "$INSTDIR"
   ${EndIf}
   
   ; Verifica finale
