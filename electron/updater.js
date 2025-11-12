@@ -830,26 +830,113 @@ updaterCacheDirName: inferno-console-updater`
         }, (res) => {
           console.log('📡 [GitHub API] Status:', res.statusCode)
           
+          // ✅ FIX: Gestisci redirect (301, 302, 307, 308)
+          if (res.statusCode >= 300 && res.statusCode < 400) {
+            const location = res.headers.location
+            console.log('🔄 [GitHub API] Redirect rilevato:', location)
+            if (location) {
+              // Segui il redirect con una nuova richiesta
+              const redirectProtocol = location.startsWith('https:') ? https : http
+              const redirectRequest = redirectProtocol.get(location, {
+                headers: {
+                  'User-Agent': 'DJ-Console-Updater/1.4.139',
+                  'Accept': 'application/vnd.github.v3+json',
+                  'Connection': 'keep-alive',
+                  'Cache-Control': 'no-cache'
+                },
+                timeout: 30000
+              }, (redirectRes) => {
+                // Gestisci la risposta del redirect (ricorsione limitata)
+                if (redirectRes.statusCode === 200) {
+                  let redirectData = ''
+                  redirectRes.on('data', (chunk) => redirectData += chunk)
+                  redirectRes.on('end', () => {
+                    try {
+                      const release = JSON.parse(redirectData)
+                      if (release && release.tag_name) {
+                        resolve(release)
+                      } else {
+                        reject(new Error('Risposta redirect non valida'))
+                      }
+                    } catch (err) {
+                      reject(new Error(`Errore parsing redirect: ${err.message}`))
+                    }
+                  })
+                } else {
+                  reject(new Error(`Redirect fallito: HTTP ${redirectRes.statusCode}`))
+                }
+              })
+              redirectRequest.on('error', reject)
+              redirectRequest.setTimeout(30000, () => {
+                redirectRequest.destroy()
+                reject(new Error('Timeout redirect'))
+              })
+              return
+            }
+          }
+          
+          // ✅ FIX: Gestisci errori HTTP
           if (res.statusCode !== 200) {
-            console.error('❌ [GitHub API] HTTP Error:', res.statusCode, res.statusMessage)
-            return reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`))
+            let errorData = ''
+            res.on('data', (chunk) => errorData += chunk)
+            res.on('end', () => {
+              console.error('❌ [GitHub API] HTTP Error:', res.statusCode, res.statusMessage)
+              console.error('❌ [GitHub API] Response body:', errorData.substring(0, 500))
+              
+              if (res.statusCode === 403) {
+                reject(new Error('GitHub API: Accesso negato (403). Potrebbe essere un rate limit o problema di autenticazione.'))
+              } else if (res.statusCode === 404) {
+                reject(new Error('GitHub API: Release non trovata (404). Verifica che la release esista su GitHub.'))
+              } else if (res.statusCode === 429) {
+                reject(new Error('GitHub API: Troppe richieste (429). Rate limit raggiunto. Riprova più tardi.'))
+              } else {
+                reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`))
+              }
+            })
+            return
           }
           
           let data = ''
           res.on('data', (chunk) => data += chunk)
           res.on('end', () => {
             try {
+              // ✅ FIX: Controlla se la risposta è vuota
+              if (!data || data.trim().length === 0) {
+                console.error('❌ [GitHub API] Risposta vuota da GitHub')
+                return reject(new Error('Risposta vuota da GitHub API'))
+              }
+              
+              // ✅ FIX: Controlla se la risposta è HTML (errore GitHub)
+              if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
+                console.error('❌ [GitHub API] GitHub ha restituito HTML invece di JSON')
+                console.error('❌ [GitHub API] Risposta:', data.substring(0, 500))
+                return reject(new Error('GitHub ha restituito una pagina HTML invece di JSON. Potrebbe essere un errore di autenticazione o rate limit.'))
+              }
+              
+              // ✅ FIX: Log della risposta per debug (primi 200 caratteri)
+              console.log('📄 [GitHub API] Risposta ricevuta (primi 200 char):', data.substring(0, 200))
+              
               const release = JSON.parse(data)
+              
+              // ✅ FIX: Valida che la risposta abbia i campi necessari
+              if (!release || !release.tag_name) {
+                console.error('❌ [GitHub API] Risposta JSON non valida - manca tag_name')
+                console.error('❌ [GitHub API] Release object:', JSON.stringify(release, null, 2))
+                return reject(new Error('Risposta GitHub API non valida - struttura dati errata'))
+              }
+              
               console.log('🔍 [GitHub API] Release trovata:', release.tag_name)
-              console.log('📁 [GitHub API] Assets disponibili:', release.assets.map(a => ({
+              console.log('📁 [GitHub API] Assets disponibili:', release.assets ? release.assets.map(a => ({
                 name: a.name,
                 size: a.size,
                 download_url: a.browser_download_url
-              })))
+              })) : 'Nessun asset')
               resolve(release)
             } catch (err) {
               console.error('❌ [GitHub API] Errore parsing JSON:', err.message)
-              reject(new Error('Errore parsing risposta GitHub API'))
+              console.error('❌ [GitHub API] Stack:', err.stack)
+              console.error('❌ [GitHub API] Data ricevuta (primi 500 char):', data.substring(0, 500))
+              reject(new Error(`Errore parsing risposta GitHub API: ${err.message}`))
             }
           })
         })
