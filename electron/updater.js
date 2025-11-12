@@ -67,11 +67,11 @@ class AppUpdater {
     autoUpdater.autoDownload = false // Controllo manuale del download
     autoUpdater.autoInstallOnAppQuit = false // Disabilitato per gestione manuale
     
-    // ✅ NUOVO: Configurazione per auto-updater
+    // ✅ NUOVO: Configurazione per auto-updater con delta updates
     if (process.platform === 'win32') {
-      // Windows: usa file completo portable
-      autoUpdater.disableDifferentialDownload = true // Disabilita delta updates
-      autoUpdater.disableWebInstaller = true // Usa file completo
+      // Windows: usa delta updates + NSIS installer
+      autoUpdater.disableDifferentialDownload = false // ✅ ABILITA delta updates (usa .blockmap)
+      autoUpdater.disableWebInstaller = true // Usa file completo, non web installer
     } else {
       // macOS: usa delta updates
       autoUpdater.disableDifferentialDownload = false // Abilita delta updates

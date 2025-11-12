@@ -26,6 +26,8 @@ nsis:
   displayLanguageSelector: false
   # ✅ Mostra sempre i dettagli durante disinstallazione
   warningsAsErrors: false
+  # ✅ Abilita aggiornamenti differenziali (genera .blockmap)
+  differentialPackage: true
   # ✅ Chiude automaticamente l'app prima dell'installazione (solo Inferno Console.exe, non node.exe generico)
   include: build/installer.nsh
 
