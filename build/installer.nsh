@@ -75,10 +75,17 @@
     
     ${If} ${FileExists} "$0"
       DetailPrint "AVVISO: Parent $0 non rimossa (potrebbe contenere altri file)"
+      StrCpy $1 "AVVISO: Cartella parent non rimossa (contiene altri file)"
     ${Else}
       DetailPrint "OK: Parent $0 rimossa al secondo tentativo"
+      StrCpy $1 "OK: Tutte le cartelle rimosse"
     ${EndIf}
   ${Else}
     DetailPrint "OK: Parent $0 rimossa al primo tentativo"
+    StrCpy $1 "OK: Tutte le cartelle rimosse"
   ${EndIf}
+  
+  ; ✅ Mostra riepilogo finale con pausa
+  Sleep 1000
+  MessageBox MB_OK|MB_ICONINFORMATION "Disinstallazione completata!$\n$\nDirectory: $INSTDIR$\nParent: $0$\n$\n$1"
 !macroend
