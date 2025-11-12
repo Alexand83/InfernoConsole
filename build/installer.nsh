@@ -3,7 +3,10 @@
 
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
+!include "WordFunc.nsh"
 !insertmacro GetParent
+!insertmacro GetParameters
+!insertmacro GetOptions
 
 ; Variabile per rilevare modalità UPDATE
 Var UpdateMode
@@ -13,8 +16,11 @@ Var UpdateMode
   ; Controlla se è stato passato /UPDATE come parametro
   ${GetParameters} $R0
   StrCpy $UpdateMode "0"
-  ${StrContains} $R1 "/UPDATE" "$R0"
-  ${If} $R1 != ""
+  
+  ; Usa GetOptions per cercare /UPDATE
+  ${GetOptions} $R0 "/UPDATE" $R1
+  ${IfNot} ${Errors}
+    ; Parametro /UPDATE trovato
     StrCpy $UpdateMode "1"
     
     ; In modalità UPDATE, leggi il path precedente dal registro
@@ -123,8 +129,10 @@ Function .onInit
   ; Questa funzione viene chiamata all'avvio dell'installer
   ${GetParameters} $R0
   StrCpy $UpdateMode "0"
-  ${StrContains} $R1 "/UPDATE" "$R0"
-  ${If} $R1 != ""
+  
+  ; Usa GetOptions per cercare /UPDATE
+  ${GetOptions} $R0 "/UPDATE" $R1
+  ${IfNot} ${Errors}
     StrCpy $UpdateMode "1"
   ${EndIf}
 FunctionEnd
