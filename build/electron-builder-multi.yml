@@ -23,6 +23,9 @@ nsis:
   runAfterFinish: true
   artifactName: Inferno-Console-Setup.${ext}
   deleteAppDataOnUninstall: false
+  displayLanguageSelector: false
+  # ✅ Mostra sempre i dettagli durante disinstallazione
+  warningsAsErrors: false
   # ✅ Chiude automaticamente l'app prima dell'installazione (solo Inferno Console.exe, non node.exe generico)
   include: build/installer.nsh
 

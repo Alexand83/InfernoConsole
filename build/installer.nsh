@@ -1,8 +1,9 @@
 ; Script NSIS personalizzato per Inferno Console
 ; Gestisce la chiusura automatica dell'app durante l'installazione
 
-; Include funzioni per manipolazione path
+; Include funzioni per manipolazione path e logica
 !include "FileFunc.nsh"
+!include "LogicLib.nsh"
 !insertmacro GetParent
 
 !macro preInit
@@ -43,16 +44,38 @@
   ; ✅ Rimuovi cartella menu Start (solo se vuota)
   RMDir "$SMPROGRAMS\Inferno Console"
   
+  ; ✅ LOG: Mostra cosa stiamo per cancellare
+  DetailPrint "Rimozione directory: $INSTDIR"
+  
   ; ✅ Rimuovi TUTTA la directory di installazione con /r (ricorsivo)
   RMDir /r "$INSTDIR"
   
+  ; Verifica se la directory esiste ancora
+  ${If} ${FileExists} "$INSTDIR"
+    DetailPrint "ERRORE: Directory $INSTDIR non rimossa completamente"
+  ${Else}
+    DetailPrint "OK: Directory $INSTDIR rimossa con successo"
+  ${EndIf}
+  
   ; ✅ Rimuovi la cartella parent se è vuota (con retry)
   ${un.GetParent} "$INSTDIR" $0
+  DetailPrint "Tentativo rimozione parent: $0"
   
   ; Primo tentativo
   RMDir "$0"
   
-  ; Se fallisce, aspetta e riprova (a volte Windows tiene lock temporanei)
-  Sleep 500
-  RMDir "$0"
+  ; Verifica se esiste ancora
+  ${If} ${FileExists} "$0"
+    DetailPrint "Parent ancora esistente, secondo tentativo..."
+    Sleep 500
+    RMDir "$0"
+    
+    ${If} ${FileExists} "$0"
+      DetailPrint "AVVISO: Parent $0 non rimossa (potrebbe contenere altri file)"
+    ${Else}
+      DetailPrint "OK: Parent $0 rimossa al secondo tentativo"
+    ${EndIf}
+  ${Else}
+    DetailPrint "OK: Parent $0 rimossa al primo tentativo"
+  ${EndIf}
 !macroend
