@@ -90,7 +90,5 @@
     ${EndIf}
   ${EndIf}
   
-  ; ✅ Mostra riepilogo finale con pausa
-  Sleep 1000
-  MessageBox MB_OK|MB_ICONINFORMATION "Disinstallazione completata!$\n$\nDirectory: $INSTDIR$\nParent: $0$\n$\n$1"
+  ; Disinstallazione completata
 !macroend
