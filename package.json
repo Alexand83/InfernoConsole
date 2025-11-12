@@ -1,6 +1,6 @@
 {
   "name": "dj-console",
-  "version": "1.4.192",
+  "version": "1.4.193",
   "buildDate": "2025-11-12T15:10:51.756Z",
   "description": "Inferno Console - Console DJ professionale con mixaggio audio avanzato, capacità di streaming e effetti in tempo reale",
   "main": "electron/main.js",
