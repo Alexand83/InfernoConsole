@@ -30,6 +30,9 @@
 !macroend
 
 !macro customUnInstall
+  ; ✅ Mostra SEMPRE i dettagli durante la disinstallazione
+  SetDetailsView show
+  
   ; Termina il processo Inferno Console durante la disinstallazione
   nsExec::ExecToLog 'taskkill /IM "Inferno Console.exe" /T /F 2>nul'
   Pop $0
