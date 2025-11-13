@@ -631,7 +631,6 @@ updaterCacheDirName: inferno-console-updater`
       const fs = require('fs')
       const path = require('path')
       
-      // ✅ Helper per inviare log al browser
       // ✅ FIX: Usa BrowserWindow direttamente invece di require('./main') per evitare re-inizializzazioni
       const { BrowserWindow } = require('electron')
       let cachedMainWindow = null
@@ -647,46 +646,28 @@ updaterCacheDirName: inferno-console-updater`
         }
       }
       
-      const sendLog = (level, msg, data = null) => {
-        try {
-          const mainWindow = getMainWindowSafe()
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('console-log', {
-              level,
-              message: msg,
-              data: data ? JSON.stringify(data, null, 2) : null,
-              timestamp: new Date().toISOString()
-            })
-          }
-        } catch (e) {
-          // Ignora errori di invio log
-        }
-      }
+      // ✅ FIX: Throttle progress updates per evitare sovraccarico IPC in produzione
+      let lastProgressUpdate = 0
+      const PROGRESS_UPDATE_INTERVAL = 100 // Aggiorna ogni 100ms max
       
       const sendProgress = (progress) => {
         try {
-          const mainWindow = getMainWindowSafe()
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('download-progress', progress)
+          const now = Date.now()
+          // Invia sempre il 100% e aggiorna solo ogni 100ms per evitare sovraccarico
+          if (progress.percent === 100 || (now - lastProgressUpdate) >= PROGRESS_UPDATE_INTERVAL) {
+            const mainWindow = getMainWindowSafe()
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('download-progress', progress)
+              lastProgressUpdate = now
+            }
           }
         } catch (e) {
           // Ignora errori di invio progresso
         }
       }
       
-      // ✅ DEBUG: Log dettagliato dell'oggetto installerInfo
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-      console.log('🔍 [DOWNLOAD INSTALLER] Oggetto installerInfo ricevuto:')
-      console.log(JSON.stringify(installerInfo, null, 2))
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-      sendLog('info', '🔍 [DOWNLOAD INSTALLER] Oggetto installerInfo ricevuto', installerInfo)
-      
       // ✅ FIX: Verifica che browser_download_url esista
       if (!installerInfo.browser_download_url) {
-        const errorMsg = '❌ [DOWNLOAD INSTALLER] browser_download_url mancante!'
-        console.error(errorMsg)
-        console.error('❌ [DOWNLOAD INSTALLER] installerInfo completo:', JSON.stringify(installerInfo, null, 2))
-        sendLog('error', errorMsg, installerInfo)
         throw new Error('URL di download non disponibile (browser_download_url mancante)')
       }
       
@@ -705,12 +686,8 @@ updaterCacheDirName: inferno-console-updater`
         }
       }
       
-      const urlMsg = `📥 [DOWNLOAD] URL: ${installerInfo.browser_download_url}`
-      const pathMsg = `📁 [DOWNLOAD] Salvataggio in: ${downloadPath}`
-      console.log(urlMsg)
-      console.log(pathMsg)
-      sendLog('info', urlMsg, { url: installerInfo.browser_download_url })
-      sendLog('info', pathMsg, { path: downloadPath })
+      console.log(`📥 [DOWNLOAD] Scaricando: ${installerInfo.browser_download_url}`)
+      console.log(`📁 [DOWNLOAD] Salvataggio in: ${downloadPath}`)
       
       return new Promise((resolve, reject) => {
         try {
@@ -718,29 +695,18 @@ updaterCacheDirName: inferno-console-updater`
           
           // ✅ FIX: Se l'URL non è valido, prova download_url
           if (!downloadUrl && installerInfo.download_url) {
-            const fallbackMsg = '⚠️ [DOWNLOAD] browser_download_url non disponibile, uso download_url'
-            console.log(fallbackMsg)
-            sendLog('warn', fallbackMsg, { download_url: installerInfo.download_url })
             downloadUrl = installerInfo.download_url
           }
           
           if (!downloadUrl) {
-            const errorMsg = 'Nessun URL di download disponibile'
-            sendLog('error', `❌ [DOWNLOAD] ${errorMsg}`, installerInfo)
-            return reject(new Error(errorMsg))
+            return reject(new Error('Nessun URL di download disponibile'))
           }
           
-          const finalUrlMsg = `🔍 [DOWNLOAD] URL finale da usare: ${downloadUrl}`
-          console.log(finalUrlMsg)
-          sendLog('info', finalUrlMsg, { finalUrl: downloadUrl })
-          
           const parsedUrl = new URL(downloadUrl)
-        
+          
           // ✅ TEST: Usa il protocollo corretto (http o https)
           const isLocalTest = parsedUrl.protocol === 'http:'
           const protocol = isLocalTest ? http : https
-          
-          console.log(`🔍 [DOWNLOAD] Protocollo: ${parsedUrl.protocol} - Test locale: ${isLocalTest}`)
           
           const options = {
             hostname: parsedUrl.hostname,
@@ -759,154 +725,127 @@ updaterCacheDirName: inferno-console-updater`
           const total = installerInfo.size
           let downloaded = 0
         
-        console.log('🔍 [DOWNLOAD] Creazione richiesta HTTP...')
-        sendLog('info', '🔍 [DOWNLOAD] Creazione richiesta HTTP', { hostname: options.hostname, path: options.path })
-        
         const request = protocol.get(options, (response) => {
-          console.log(`📡 [DOWNLOAD] Risposta ricevuta: ${response.statusCode}`)
-          sendLog('info', `📡 [DOWNLOAD] Risposta HTTP ${response.statusCode}`, { statusCode: response.statusCode, headers: response.headers })
           
           // Gestisci redirect
-          if (response.statusCode === 302 || response.statusCode === 301) {
+          if (response.statusCode === 302 || response.statusCode === 301 || response.statusCode === 307 || response.statusCode === 308) {
             const redirectLocation = response.headers.location
-            console.log('🔄 Redirect rilevato:', redirectLocation)
-            sendLog('info', '🔄 [DOWNLOAD] Redirect rilevato', { location: redirectLocation })
+            console.log('🔄 [DOWNLOAD] Redirect rilevato:', response.statusCode)
             
-            try {
-              file.close()
-              fs.unlinkSync(downloadPath)
-            } catch (e) {
-              // Ignora errori di cleanup
-            }
-            
-            // Segui il redirect
-            const redirectUrl = redirectLocation
-            const redirectParsedUrl = new URL(redirectUrl)
-            const redirectIsLocal = redirectParsedUrl.protocol === 'http:'
-            const redirectProtocol = redirectIsLocal ? http : https
-            
-            const redirectOptions = {
-              hostname: redirectParsedUrl.hostname,
-              port: redirectParsedUrl.port || (redirectIsLocal ? 80 : 443),
-              path: redirectParsedUrl.pathname + redirectParsedUrl.search,
-              method: 'GET',
-              headers: options.headers
-            }
-            
-            console.log('🔄 [DOWNLOAD] Seguendo redirect a:', redirectUrl)
-            sendLog('info', '🔄 [DOWNLOAD] Seguendo redirect', { url: redirectUrl })
-            
-            const redirectRequest = redirectProtocol.get(redirectOptions, (redirectResponse) => {
-              console.log(`📡 [DOWNLOAD] Risposta redirect: ${redirectResponse.statusCode}`)
-              sendLog('info', `📡 [DOWNLOAD] Risposta redirect ${redirectResponse.statusCode}`)
-              
-              // ✅ FIX: Verifica che la risposta sia OK
-              if (redirectResponse.statusCode !== 200) {
-                const errorMsg = `Errore HTTP ${redirectResponse.statusCode} durante redirect`
-                console.error(`❌ [DOWNLOAD] ${errorMsg}`)
-                sendLog('error', `❌ [DOWNLOAD] ${errorMsg}`, { statusCode: redirectResponse.statusCode })
-                try {
-                  fs.unlink(downloadPath, () => {})
-                } catch (e) {
-                  // Ignora errori cleanup
+            // ✅ CRITICAL: Chiudi e rimuovi il file PRIMA di seguire il redirect
+            // In produzione, questo è fondamentale per evitare problemi con file locks
+            file.end(() => {
+              // Rimuovi il file parziale
+              fs.unlink(downloadPath, (unlinkErr) => {
+                // Ignora errori di unlink (file potrebbe non esistere)
+                
+                // Segui il redirect
+                const redirectUrl = redirectLocation
+                const redirectParsedUrl = new URL(redirectUrl)
+                const redirectIsLocal = redirectParsedUrl.protocol === 'http:'
+                const redirectProtocol = redirectIsLocal ? http : https
+                
+                const redirectOptions = {
+                  hostname: redirectParsedUrl.hostname,
+                  port: redirectParsedUrl.port || (redirectIsLocal ? 80 : 443),
+                  path: redirectParsedUrl.pathname + redirectParsedUrl.search,
+                  method: 'GET',
+                  headers: {
+                    'User-Agent': 'DJ-Console-Updater/1.0',
+                    'Accept': '*/*',
+                    'Connection': 'keep-alive'
+                  },
+                  timeout: 300000
                 }
-                return reject(new Error(errorMsg))
-              }
-              
-              const redirectFile = fs.createWriteStream(downloadPath)
-              let redirectDownloaded = 0
-              
-              redirectResponse.on('data', (chunk) => {
-                try {
-                  redirectDownloaded += chunk.length
-                  downloaded = redirectDownloaded
-                  const percent = Math.round((downloaded / total) * 100)
-                  
-                  // Invia progresso al renderer
-                  sendProgress({
-                    percent: percent,
-                    bytesPerSecond: 0,
-                    transferred: downloaded,
-                    total: total
-                  })
-                  
-                  if (!redirectFile.write(chunk)) {
-                    // Se il buffer è pieno, aspetta che si svuoti
-                    redirectFile.once('drain', () => {
-                      // Continua il download
-                    })
+                
+                const redirectRequest = redirectProtocol.get(redirectOptions, (redirectResponse) => {
+                  // ✅ FIX: Verifica che la risposta sia OK
+                  if (redirectResponse.statusCode !== 200) {
+                    const errorMsg = `Errore HTTP ${redirectResponse.statusCode} durante redirect`
+                    console.error(`❌ [DOWNLOAD] ${errorMsg}`)
+                    try {
+                      fs.unlink(downloadPath, () => {})
+                    } catch (e) {
+                      // Ignora errori cleanup
+                    }
+                    return reject(new Error(errorMsg))
                   }
-                } catch (e) {
-                  console.error('❌ [DOWNLOAD] Errore durante scrittura chunk:', e.message)
-                  sendLog('error', '❌ [DOWNLOAD] Errore scrittura chunk', { error: e.message })
-                }
-              })
-              
-              redirectResponse.on('end', () => {
-                try {
-                  // ✅ FIX: Verifica che il file sia stato scritto completamente
-                  redirectFile.end(() => {
-                    // ✅ FIX: Verifica che il file esista e abbia dimensione corretta
-                    setTimeout(() => {
-                      try {
-                        if (fs.existsSync(downloadPath)) {
-                          const stats = fs.statSync(downloadPath)
-                          console.log(`📊 [DOWNLOAD] File scritto: ${stats.size} bytes (atteso: ${total} bytes)`)
-                          sendLog('info', '📊 [DOWNLOAD] File scritto', { size: stats.size, expected: total })
-                        }
-                        
-                        sendProgress({
-                          percent: 100,
-                          bytesPerSecond: 0,
-                          transferred: downloaded,
-                          total: total
+                  
+                  const redirectFile = fs.createWriteStream(downloadPath)
+                  let redirectDownloaded = 0
+                  
+                  redirectResponse.on('data', (chunk) => {
+                    try {
+                      redirectDownloaded += chunk.length
+                      downloaded = redirectDownloaded
+                      const percent = Math.round((downloaded / total) * 100)
+                      
+                      // Invia progresso al renderer
+                      sendProgress({
+                        percent: percent,
+                        bytesPerSecond: 0,
+                        transferred: downloaded,
+                        total: total
+                      })
+                      
+                      if (!redirectFile.write(chunk)) {
+                        // Se il buffer è pieno, aspetta che si svuoti
+                        redirectFile.once('drain', () => {
+                          // Continua il download
                         })
-                        
-                        console.log('✅ Download installer completato:', downloadPath)
-                        sendLog('info', '✅ [DOWNLOAD] Download completato', { path: downloadPath })
-                        resolve(downloadPath)
-                      } catch (e) {
-                        const safeErr = makeErrorSafe(e)
-                        sendLog('error', '❌ [DOWNLOAD] Errore verifica file', { error: safeErr.message })
-                        reject(safeErr)
                       }
-                    }, 200) // Aumentato a 200ms per dare più tempo
+                    } catch (e) {
+                      console.error('❌ [DOWNLOAD] Errore durante scrittura chunk:', e.message)
+                    }
                   })
-                } catch (e) {
-                  const safeErr = makeErrorSafe(e)
-                  sendLog('error', '❌ [DOWNLOAD] Errore fine redirect', { error: safeErr.message })
-                  reject(safeErr)
-                }
-              })
-              
-              redirectResponse.on('error', (err) => {
-                try {
-                  redirectFile.close()
-                  fs.unlink(downloadPath, () => {})
+                  
+                  redirectResponse.on('end', () => {
+                    try {
+                      // ✅ FIX: Verifica che il file sia stato scritto completamente
+                      redirectFile.end(() => {
+                        setTimeout(() => {
+                          sendProgress({
+                            percent: 100,
+                            bytesPerSecond: 0,
+                            transferred: downloaded,
+                            total: total
+                          })
+                          
+                          console.log('✅ [DOWNLOAD] Download completato:', downloadPath)
+                          resolve(downloadPath)
+                        }, 200)
+                      })
+                    } catch (e) {
+                      const safeErr = makeErrorSafe(e)
+                      reject(safeErr)
+                    }
+                  })
+                  
+                  redirectResponse.on('error', (err) => {
+                    try {
+                      redirectFile.close()
+                      fs.unlink(downloadPath, () => {})
+                      const safeErr = makeErrorSafe(err)
+                      console.error('❌ [DOWNLOAD] Errore redirect response:', safeErr.message)
+                      reject(safeErr)
+                    } catch (e) {
+                      reject(makeErrorSafe(e))
+                    }
+                  })
+                })
+                
+                // ✅ CRITICAL: Timeout sulla richiesta redirect per evitare blocchi
+                redirectRequest.setTimeout(300000, () => {
+                  redirectRequest.destroy()
+                  reject(new Error('Timeout durante download redirect (5 minuti)'))
+                })
+                
+                redirectRequest.on('error', (err) => {
                   const safeErr = makeErrorSafe(err)
-                  console.error('❌ [DOWNLOAD] Errore redirect response:', safeErr.message)
-                  sendLog('error', '❌ [DOWNLOAD] Errore redirect response', { error: safeErr.message, code: safeErr.code })
+                  console.error('❌ [DOWNLOAD] Errore redirect request:', safeErr.message)
                   reject(safeErr)
-                } catch (e) {
-                  reject(makeErrorSafe(e))
-                }
+                })
               })
-            })
-            
-            // ✅ CRITICAL: Timeout sulla richiesta redirect per evitare blocchi
-            redirectRequest.setTimeout(300000, () => {
-              redirectRequest.destroy()
-              const errorMsg = 'Timeout durante download redirect (5 minuti)'
-              console.error(`❌ [DOWNLOAD] ${errorMsg}`)
-              sendLog('error', `❌ [DOWNLOAD] ${errorMsg}`)
-              reject(new Error(errorMsg))
-            })
-            
-            redirectRequest.on('error', (err) => {
-              const safeErr = makeErrorSafe(err)
-              console.error('❌ [DOWNLOAD] Errore redirect request:', safeErr.message)
-              sendLog('error', '❌ [DOWNLOAD] Errore redirect request', { error: safeErr.message, code: safeErr.code })
-              reject(safeErr)
             })
             
             return
@@ -927,14 +866,12 @@ updaterCacheDirName: inferno-console-updater`
               file.write(chunk)
             } catch (e) {
               console.error('❌ [DOWNLOAD] Errore durante scrittura chunk:', e.message)
-              sendLog('error', '❌ [DOWNLOAD] Errore scrittura chunk', { error: e.message })
             }
           })
           
           response.on('end', () => {
             try {
               file.end()
-              
               setTimeout(() => {
                 sendProgress({
                   percent: 100,
@@ -942,14 +879,11 @@ updaterCacheDirName: inferno-console-updater`
                   transferred: downloaded,
                   total: total
                 })
-                
-                console.log('✅ Download installer completato:', downloadPath)
-                sendLog('info', '✅ [DOWNLOAD] Download completato', { path: downloadPath })
+                console.log('✅ [DOWNLOAD] Download completato:', downloadPath)
                 resolve(downloadPath)
               }, 100)
             } catch (e) {
               const safeErr = makeErrorSafe(e)
-              sendLog('error', '❌ [DOWNLOAD] Errore fine response', { error: safeErr.message })
               reject(safeErr)
             }
           })
@@ -960,7 +894,6 @@ updaterCacheDirName: inferno-console-updater`
               fs.unlink(downloadPath, () => {})
               const safeErr = makeErrorSafe(err)
               console.error('❌ [DOWNLOAD] Errore response:', safeErr.message)
-              sendLog('error', '❌ [DOWNLOAD] Errore response', { error: safeErr.message, code: safeErr.code })
               reject(safeErr)
             } catch (e) {
               reject(makeErrorSafe(e))
@@ -974,7 +907,6 @@ updaterCacheDirName: inferno-console-updater`
             fs.unlink(downloadPath, () => {})
             const safeErr = makeErrorSafe(err)
             console.error('❌ [DOWNLOAD] Errore request:', safeErr.message)
-            sendLog('error', '❌ [DOWNLOAD] Errore request', { error: safeErr.message, code: safeErr.code })
             reject(safeErr)
           } catch (e) {
             reject(makeErrorSafe(e))
@@ -984,16 +916,13 @@ updaterCacheDirName: inferno-console-updater`
         // ✅ CRITICAL: Timeout sulla richiesta principale per evitare blocchi
         request.setTimeout(300000, () => {
           request.destroy()
-          const errorMsg = 'Timeout richiesta HTTP (5 minuti)'
-          console.error(`❌ [DOWNLOAD] ${errorMsg}`)
-          sendLog('error', `❌ [DOWNLOAD] ${errorMsg}`)
           try {
             file.close()
             fs.unlink(downloadPath, () => {})
           } catch (e) {
             // Ignora errori cleanup
           }
-          reject(new Error(errorMsg))
+          reject(new Error('Timeout richiesta HTTP (5 minuti)'))
         })
         
         file.on('error', (err) => {
@@ -1002,7 +931,6 @@ updaterCacheDirName: inferno-console-updater`
             fs.unlink(downloadPath, () => {})
             const safeErr = makeErrorSafe(err)
             console.error('❌ [DOWNLOAD] Errore file:', safeErr.message)
-            sendLog('error', '❌ [DOWNLOAD] Errore file', { error: safeErr.message, code: safeErr.code })
             reject(safeErr)
           } catch (e) {
             reject(makeErrorSafe(e))
@@ -1011,14 +939,12 @@ updaterCacheDirName: inferno-console-updater`
         } catch (setupError) {
           const safeErr = makeErrorSafe(setupError)
           console.error('❌ [DOWNLOAD] Errore setup download:', safeErr.message)
-          sendLog('error', '❌ [DOWNLOAD] Errore setup', { error: safeErr.message })
           reject(safeErr)
         }
       })
     } catch (error) {
       const safeErr = makeErrorSafe(error)
-      console.error('❌ Errore download installer:', safeErr.message)
-      sendLog('error', '❌ [DOWNLOAD] Errore generale', { error: safeErr.message })
+      console.error('❌ [DOWNLOAD] Errore download installer:', safeErr.message)
       throw safeErr
     }
   }

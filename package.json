@@ -1,7 +1,7 @@
 {
   "name": "dj-console",
   "version": "1.4.199",
-  "buildDate": "2025-11-12T16:27:38.359Z",
+  "buildDate": "2025-11-13T14:44:25.029Z",
   "description": "Inferno Console - Console DJ professionale con mixaggio audio avanzato, capacità di streaming e effetti in tempo reale",
   "main": "electron/main.js",
   "updater": {
@@ -29,7 +29,9 @@
     "version:major": "npm version major && npm run update-version",
     "test:update": "node test-update-local.js",
     "test:update:quick": "node test-update-quick.js",
-    "test:update:app": "cross-env UPDATE_TEST_MODE=local npm run electron"
+    "test:update:app": "cross-env UPDATE_TEST_MODE=local npm run electron",
+    "test:production": "node test-production-local.js",
+    "test:prod": "node test-production-local.js"
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",

@@ -1038,24 +1038,6 @@ ipcMain.handle('db-save', async (_evt, payload) => {
   }
 })
 
-// ✅ Helper per logging che invia anche alla console del browser (F12)
-function logToBrowser(level, message, data = null) {
-  try {
-    const { BrowserWindow } = require('electron')
-    const mainWindow = BrowserWindow.getAllWindows()[0]
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('console-log', {
-        level, // 'log', 'error', 'warn', 'info'
-        message,
-        data: data ? JSON.stringify(data, null, 2) : null,
-        timestamp: new Date().toISOString()
-      })
-    }
-  } catch (e) {
-    // Ignora errori di invio log
-  }
-}
-
 // ✅ Helper per rendere errori serializzabili per IPC
 // CRITICAL: Questa funzione NON può mai fallire o lanciare errori
 function makeErrorSerializable(error) {
@@ -1128,24 +1110,6 @@ ipcMain.handle('download-update', async () => {
       throw makeErrorSerializable(new Error('Nessun aggiornamento disponibile'))
     }
     
-    // ✅ DEBUG: Log dettagliato degli assets disponibili
-    const assetsInfo = `Assets disponibili: ${release.assets.length}\n` + 
-      release.assets.map((asset, index) => 
-        `  [${index}] ${asset.name} (${asset.size} bytes)\n` +
-        `      browser_download_url: ${asset.browser_download_url || 'NON PRESENTE'}\n` +
-        `      download_url: ${asset.download_url || 'NON PRESENTE'}`
-      ).join('\n')
-    
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('🔍 [DOWNLOAD UPDATE] Assets disponibili:', release.assets.length)
-    logToBrowser('info', '🔍 [DOWNLOAD UPDATE] Assets disponibili', { count: release.assets.length, assets: release.assets })
-    release.assets.forEach((asset, index) => {
-      const assetLog = `[${index}] ${asset.name} (${asset.size} bytes) - browser_download_url: ${asset.browser_download_url || 'NON PRESENTE'}`
-      console.log(`  ${assetLog}`)
-      logToBrowser('info', `Asset [${index}]: ${asset.name}`, asset)
-    })
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    
     const installer = release.assets.find(asset => 
       asset.name === 'Inferno-Console-Setup.exe' ||
       asset.name === 'Inferno-Console-Installer.exe' ||
@@ -1153,45 +1117,20 @@ ipcMain.handle('download-update', async () => {
     )
     
     if (!installer) {
-      const errorMsg = '❌ [DOWNLOAD UPDATE] Installer non trovato negli assets'
-      console.error(errorMsg)
-      logToBrowser('error', errorMsg, { assets: release.assets.map(a => a.name) })
       throw makeErrorSerializable(new Error('Installer non trovato'))
     }
     
-    // ✅ DEBUG: Log dettagliato dell'installer trovato
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('✅ [DOWNLOAD UPDATE] Installer trovato:')
-    console.log(`  Nome: ${installer.name}`)
-    console.log(`  Dimensione: ${installer.size} bytes`)
-    console.log(`  browser_download_url: ${installer.browser_download_url || 'NON PRESENTE'}`)
-    console.log(`  download_url: ${installer.download_url || 'NON PRESENTE'}`)
-    console.log(`  URL completo: ${JSON.stringify(installer, null, 2)}`)
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    
-    logToBrowser('info', '✅ [DOWNLOAD UPDATE] Installer trovato', installer)
-    
     // ✅ FIX: Verifica che browser_download_url esista
     if (!installer.browser_download_url) {
-      const errorMsg = '❌ [DOWNLOAD UPDATE] browser_download_url mancante nell\'installer'
-      console.error(errorMsg)
-      logToBrowser('error', errorMsg, installer)
       throw makeErrorSerializable(new Error('URL di download non disponibile nell\'installer'))
     }
     
     let downloadPath
     try {
-      const startMsg = `📥 [DOWNLOAD UPDATE] Avvio download da: ${installer.browser_download_url}`
-      console.log(startMsg)
-      logToBrowser('info', startMsg, { url: installer.browser_download_url })
       downloadPath = await updater.downloadInstaller(installer)
-      const completeMsg = `✅ [DOWNLOAD UPDATE] Download completato: ${downloadPath}`
-      console.log(completeMsg)
-      logToBrowser('info', completeMsg, { path: downloadPath })
+      console.log('✅ [DOWNLOAD UPDATE] Download completato:', downloadPath)
     } catch (downloadError) {
-      const errorMsg = `❌ [DOWNLOAD UPDATE] Errore durante download: ${downloadError?.message || String(downloadError)}`
-      console.error(errorMsg)
-      logToBrowser('error', errorMsg, { error: downloadError?.message, stack: downloadError?.stack })
+      console.error('❌ [DOWNLOAD UPDATE] Errore durante download:', downloadError?.message || String(downloadError))
       const safeError = makeErrorSerializable(downloadError)
       throw safeError
     }
